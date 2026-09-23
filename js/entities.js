@@ -78,7 +78,9 @@
   };
 
   const MOBS = {
-    mouflon: { hw: 0.4, h: 1.15, hp: 8, speed: 1.4 },
+    mouflon: { hw: 0.4, h: 1.15, hp: 8, speed: 1.4, passive: true },
+    boar: { hw: 0.45, h: 0.95, hp: 12, speed: 1.5, passive: true },
+    penguin: { hw: 0.28, h: 0.95, hp: 6, speed: 1.1, passive: true },
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
   };
 
@@ -97,7 +99,7 @@
       this.walk = 0;
       this.dead = false;
       this.age = 0;
-      this.ai = { timer: 0, dir: null, flee: 0, attackCd: 0, chasing: false };
+      this.ai = { timer: 0, dir: null, flee: 0, attackCd: 0, chasing: false, angry: 0 };
     }
   }
 
@@ -215,7 +217,18 @@
       const dxp = p.x - m.x, dzp = p.z - m.z, dyp = p.y - m.y;
       const distP = Math.hypot(dxp, dzp);
 
-      if (m.type === 'mouflon') {
+      if (def.passive && m.ai.angry > 0) {
+        // sanglier en colère : charge le joueur
+        m.ai.angry -= dt;
+        if (distP > 22 || !p.alive) m.ai.angry = 0;
+        const dir = Math.atan2(-dxp, -dzp);
+        tvx = -Math.sin(dir) * 4.3;
+        tvz = -Math.cos(dir) * 4.3;
+        if (p.alive && distP < 1.3 && Math.abs(dyp) < 1.5 && m.ai.attackCd <= 0) {
+          m.ai.attackCd = 1;
+          p.damage(2, m.x, m.z, 'Un sanglier');
+        }
+      } else if (def.passive) {
         let speed = def.speed;
         if (m.ai.flee > 0) {
           m.ai.flee -= dt;
@@ -240,7 +253,7 @@
             tvz = dz * speed;
           }
         }
-        if (distP < 14 && r() < dt * 0.04) CM.Audio.play('baa');
+        if (distP < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
       } else if (m.type === 'ombre') {
         const bl = w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
         const sky = w.skyAt(fx, Math.floor(m.y + 1.5), fz);
@@ -340,7 +353,8 @@
           m.knock = 0.3;
         }
         CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
-        if (m.type === 'mouflon') m.ai.flee = 5;
+        if (m.type === 'boar') m.ai.angry = 12;
+        else if (MOBS[m.type].passive) m.ai.flee = 5;
       }
       if (m.hp <= 0 && !m.dead) this.killMob(m);
     }
@@ -354,6 +368,12 @@
         this.addDrop(I.RAW_MEAT, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
         if (r() < 0.7) this.addDrop(B.WOOL, 1, m.x, m.y + 0.5, m.z);
         this.burst(CM.Textures.layer.mouflon_wool, m.x, m.y + 0.6, m.z, 16, { speed: 3 });
+      } else if (m.type === 'boar') {
+        this.addDrop(I.RAW_MEAT, 1 + Math.floor(r() * 3), m.x, m.y + 0.5, m.z);
+        this.burst(CM.Textures.layer.boar_hide, m.x, m.y + 0.5, m.z, 14, { speed: 3 });
+      } else if (m.type === 'penguin') {
+        this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
+        this.burst(CM.Textures.layer.white, m.x, m.y + 0.5, m.z, 14, { speed: 3, size: 0.06 });
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.8, m.z);
         this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
@@ -404,7 +424,7 @@
       let nMouf = 0, nOmbre = 0;
       for (const m of this.mobs) {
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
-        if (m.type === 'mouflon') {
+        if (MOBS[m.type].passive) {
           if (dist > 110) m.dead = true;
           else nMouf++;
         } else {
@@ -418,8 +438,9 @@
           const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
           if (!w.loaded(x, z)) continue;
           const y = w.groundBelow(x, H - 1, z);
-          if (y > 0 && w.get(x, y, z) === B.GRASS && w.skyAt(x, y + 1, z) >= 14) {
-            this.addMob('mouflon', x + 0.5, y + 1, z + 0.5);
+          const type = this.animalFor(w.column(x, z).bi);
+          if (type && y > 0 && CM.blocks[w.get(x, y, z)].soil && w.skyAt(x, y + 1, z) >= 14) {
+            this.addMob(type, x + 0.5, y + 1, z + 0.5);
             break;
           }
         }
@@ -448,6 +469,25 @@
       }
     }
 
+    // Animal typique d'un biome (null s'il n'y en a pas).
+    animalFor(bi) {
+      const BIO = CM.BIO, r = this.rand();
+      switch (bi) {
+        case BIO.SNOWY_TAIGA:
+        case BIO.TUNDRA: return 'penguin';
+        case BIO.FOREST:
+        case BIO.BIRCH:
+        case BIO.TAIGA:
+        case BIO.JUNGLE:
+        case BIO.SWAMP:
+        case BIO.CRYSTAL: return r < 0.6 ? 'boar' : 'mouflon';
+        case BIO.PLAINS:
+        case BIO.SAVANNA:
+        case BIO.MOUNTAINS: return 'mouflon';
+        default: return null;
+      }
+    }
+
     // Rayon vers les créatures (pour attaquer).
     raycastMob(ox, oy, oz, dx, dy, dz, maxD) {
       let best = null, bestT = maxD;
@@ -468,8 +508,8 @@
       return [w.skyAt(fx, fy, fz) / 15, w.blockLightAt(fx, fy, fz) / 15];
     }
 
-    part(batch, base, px, py, pz, rx, box, layers, l, flags, faceFlags, ry) {
-      mat4.compose(this.P, px, py, pz, ry || 0, rx, 0, 1);
+    part(batch, base, px, py, pz, rx, box, layers, l, flags, faceFlags, ry, rz) {
+      mat4.compose(this.P, px, py, pz, ry || 0, rx, rz || 0, 1);
       mat4.multiply(this.R, base, this.P);
       batch.box(this.R, box[0], box[1], box[2], box[3], box[4], box[5], layers, l[0], l[1], flags, null, faceFlags);
     }
@@ -490,6 +530,25 @@
           this.part(batch, this.M, 0, 0.92, -0.48, hb, [0.2, 0.08, -0.26, 0.32, 0.24, -0.06], L.mouflon_horn, l, flags);
           const legs = [[-0.2, -0.32, 1], [0.2, -0.32, -1], [-0.2, 0.32, -1], [0.2, 0.32, 1]];
           for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.45, lz, sw * 0.7 * ph, [-0.09, -0.45, -0.09, 0.09, 0, 0.09], skin, l, flags);
+        } else if (m.type === 'boar') {
+          const hide = L.boar_hide;
+          this.part(batch, this.M, 0, 0, 0, 0, [-0.38, 0.35, -0.55, 0.38, 0.92, 0.55], hide, l, flags);
+          const hb = Math.sin(time * 3 + m.age) * 0.04;
+          this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.26, -0.22, -0.36, 0.26, 0.24, 0.02], [hide, hide, hide, hide, hide, L.boar_face], l, flags);
+          this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.22, -0.2, -0.44, -0.14, -0.04, -0.34], L.boar_tusk, l, flags);
+          this.part(batch, this.M, 0, 0.7, -0.55, hb, [0.14, -0.2, -0.44, 0.22, -0.04, -0.34], L.boar_tusk, l, flags);
+          const legs = [[-0.22, -0.36, 1], [0.22, -0.36, -1], [-0.22, 0.36, -1], [0.22, 0.36, 1]];
+          for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.36, lz, sw * 0.8 * ph, [-0.1, -0.36, -0.1, 0.1, 0, 0.1], hide, l, flags);
+        } else if (m.type === 'penguin') {
+          const bodyT = L.penguin_body, waddle = m.moving ? Math.sin(m.walk * 1.5) * 0.12 : 0;
+          this.part(batch, this.M, 0, 0, 0, 0, [-0.24, 0.12, -0.2, 0.24, 0.72, 0.2], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_belly], l, flags, null, 0, waddle);
+          this.part(batch, this.M, 0, 0.72, 0, 0, [-0.19, 0, -0.18, 0.19, 0.32, 0.18], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_face], l, flags, null, 0, waddle);
+          this.part(batch, this.M, 0, 0.72, 0, 0, [-0.06, 0.1, -0.32, 0.06, 0.18, -0.18], L.penguin_beak, l, flags, null, 0, waddle);
+          const flap = m.moving ? Math.sin(m.walk * 3) * 0.3 : 0.1;
+          this.part(batch, this.M, -0.25, 0.66, 0, 0, [-0.05, -0.42, -0.12, 0, 0, 0.12], bodyT, l, flags, null, 0, -flap - 0.15);
+          this.part(batch, this.M, 0.25, 0.66, 0, 0, [0, -0.42, -0.12, 0.05, 0, 0.12], bodyT, l, flags, null, 0, flap + 0.15);
+          this.part(batch, this.M, -0.1, 0.12, -0.04, sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
+          this.part(batch, this.M, 0.1, 0.12, -0.04, -sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
         } else {
           const body = L.ombre_body;
           this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);

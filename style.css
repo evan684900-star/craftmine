@@ -59,6 +59,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 }
 .ability b { color: var(--gold); }
 .ability.cool { opacity: 0.35; }
+.ability { white-space: nowrap; }
 #stamina { position: relative; width: 186px; height: 14px; border-radius: 7px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.18); overflow: hidden; }
 #stamina-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #5fd35f, #c8f05a); transition: width 0.08s linear; }
 #stamina.exhausted #stamina-fill { background: linear-gradient(90deg, #d23c3c, #ff7a4a); }
@@ -104,6 +105,8 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   border: 1px solid var(--line); font-weight: 700;
 }
 #clock .danger { color: #c88cff; }
+#clock .biome { font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; margin-top: 1px; }
+#recipe-search { flex: 1; min-width: 110px; font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--text); }
 #toasts { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .toast {
   padding: 7px 14px; border-radius: 8px; background: rgba(10, 12, 20, 0.82); border: 1px solid var(--line); font-weight: 600;

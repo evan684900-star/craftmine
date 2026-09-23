@@ -62,11 +62,17 @@ Pour jouer sans ce guide, décoche *Afficher les objectifs à l'écran* dans les
 
 ## Contenu
 
-- **Monde infini** (graine au choix, 96 blocs de haut) : plaines, forêts, déserts, montagnes enneigées, lacs et océans, grottes, cavernes, minerais (charbon, fer, cristal) et îles célestes un peu partout.
+- **Monde infini** (graine au choix, 96 blocs de haut) avec **15 biomes** : plaines, forêt, forêt de bouleaux, taïga, taïga enneigée, toundra glacée (lacs gelés), savane, jungle, marais, désert, canyon rouge (terre cuite en bandes), montagnes, lacs, océans et la rare **Sylve cristalline** aux arbres lumineux. Le nom du biome s'affiche sous l'horloge.
+- **7 essences de bois** (chêne, bouleau, sapin, acacia, acajou, saule, bois cristallin), chacune avec sa forme d'arbre, ses planches, ses feuilles et sa pousse. Les recettes acceptent n'importe quelles planches.
+- **7 minerais** : charbon, fer, cuivre, or (abondant dans les canyons rouges), cristal (en profondeur), rubis (seulement en montagne) et éclats célestes. Sous terre : granit, diorite, andésite et gravier.
+- Sols variés : herbe sèche, luxuriante, de marais ou enneigée, sol de forêt, mousse cristalline, grès, sable rouge, argile, **boue** (ralentit), **glace** (glissante), **cactus** (piquent).
+- Plantes et nourriture : fleurs (coquelicot, pissenlit, bleuet, tulipe, marguerite, fleur de cristal lumineuse), fougères, buissons morts, champignons, baies, pommes, melons, citrouilles ; soupe de champignons, tarte à la citrouille, pomme dorée…
+- **Ruines** à explorer, avec un coffre rempli de butin.
 - Le monde est découpé en tronçons de 16 × 16 blocs, générés à la volée autour du joueur (distance d'affichage réglable jusqu'à 16 tronçons, soit 256 blocs). Les tronçons trop lointains sont retirés de la mémoire, mais **rien n'est perdu** : chaque modification (bloc posé ou cassé, coffre, torche…) est enregistrée et réappliquée quand on revient, comme dans Minecraft.
 - Éclairage par propagation (ciel + blocs), occlusion ambiante, cycle jour/nuit avec soleil, lune, étoiles et nuages cubiques, eau animée et translucide.
-- 32 blocs, 30 objets (dont 16 outils en 4 matériaux), 36 recettes.
-- Créatures : *Mouflons* (passifs : viande, laine) et *Ombres* (hostiles : essence d'ombre).
+- **106 blocs, 40 objets** (dont 16 outils en 4 matériaux) et **75 recettes** (avec une recherche dans le livre de recettes).
+- Créatures : *Mouflons* (prairies : viande, laine), *Sangliers* (forêts : ils chargent si on les attaque), *Pingouins* (neige : plumes pour l'Amulette de plume) et *Ombres* (hostiles : essence d'ombre).
+- Amulettes : plume (double saut), endurance (+50 d'endurance max), rubis (+2 cœurs).
 - Coffres, pousses d'arbre qui grandissent, objets à ramasser au sol, particules, sons synthétisés.
 - Sauvegarde automatique : seules les modifications du monde sont stockées, le reste est régénéré depuis la graine.
 

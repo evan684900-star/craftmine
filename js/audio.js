@@ -129,6 +129,14 @@
       case 'shadow_hurt':
         tone(t, 0.2, 'sawtooth', 200, 90, 0.1);
         break;
+      case 'grunt':
+        tone(t, 0.25, 'sawtooth', 110, 80, 0.07, 0.02);
+        noise(t, 0.15, 'lowpass', 500, 1, 0.08);
+        break;
+      case 'squeak':
+        tone(t, 0.12, 'square', 900, 1300, 0.04);
+        tone(t + 0.12, 0.1, 'square', 1100, 800, 0.04);
+        break;
       case 'baa':
         tone(t, 0.35, 'sawtooth', 330, 300, 0.05, 0.03);
         break;

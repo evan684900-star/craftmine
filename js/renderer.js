@@ -38,16 +38,24 @@
     uniform vec3 uOffset;
     uniform float uTime;
     uniform float uWater;
+    uniform float uWaterLayer;
+    uniform vec2 uWaveOrigin;
     out vec3 vUV;
     out vec2 vLight;
     out float vShade;
     out vec3 vPos;
+    out float vIsWater;
     void main() {
       vec3 p = vec3(aPos.xyz) / 16.0 + uOffset;
       float uvp = float(aPos.w);
       float u = floor(uvp / 32.0);
       float v = uvp - u * 32.0;
-      if (uWater > 0.5) p.y += (sin(p.x * 1.3 + uTime * 1.7) + cos(p.z * 1.1 + uTime * 1.3)) * 0.025 - 0.05;
+      vIsWater = (uWater > 0.5 && abs(aData.x - uWaterLayer) < 0.5) ? 1.0 : 0.0;
+      if (vIsWater > 0.5) {
+        // vagues calées sur le monde (et non sur la caméra)
+        vec2 wp = p.xz + uWaveOrigin;
+        p.y += (sin(wp.x * 1.3 + uTime * 1.7) + cos(wp.y * 1.1 + uTime * 1.3)) * 0.025 - 0.05;
+      }
       vUV = vec3(u / 16.0, v / 16.0, aData.x);
       vLight = aData.yz / 255.0;
       vShade = aData.w / 255.0;
@@ -65,16 +73,17 @@
     in vec2 vLight;
     in float vShade;
     in vec3 vPos;
+    in float vIsWater;
     out vec4 outColor;
     ${LIGHT_FN}
     void main() {
       vec2 uv = vUV.xy;
-      if (uWater > 0.5) uv += vec2(uTime * 0.015, uTime * 0.03);
+      if (vIsWater > 0.5) uv += vec2(uTime * 0.015, uTime * 0.03);
       vec4 tex = texture(uTex, vec3(uv, vUV.z));
       if (uWater < 0.5 && tex.a < 0.5) discard;
       vec3 col = tex.rgb * shadeLight(vLight, vPos) * vShade;
       col = applyFog(col, vPos);
-      outColor = vec4(col, uWater > 0.5 ? 0.78 : 1.0);
+      outColor = vec4(col, uWater > 0.5 ? (vIsWater > 0.5 ? 0.78 : tex.a) : 1.0);
     }`;
 
   const ENT_VS = `#version 300 es
@@ -556,6 +565,8 @@
       gl.uniformMatrix4fv(cp.u.uViewProj, false, this.viewProj);
       gl.uniform1f(cp.u.uTime, env.time);
       gl.uniform1f(cp.u.uWater, 0);
+      gl.uniform1f(cp.u.uWaterLayer, CM.Textures.layer.water);
+      gl.uniform2f(cp.u.uWaveOrigin, cam[0] % ((2 * Math.PI * 1000) / 1.3), cam[2] % ((2 * Math.PI * 1000) / 1.1));
       let drawn = 0, quads = 0;
       const waterList = [];
       for (const sec of this.sections.values()) {

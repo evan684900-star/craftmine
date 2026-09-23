@@ -105,7 +105,8 @@
       }
       this.world.fixSpawn();
       this.world.dirty.clear();
-      this.saplings = new Set(this.world.editedPositions(B.SAPLING).map((p) => p.join(',')));
+      this.saplings = new Set();
+      for (const id of CM.TAGS.saplings) for (const p of this.world.editedPositions(id)) this.saplings.add(p.join(','));
       this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
@@ -146,6 +147,7 @@
       if (this.autostart) {
         this.forceInput = true;
       } else this.ui.show('start');
+      if (save && save.v === 2) setTimeout(() => this.ui.toast('Mise à jour des biomes : le paysage autour de tes constructions a pu changer.', 'warn'), 800);
     }
 
     spawnInitialMobs() {
@@ -155,8 +157,9 @@
         const x = Math.floor(sp.x + (r() - 0.5) * 140), z = Math.floor(sp.z + (r() - 0.5) * 140);
         if (!w.loaded(x, z)) continue;
         const y = w.groundBelow(x, CM.WORLD.H - 1, z);
-        if (y > 0 && w.get(x, y, z) === B.GRASS && Math.hypot(x - sp.x, z - sp.z) > 8) {
-          this.entities.addMob('mouflon', x + 0.5, y + 1, z + 0.5);
+        const type = this.entities.animalFor(w.column(x, z).bi);
+        if (type && y > 0 && CM.blocks[w.get(x, y, z)].soil && Math.hypot(x - sp.x, z - sp.z) > 8) {
+          this.entities.addMob(type, x + 0.5, y + 1, z + 0.5);
           n++;
         }
       }
@@ -167,7 +170,7 @@
     saveData() {
       const p = this.player;
       return {
-        v: 2,
+        v: 3,
         seed: this.world.seed,
         spawn: this.world.spawn,
         edits: this.world.editsObject(),
@@ -244,7 +247,7 @@
           throw new Error("le fichier n'est pas une sauvegarde CraftMine");
         }
         if (data && data.v === 1) throw new Error("cette sauvegarde vient d'une ancienne version du jeu (monde limité) et ne peut plus être chargée");
-        if (!data || data.v !== 2 || !Number.isFinite(data.seed) || typeof data.edits !== 'object' || !data.player) {
+        if (!data || (data.v !== 2 && data.v !== 3) || !Number.isFinite(data.seed) || typeof data.edits !== 'object' || !data.player) {
           throw new Error("le fichier n'est pas une sauvegarde CraftMine valide");
         }
         const existing = this.loadSave();
@@ -271,7 +274,7 @@
     loadSave() {
       try {
         const s = JSON.parse(storageGet(SAVE_KEY));
-        return s && s.v === 2 ? s : null;
+        return s && (s.v === 2 || s.v === 3) ? s : null;
       } catch (e) {
         return null;
       }
@@ -523,8 +526,29 @@
     }
     chestAt(x, y, z) {
       const k = x + ',' + y + ',' + z;
-      if (!this.chests.has(k)) this.chests.set(k, new Array(27).fill(null));
+      if (!this.chests.has(k)) {
+        const slots = new Array(27).fill(null);
+        if (this.world.isNaturalChest(x, y, z)) this.fillLoot(slots, x, y, z);
+        this.chests.set(k, slots);
+      }
       return this.chests.get(k);
+    }
+    // Butin (déterministe) des coffres trouvés dans les ruines.
+    fillLoot(slots, x, y, z) {
+      const r = CM.rng((CM.hash3(x, y, z, this.world.seed + 999) * 4294967296) >>> 0);
+      const I = CM.I;
+      const table = [
+        [B.TORCH, 0.6, 4, 12], [I.COAL, 0.5, 3, 8], [I.IRON_INGOT, 0.55, 1, 4], [I.COPPER_INGOT, 0.45, 2, 6],
+        [I.GOLD_INGOT, 0.35, 1, 3], [I.APPLE, 0.4, 1, 3], [I.COOKED_MEAT, 0.35, 1, 3], [I.ROPE, 0.35, 1, 3],
+        [I.CRYSTAL, 0.22, 1, 2], [I.RUBY, 0.12, 1, 2], [I.SKY_SHARD, 0.08, 1, 1], [I.GOLDEN_APPLE, 0.06, 1, 1],
+        [I.FEATHER, 0.25, 1, 4], [I.PUMPKIN_PIE, 0.2, 1, 2],
+      ];
+      const items = [];
+      for (const [id, p, a, b] of table) if (r() < p) items.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
+      const saplings = CM.TAGS.saplings;
+      if (r() < 0.4) items.push({ id: saplings[Math.floor(r() * saplings.length)], count: 1 + Math.floor(r() * 3) });
+      const free = [...Array(27).keys()];
+      for (const it of items) slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
     }
     spillChest(x, y, z) {
       const k = x + ',' + y + ',' + z;
@@ -538,13 +562,14 @@
       for (const key of [...this.saplings]) {
         const [x, y, z] = key.split(',').map(Number);
         if (!w.loaded(x, z)) continue;
-        if (w.get(x, y, z) !== B.SAPLING) {
+        const id = w.get(x, y, z);
+        if (!CM.TAGS.saplings.includes(id)) {
           this.saplings.delete(key);
           continue;
         }
         if (Math.random() > 1 / 50) continue;
         if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
-        if (w.growTree(x, y, z, Math.random)) {
+        if (w.growTree(x, y, z, CM.woodOf(id).key)) {
           this.saplings.delete(key);
           this.entities.burst(CM.Textures.layer.leaves, x + 0.5, y + 1, z + 0.5, 12, { speed: 2, size: 0.07 });
         }

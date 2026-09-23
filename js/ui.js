@@ -2,6 +2,8 @@
 // Interface : HUD, inventaire, fabrication, journal, menus.
 (function () {
   const $ = (id) => document.getElementById(id);
+  // Texte sans accents ni majuscules (pour la recherche de recettes).
+  const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const I = CM.I;
 
   // Texte d'aide partagé (menu principal + onglet « Mécaniques »).
@@ -15,11 +17,15 @@
     ['🌑 Les Ombres', "La nuit, et dans l'obscurité des grottes, des Ombres apparaissent. Elles brûlent au soleil et ont peur de la lumière : elles refusent d'entrer dans la zone d'une torche et y souffrent. Éclaire ta base ! Tenir une torche éclaire autour de toi."],
     ['🍄 Champignons rebond', "Dans les grottes poussent des champignons violets lumineux. Saute dessus pour rebondir très haut ; tomber dessus annule les dégâts de chute. Tu peux les récolter et les poser."],
     ['🏝 Îles célestes', "Des îles flottent au-dessus du monde (vers la couche 75). Leur pierre renferme des Éclats célestes. Atteins-les avec le grappin, depuis une montagne ou en empilant des blocs."],
+    ['🗺 Biomes et essences', "Le monde compte 15 biomes : plaines, forêts de chênes et de bouleaux, taïga, taïga enneigée et toundra glacée, savane, jungle, marais, désert, canyon rouge en terre cuite, montagnes, lacs, océans… et la rare Sylve cristalline aux arbres lumineux. Sept essences de bois (chêne, bouleau, sapin, acacia, acajou, saule, bois cristallin) donnent chacune leurs planches. Le nom du biome s'affiche sous l'horloge."],
+    ['⛏ Minerais', "Charbon, fer, cuivre (lanternes), or (pommes dorées, surtout dans les canyons rouges), cristal (en profondeur), rubis (seulement en montagne, pour l'Amulette de rubis : +2 cœurs) et éclats célestes (îles volantes). Sous terre, du granit, de la diorite, de l'andésite et du gravier."],
+    ['🏛 Ruines', "Des ruines de pierre (ou de grès dans le désert) cachent un coffre rempli de butin : lingots, nourriture, pousses, parfois un rubis ou un éclat céleste."],
+    ['🐗 Faune', "Mouflons dans les prairies, sangliers dans les forêts (ils chargent si on les attaque !), pingouins sur la neige (leurs plumes servent à l'Amulette de plume)."],
     ["☀ Le Cœur d'aube", "Le but final : forge le Cœur d'aube (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et pose-le. Il chasse les Ombres alentour pour toujours."],
   ];
 
   const OBJECTIVES = [
-    { t: 'Coupe du bois', d: 'Maintiens le clic gauche sur un tronc d’arbre pour récolter 3 bûches.', done: (g) => (g.stats.mined[CM.B.LOG] || 0) >= 3 },
+    { t: 'Coupe du bois', d: 'Maintiens le clic gauche sur un tronc d’arbre pour récolter 3 bûches.', done: (g) => CM.TAGS.logs.reduce((n, id) => n + (g.stats.mined[id] || 0), 0) >= 3 },
     { t: 'Fabrique un établi', d: 'Ouvre l’inventaire (E) : bûches → planches, puis établi.', done: (g) => g.crafted(CM.B.TABLE) },
     { t: 'Ta première pioche', d: 'Pose l’établi (clic droit) et fabrique une pioche en bois à côté.', done: (g) => g.crafted(I.PICKAXE_1) },
     { t: 'L’âge de pierre', d: 'Mine de la pierre (tu obtiens des galets) et fabrique une pioche en pierre.', done: (g) => g.crafted(I.PICKAXE_2) },
@@ -144,9 +150,16 @@
       }
       // cœurs
       const hp = Math.ceil(p.health);
+      const nHearts = p.maxHealth / 2;
+      if (nHearts !== this.heartEls.length) {
+        const he = $('hearts');
+        while (this.heartEls.length < nHearts) this.heartEls.push(he.appendChild(document.createElement('i')));
+        while (this.heartEls.length > nHearts) he.removeChild(this.heartEls.pop());
+        this.lastHealth = -1;
+      }
       if (hp !== this.lastHealth) {
         this.lastHealth = hp;
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < nHearts; i++) {
           const v = hp - i * 2;
           this.heartEls[i].style.backgroundImage = 'url(' + (v >= 2 ? this.hearts.full : v === 1 ? this.hearts.half : this.hearts.empty) + ')';
         }
@@ -183,7 +196,8 @@
         const night = g.daylight < 0.35;
         const hours = (Math.floor(((g.time + 0.25) % 1) * 24) + 0) % 24;
         const hh = String(hours).padStart(2, '0');
-        $('clock').innerHTML = (night ? '<span class="danger">☾ Nuit ' : '<span>☀ Jour ') + (g.dayCount + 1) + '</span> · ' + hh + 'h';
+        $('clock').innerHTML = (night ? '<span class="danger">☾ Nuit ' : '<span>☀ Jour ') + (g.dayCount + 1) + '</span> · ' + hh + 'h' +
+          '<div class="biome">' + g.world.biomeName(g.player.x, g.player.z) + '</div>';
         this.updateObjective();
         if (this.invOpen) this.refreshStations();
       }
@@ -326,6 +340,11 @@
           this.renderRecipes();
         }),
       );
+      $('recipe-search').addEventListener('input', (e) => {
+        this.search = norm(e.target.value.trim());
+        this.renderRecipes();
+      });
+      $('recipe-search').addEventListener('keydown', (e) => e.stopPropagation());
       $('only-can').addEventListener('change', (e) => {
         this.onlyCan = e.target.checked;
         this.renderRecipes();
@@ -511,7 +530,10 @@
         if (b.light) bits.push('Lumineux (' + b.light + ')');
         if (b.station) bits.push('Station de fabrication');
         if (b.bounce) bits.push('Rebondissant');
-        if (b.id === CM.B.SAPLING) bits.push('Pose-la sur de l’herbe au soleil : un arbre poussera');
+        if (CM.TAGS.saplings.includes(b.id)) bits.push('Pose-la sur de l’herbe au soleil : un arbre poussera');
+        if (b.slip) bits.push('Glissant');
+        if (b.slow) bits.push('Ralentit la marche');
+        if (b.hurts) bits.push('Pique !');
         if (b.tier > 1) bits.push('Pioche en ' + CM.TIER_NAMES[b.tier] + ' requise');
         if (bits.length) h += '<div class="tt-sub">' + bits.join(' · ') + '</div>';
       }
@@ -523,14 +545,16 @@
       const box = $('recipes');
       const list = CM.recipes
         .map((r, i) => ({ r, i, can: inv.canCraft(r, st) }))
-        .filter((o) => (this.filter === 'tout' || o.r.cat === this.filter) && (!this.onlyCan || o.can));
+        .filter((o) => (this.filter === 'tout' || o.r.cat === this.filter) && (!this.onlyCan || o.can))
+        .filter((o) => !this.search || norm(CM.itemName(o.r.out)).includes(this.search) || o.r.ing.some(([id]) => norm(CM.ingName(id)).includes(this.search)));
       list.sort((a, b) => (b.can ? 1 : 0) - (a.can ? 1 : 0));
       let h = '';
       for (const { r, i, can } of list) {
         const ing = r.ing
           .map(([id, n]) => {
             const have = inv.count(id);
-            return '<span class="ing ' + (have >= n ? '' : 'miss') + '"><i style="background-image:url(' + CM.Textures.icons[id] + ')"></i>' + n + ' ' + CM.itemName(id) + '</span>';
+            const shown = typeof id === 'string' ? CM.tagMembers(id).find((m) => inv.has(m)) || CM.tagMembers(id)[0] : id;
+            return '<span class="ing ' + (have >= n ? '' : 'miss') + '"><i style="background-image:url(' + CM.Textures.icons[shown] + ')"></i>' + n + ' ' + CM.ingName(id) + '</span>';
           })
           .join('');
         const stn = r.station ? '<span class="r-station ' + (st[r.station] ? '' : 'miss') + '">' + CM.STATION_NAMES[r.station] + '</span>' : '';

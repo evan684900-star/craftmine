@@ -829,6 +829,525 @@
     }
   }
 
+  // ======================================================= variété (v3) ===
+  const INGOT_ROWS = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.....hhhhhhhh...',
+    '....hHHHHHHHmd..',
+    '...hHHHHHHHmmd..',
+    '..hhhhhhhhhmdd..',
+    '..mmmmmmmmmmdd..',
+    '..mmmmmmmmmmd...',
+    '..dddddddddd....',
+  ];
+  const GEM_ROWS = [
+    '................',
+    '.......h........',
+    '......hHm.......',
+    '.....hHHmm......',
+    '....hHHHmmm.....',
+    '...hHHHHmmmm....',
+    '..hHHHHHmmmmd...',
+    '..mmmmmmmdddd...',
+    '...mmmmmdddd....',
+    '....mmmmddd.....',
+    '.....mmmdd......',
+    '......mmd.......',
+    '.......d........',
+  ];
+  const shade = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+  const pal4 = (c) => ({ h: shade(c, 1.35), H: shade(c, 1.15), m: c, d: shade(c, 0.65) });
+
+  // ---- essences de bois : écorce, cerne, planches, feuilles, pousse ----
+  function woodSet(t, p) {
+    make(t + '_log_side', (d, r) => {
+      const cols = [];
+      for (let x = 0; x < 16; x++) cols.push((r() - 0.5) * 20 + (r() < 0.25 ? -22 : 0));
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const v = cols[x] + (r() - 0.5) * 10;
+          put(d, x, y, [p.bark[0] + v, p.bark[1] + v * 0.85, p.bark[2] + v * 0.7]);
+        }
+      if (p.style === 'birch') {
+        for (let k = 0; k < 9; k++) {
+          const x = Math.floor(r() * 14), y = Math.floor(r() * 16), len = 2 + Math.floor(r() * 3);
+          for (let i = 0; i < len; i++) put(d, x + i, y, vary([40, 40, 38], r, 8));
+        }
+      } else if (p.style === 'crystal') {
+        for (let k = 0; k < 3; k++) {
+          let x = Math.floor(r() * 16);
+          for (let y = 0; y < 16; y++) {
+            put(d, x, y, [110, 230, 250]);
+            if (r() < 0.3) x = (x + (r() < 0.5 ? 15 : 1)) % 16;
+          }
+        }
+      } else if (p.style === 'jungle') {
+        speckle(d, r, [70, 110, 40], 0.08, 6);
+      }
+    });
+    make(t + '_log_top', (d, r) => {
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const dist = Math.hypot(x - 7.5, y - 7.5);
+          const c = dist > 7 ? p.bark : Math.floor(dist * 1.2) % 2 ? p.ring1 : p.ring2;
+          put(d, x, y, vary(c, r, 6));
+        }
+    });
+    make(t + '_planks', (d, r) => {
+      const offs = [3, 11, 6, 14];
+      for (let y = 0; y < 16; y++) {
+        const board = Math.floor(y / 4);
+        const bv = (r() - 0.5) * 14;
+        for (let x = 0; x < 16; x++) {
+          let c = [p.plank[0] + bv, p.plank[1] + bv, p.plank[2] + bv * 0.6];
+          if (y % 4 === 3 || x === offs[board]) c = shade(p.plank, 0.7);
+          put(d, x, y, vary(c, r, 6));
+        }
+      }
+    });
+    make(t + '_leaves', (d, r) => {
+      fill(d, r, p.leaf, 12);
+      if (p.leafStyle === 'needles') {
+        for (let y = 0; y < 16; y += 2) for (let x = (y / 2) % 2; x < 16; x += 2) put(d, x, y, vary(shade(p.leaf, 0.65), r, 6));
+      } else speckle(d, r, shade(p.leaf, 0.62), 0.26, 5);
+      speckle(d, r, shade(p.leaf, 1.3), p.leafStyle === 'crystal' ? 0.14 : 0.08, 5);
+      if (p.leafStyle === 'crystal') speckle(d, r, [235, 255, 255], 0.05, 0);
+    });
+    make(t + '_sapling', (d, r) => {
+      clear(d);
+      for (let y = 9; y < 16; y++) put(d, 7 + (y > 12 ? 1 : 0), y, p.bark);
+      if (p.leafStyle === 'needles') {
+        for (let y = 1; y < 12; y++) {
+          const w = Math.floor((y % 4) + y / 4);
+          for (let x = 8 - w; x <= 7 + w; x++) if (r() < 0.85) put(d, x, y, vary(p.leaf, r, 10));
+        }
+      } else {
+        disc(d, 7.5, 6, 4.2, (x, y) => {
+          if (r() < 0.82) put(d, x, y, vary(r() < 0.3 ? shade(p.leaf, 0.7) : p.leaf, r, 10));
+        });
+      }
+    });
+  }
+  woodSet('birch', { bark: [218, 216, 206], ring1: [214, 198, 150], ring2: [190, 172, 124], plank: [206, 188, 134], leaf: [104, 156, 70], style: 'birch' });
+  woodSet('spruce', { bark: [72, 52, 32], ring1: [150, 112, 70], ring2: [120, 88, 52], plank: [114, 84, 52], leaf: [46, 88, 62], leafStyle: 'needles' });
+  woodSet('acacia', { bark: [106, 100, 92], ring1: [196, 104, 54], ring2: [170, 86, 44], plank: [174, 92, 52], leaf: [112, 142, 48] });
+  woodSet('jungle', { bark: [98, 78, 40], ring1: [178, 128, 82], ring2: [150, 104, 64], plank: [162, 116, 82], leaf: [46, 142, 32], style: 'jungle' });
+  woodSet('willow', { bark: [92, 84, 64], ring1: [168, 158, 112], ring2: [140, 130, 92], plank: [152, 146, 104], leaf: [86, 128, 62] });
+  woodSet('crystal', { bark: [72, 52, 120], ring1: [170, 140, 230], ring2: [130, 104, 200], plank: [150, 124, 206], leaf: [120, 196, 238], style: 'crystal', leafStyle: 'crystal' });
+
+  // ---- variantes d'herbe ----
+  function grassSet(t, top, sideBand, opts) {
+    opts = opts || {};
+    make(t + '_top', (d, r) => {
+      if (opts.topFrom) copyFrom(d, opts.topFrom);
+      else {
+        for (let y = 0; y < 16; y++)
+          for (let x = 0; x < 16; x++) {
+            const v = (r() - 0.5) * 30;
+            put(d, x, y, [top[0] + v * 0.6, top[1] + v, top[2] + v * 0.4]);
+          }
+        speckle(d, r, shade(top, 0.78), 0.12);
+        if (opts.speck) speckle(d, r, opts.speck, 0.1, 6);
+      }
+    });
+    make(t + '_side', (d, r) => {
+      copyFrom(d, 'dirt');
+      for (let x = 0; x < 16; x++) {
+        const depth = 3 + (r() < 0.45 ? 1 : 0) + (r() < 0.15 ? 1 : 0);
+        for (let y = 0; y < depth; y++) put(d, x, y, vary(sideBand, r, 12));
+        if (r() < 0.5) put(d, x, depth, shade(sideBand, 0.75));
+      }
+    });
+  }
+  grassSet('snowy_grass', null, [236, 242, 252], { topFrom: 'snow' });
+  grassSet('dry_grass', [168, 164, 78], [150, 148, 70]);
+  grassSet('lush_grass', [66, 176, 44], [62, 160, 40]);
+  grassSet('swamp_grass', [86, 104, 52], [80, 96, 48]);
+  grassSet('podzol', [112, 80, 44], [104, 74, 40], { speck: [150, 98, 50] });
+  grassSet('crystal_moss', [124, 96, 196], [112, 88, 184], { speck: [120, 230, 240] });
+
+  // ---- roches, sables, argiles ----
+  make('sandstone_top', (d, r) => {
+    fill(d, r, [216, 200, 150], 5);
+    speckle(d, r, [200, 184, 134], 0.08, 4);
+  });
+  make('sandstone_side', (d, r) => {
+    for (let y = 0; y < 16; y++) {
+      const band = y < 3 ? [226, 212, 162] : y > 12 ? [196, 178, 128] : [214, 198, 148];
+      for (let x = 0; x < 16; x++) put(d, x, y, vary(band, r, 5));
+    }
+    for (let x = 0; x < 16; x++) put(d, x, 3, [190, 172, 124]);
+  });
+  make('carved_sandstone', (d, r) => {
+    copyFrom(d, 'sandstone_side');
+    for (let i = 2; i < 14; i++) {
+      put(d, i, 2, [180, 160, 112]); put(d, i, 13, [180, 160, 112]);
+      put(d, 2, i, [180, 160, 112]); put(d, 13, i, [180, 160, 112]);
+    }
+    line(d, 5, 5, 10, 10, [170, 150, 104]);
+    line(d, 10, 5, 5, 10, [170, 150, 104]);
+    disc(d, 7.5, 7.5, 1.2, (x, y) => put(d, x, y, [196, 176, 126]));
+  });
+  make('red_sand', (d, r) => {
+    fill(d, r, [190, 104, 52], 8);
+    speckle(d, r, [166, 86, 40], 0.12);
+    speckle(d, r, [214, 128, 70], 0.06);
+  });
+  make('red_sandstone_top', (d, r) => {
+    fill(d, r, [182, 98, 46], 5);
+    speckle(d, r, [160, 84, 38], 0.08, 4);
+  });
+  make('red_sandstone_side', (d, r) => {
+    for (let y = 0; y < 16; y++) {
+      const band = y < 3 ? [194, 108, 52] : y > 12 ? [160, 82, 36] : [180, 96, 44];
+      for (let x = 0; x < 16; x++) put(d, x, y, vary(band, r, 5));
+    }
+    for (let x = 0; x < 16; x++) put(d, x, 3, [150, 76, 34]);
+  });
+  const TERRA = { terracotta: [160, 92, 64], terracotta_red: [142, 60, 46], terracotta_yellow: [186, 134, 54], terracotta_brown: [98, 66, 46], terracotta_white: [206, 176, 160] };
+  for (const [name, c] of Object.entries(TERRA)) {
+    make(name, (d, r) => {
+      fill(d, r, c, 4);
+      speckle(d, r, shade(c, 0.9), 0.1, 3);
+    });
+  }
+  make('gravel', (d, r) => {
+    fill(d, r, [128, 122, 118], 10);
+    for (let k = 0; k < 22; k++) {
+      const x = Math.floor(r() * 15), y = Math.floor(r() * 15);
+      const c = r() < 0.5 ? [96, 90, 88] : r() < 0.5 ? [160, 154, 150] : [118, 100, 86];
+      put(d, x, y, c); put(d, x + 1, y, shade(c, 0.9)); put(d, x, y + 1, shade(c, 0.85));
+    }
+  });
+  make('clay', (d, r) => {
+    fill(d, r, [160, 166, 180], 4);
+    for (let k = 0; k < 6; k++) {
+      const y = Math.floor(r() * 16), x = Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) put(d, x + i, y, [146, 152, 166]);
+    }
+  });
+  make('mud', (d, r) => {
+    fill(d, r, [70, 56, 46], 7);
+    speckle(d, r, [54, 42, 34], 0.15, 4);
+    speckle(d, r, [104, 90, 78], 0.05, 4);
+  });
+  make('ice', (d, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary([150, 196, 246], r, 6), 200);
+    line(d, 2, 12, 7, 7, [226, 244, 255, 220]);
+    line(d, 7, 7, 13, 5, [226, 244, 255, 220]);
+    line(d, 9, 14, 14, 10, [200, 230, 255, 220]);
+  });
+  function rock(name, base, ...specks) {
+    make(name, (d, r) => {
+      fill(d, r, base, 7);
+      for (const [c, p] of specks) speckle(d, r, c, p, 5);
+    });
+  }
+  rock('granite', [154, 106, 88], [[120, 80, 66], 0.2], [[186, 140, 122], 0.12], [[90, 60, 52], 0.05]);
+  rock('diorite', [196, 196, 194], [[140, 140, 140], 0.14], [[230, 230, 228], 0.12], [[90, 90, 92], 0.05]);
+  rock('andesite', [134, 134, 136], [[112, 112, 116], 0.2], [[158, 158, 160], 0.14]);
+  function polished(name, from) {
+    make(name, (d, r) => {
+      copyFrom(d, from);
+      // lisse la pierre : chaque pixel se rapproche de la couleur moyenne
+      const avg = [0, 0, 0];
+      for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) avg[k] += d[i * 4 + k] / 256;
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const c = get(d, x, y);
+          put(d, x, y, [avg[0] + (c[0] - avg[0]) * 0.35, avg[1] + (c[1] - avg[1]) * 0.35, avg[2] + (c[2] - avg[2]) * 0.35]);
+        }
+      for (let i = 0; i < 16; i++) {
+        put(d, i, 0, shade(get(d, i, 0), 1.18)); put(d, 0, i, shade(get(d, 0, i), 1.18));
+        put(d, i, 15, shade(get(d, i, 15), 0.7)); put(d, 15, i, shade(get(d, 15, i), 0.7));
+      }
+    });
+  }
+  polished('polished_granite', 'granite');
+  polished('polished_diorite', 'diorite');
+  polished('polished_andesite', 'andesite');
+  function mossy(name, from) {
+    make(name, (d, r) => {
+      copyFrom(d, from);
+      for (let k = 0; k < 5; k++) {
+        const cx = r() * 16, cy = r() * 16, rad = 1.5 + r() * 2.5;
+        disc(d, cx, cy, rad, (x, y) => {
+          if (r() < 0.75) put(d, x, y, vary([74, 116, 50], r, 12));
+        });
+      }
+    });
+  }
+  mossy('mossy_cobble', 'cobble');
+  mossy('mossy_stonebrick', 'stonebrick');
+
+  // ---- plantes ----
+  make('cactus_side', (d, r) => {
+    fill(d, r, [66, 130, 50], 8);
+    for (let y = 0; y < 16; y++) {
+      put(d, 0, y, [44, 96, 36]); put(d, 15, y, [44, 96, 36]);
+      put(d, 4, y, [54, 112, 42]); put(d, 11, y, [54, 112, 42]);
+    }
+    for (let k = 0; k < 8; k++) put(d, 2 + Math.floor(r() * 12), Math.floor(r() * 16), [226, 222, 180]);
+  });
+  make('cactus_top', (d, r) => {
+    fill(d, r, [80, 146, 58], 8);
+    for (let i = 0; i < 16; i++) {
+      put(d, i, 0, [44, 96, 36]); put(d, i, 15, [44, 96, 36]); put(d, 0, i, [44, 96, 36]); put(d, 15, i, [44, 96, 36]);
+    }
+    disc(d, 7.5, 7.5, 2, (x, y) => put(d, x, y, [110, 170, 80]));
+  });
+  make('dead_bush', (d, r) => {
+    clear(d);
+    const c = [124, 88, 48];
+    line(d, 8, 15, 8, 8, c);
+    line(d, 8, 10, 4, 5, c);
+    line(d, 8, 9, 12, 4, c);
+    line(d, 8, 12, 12, 9, c);
+    line(d, 5, 6, 3, 3, c);
+    line(d, 11, 5, 13, 2, c);
+  });
+  make('fern', (d, r) => {
+    clear(d);
+    for (const [x0, lean] of [[7, -4], [8, 3], [6, -1], [9, 1]]) {
+      for (let y = 15; y > 3; y--) {
+        const t = (15 - y) / 12;
+        const x = Math.round(x0 + lean * t * t);
+        put(d, x, y, vary([58, 128, 44], r, 10));
+        if (y % 2 === 0) {
+          put(d, x - 1, y, [50, 112, 38]);
+          put(d, x + 1, y, [70, 146, 54]);
+        }
+      }
+    }
+  });
+  function flowerTex(name, petal, center) {
+    make(name, (d, r) => {
+      clear(d);
+      for (let y = 8; y < 16; y++) put(d, 8, y, [58, 138, 40]);
+      put(d, 7, 12, [70, 150, 48]); put(d, 9, 11, [70, 150, 48]);
+      disc(d, 8, 5.5, 2.6, (x, y, dist) => put(d, x, y, dist > 1.8 ? shade(petal, 0.8) : petal));
+      put(d, 8, 5, center); put(d, 8, 6, center);
+    });
+  }
+  flowerTex('dandelion', [250, 214, 40], [230, 170, 20]);
+  flowerTex('cornflower', [70, 110, 230], [40, 60, 150]);
+  flowerTex('tulip', [242, 124, 36], [196, 80, 20]);
+  flowerTex('daisy', [246, 246, 240], [236, 196, 40]);
+  make('crystal_flower', (d, r) => {
+    clear(d);
+    for (let y = 9; y < 16; y++) put(d, 8, y, [90, 70, 150]);
+    art(d, [
+      '................',
+      '.......h........',
+      '......hHm.......',
+      '...h..hHm..h....',
+      '...Hm.hHm.Hm....',
+      '....HmhHmHm.....',
+      '.....HHHHm......',
+      '......Hmm.......',
+    ], { h: [236, 255, 255], H: [130, 230, 250], m: [90, 150, 230] });
+  });
+  function shroomTex(name, cap, spots) {
+    make(name, (d, r) => {
+      clear(d);
+      for (let y = 10; y < 16; y++) { put(d, 7, y, [226, 214, 196]); put(d, 8, y, [206, 192, 172]); }
+      for (let y = 6; y < 10; y++) for (let x = 4; x < 12; x++) {
+        if ((y === 6 && (x < 6 || x > 9))) continue;
+        put(d, x, y, vary(cap, r, 8));
+      }
+      if (spots) { put(d, 6, 7, [250, 250, 250]); put(d, 9, 8, [250, 250, 250]); put(d, 8, 6, [250, 250, 250]); }
+    });
+  }
+  shroomTex('red_shroom', [200, 34, 34], true);
+  shroomTex('brown_shroom', [150, 106, 72], false);
+  make('melon_side', (d, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(x % 4 < 2 ? [90, 150, 40] : [120, 176, 56], r, 8));
+  });
+  make('melon_top', (d, r) => {
+    fill(d, r, [110, 164, 50], 8);
+    disc(d, 7.5, 7.5, 2, (x, y) => put(d, x, y, [80, 120, 40]));
+  });
+  make('pumpkin_side', (d, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(x % 5 === 0 ? [186, 100, 20] : [226, 136, 32], r, 8));
+  });
+  make('pumpkin_top', (d, r) => {
+    fill(d, r, [210, 124, 28], 8);
+    for (let y = 6; y < 10; y++) for (let x = 7; x < 9; x++) put(d, x, y, [96, 76, 36]);
+  });
+  make('jack_face', (d, r) => {
+    copyFrom(d, 'pumpkin_side');
+    const glow = [255, 222, 90];
+    art(d, [
+      '................',
+      '................',
+      '................',
+      '...gg......gg...',
+      '...ggg....ggg...',
+      '................',
+      '.......gg.......',
+      '................',
+      '..gggggggggggg..',
+      '..g.gggggggg.g..',
+      '....gg....gg....',
+    ], { g: glow });
+  });
+
+  // ---- minerais et blocs de métal ----
+  make('copper_ore', (d, r) => {
+    copyFrom(d, 'stone');
+    ore(d, r, [206, 116, 72], [236, 170, 120], 6);
+    speckle(d, r, [90, 170, 150], 0.03, 0);
+  });
+  make('gold_ore', (d, r) => {
+    copyFrom(d, 'stone');
+    ore(d, r, [236, 196, 60], [255, 240, 150], 6);
+  });
+  make('ruby_ore', (d, r) => {
+    copyFrom(d, 'stone');
+    ore(d, r, [206, 30, 60], [255, 140, 160], 5);
+  });
+  function metalBlock(name, c) {
+    make(name, (d, r) => {
+      fill(d, r, c, 5);
+      for (let i = 0; i < 16; i++) {
+        put(d, i, 0, shade(c, 1.25)); put(d, 0, i, shade(c, 1.25));
+        put(d, i, 15, shade(c, 0.7)); put(d, 15, i, shade(c, 0.7));
+      }
+      line(d, 3, 3, 7, 3, shade(c, 1.3));
+      line(d, 3, 4, 5, 4, shade(c, 1.2));
+      for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) put(d, x, y, shade(c, 0.6));
+    });
+  }
+  metalBlock('copper_block', [196, 110, 66]);
+  metalBlock('gold_block', [240, 200, 60]);
+  metalBlock('iron_block', [210, 210, 216]);
+  metalBlock('coal_block', [34, 34, 38]);
+  function gemBlock(name, c) {
+    make(name, (d, r) => {
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const f = ((x + y) % 8 < 4 ? 1.1 : 0.9) * (x % 8 === 0 || y % 8 === 0 ? 0.75 : 1);
+          put(d, x, y, vary(shade(c, f), r, 6));
+        }
+      speckle(d, r, [255, 255, 255], 0.03, 0);
+    });
+  }
+  gemBlock('crystal_block', [90, 210, 230]);
+  gemBlock('ruby_block', [190, 30, 56]);
+  make('lantern_side', (d, r) => {
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const t = CM.clamp(1 - Math.hypot(x - 7.5, y - 8) / 8, 0, 1);
+        put(d, x, y, [255, 170 + 80 * t, 70 + 150 * t]);
+      }
+    for (let i = 0; i < 16; i++) {
+      put(d, i, 0, [150, 84, 50]); put(d, i, 15, [150, 84, 50]);
+      put(d, 0, i, [170, 96, 58]); put(d, 15, i, [130, 72, 42]);
+      put(d, i, 5, [170, 96, 58]); put(d, 7, i, [170, 96, 58]); put(d, 8, i, [150, 84, 50]);
+    }
+  });
+  make('lantern_top', (d, r) => {
+    fill(d, r, [170, 96, 58], 6);
+    disc(d, 7.5, 7.5, 2.5, (x, y) => put(d, x, y, [255, 230, 150]));
+  });
+
+  // ---- objets ----
+  make('apple', (d, r) => {
+    clear(d);
+    disc(d, 7.5, 9, 5, (x, y, dist) => put(d, x, y, dist > 4 ? [150, 16, 24] : [214, 36, 40]));
+    put(d, 5, 7, [255, 150, 150]); put(d, 6, 6, [255, 190, 190]);
+    line(d, 8, 4, 9, 2, [96, 66, 36]);
+    put(d, 10, 2, [70, 150, 48]); put(d, 11, 3, [70, 150, 48]);
+  });
+  make('golden_apple', (d, r) => {
+    clear(d);
+    disc(d, 7.5, 9, 5, (x, y, dist) => put(d, x, y, dist > 4 ? [196, 146, 20] : [250, 214, 60]));
+    put(d, 5, 7, [255, 250, 210]); put(d, 6, 6, [255, 255, 240]);
+    line(d, 8, 4, 9, 2, [96, 66, 36]);
+    put(d, 10, 2, [70, 150, 48]); put(d, 11, 3, [70, 150, 48]);
+  });
+  make('melon_slice', (d, r) => {
+    clear(d);
+    for (let y = 4; y < 14; y++)
+      for (let x = 2; x < 14; x++) {
+        if (y - 4 < Math.abs(x - 7.5) * 0.9) continue;
+        const edge = y >= 12;
+        put(d, x, y, edge ? [70, 140, 40] : y === 11 ? [236, 236, 200] : [226, 60, 60]);
+      }
+    for (const [x, y] of [[6, 8], [9, 9], [7, 10], [10, 7]]) put(d, x, y, [30, 20, 20]);
+  });
+  make('mushroom_stew', (d, r) => {
+    clear(d);
+    for (let y = 8; y < 14; y++) for (let x = 2; x < 14; x++) {
+      if (y === 13 && (x < 4 || x > 11)) continue;
+      put(d, x, y, y === 8 ? [196, 140, 90] : [136, 92, 54]);
+    }
+    for (let x = 3; x < 13; x++) put(d, x, 7, [170, 110, 70]);
+    put(d, 5, 7, [200, 40, 40]); put(d, 9, 7, [220, 200, 170]);
+  });
+  make('copper_ingot', (d) => { clear(d); art(d, INGOT_ROWS, pal4([200, 112, 70])); });
+  make('gold_ingot', (d) => { clear(d); art(d, INGOT_ROWS, pal4([230, 186, 50])); });
+  make('ruby', (d) => { clear(d); art(d, GEM_ROWS, pal4([196, 30, 60])); });
+  make('feather', (d, r) => {
+    clear(d);
+    line(d, 3, 13, 12, 2, [200, 200, 210]);
+    for (let k = 0; k < 9; k++) {
+      const x = 4 + k, y = 12 - k;
+      line(d, x, y - 1, x + 2, y + 1, [246, 248, 255]);
+      put(d, x - 1, y - 1, [226, 232, 244]);
+    }
+  });
+  make('ruby_charm', (d) => {
+    clear(d);
+    disc(d, 7.5, 9.5, 5.5, (x, y, dist) => put(d, x, y, dist > 4.5 ? [220, 170, 50] : [60, 40, 30]));
+    art(d, [
+      '......ss........',
+      '.....s..s.......',
+      '................',
+      '................',
+      '................',
+      '.......h........',
+      '......hHm.......',
+      '.....hHHmm......',
+      '.....mmmdd......',
+      '......mdd.......',
+      '.......d........',
+    ], Object.assign({ s: [170, 130, 80] }, pal4([200, 30, 60])));
+  });
+  make('pumpkin_pie', (d, r) => {
+    clear(d);
+    for (let y = 7; y < 13; y++) for (let x = 2; x < 14; x++) put(d, x, y, y < 9 ? [226, 140, 50] : [200, 150, 90]);
+    for (let x = 2; x < 14; x++) { put(d, x, 7, [236, 196, 130]); put(d, x, 12, [170, 110, 60]); }
+  });
+
+  // ---- nouvelles créatures ----
+  make('boar_hide', (d, r) => {
+    fill(d, r, [96, 70, 50], 10);
+    for (let k = 0; k < 30; k++) put(d, Math.floor(r() * 16), Math.floor(r() * 16), [66, 48, 34]);
+  });
+  make('boar_face', (d, r) => {
+    fill(d, r, [104, 76, 54], 8);
+    put(d, 4, 5, [20, 20, 20]); put(d, 11, 5, [20, 20, 20]);
+    for (let y = 9; y < 14; y++) for (let x = 5; x < 11; x++) put(d, x, y, [196, 140, 120]);
+    put(d, 6, 11, [90, 50, 40]); put(d, 9, 11, [90, 50, 40]);
+  });
+  make('boar_tusk', (d, r) => fill(d, r, [236, 230, 210], 5));
+  make('penguin_body', (d, r) => fill(d, r, [30, 32, 40], 5));
+  make('penguin_belly', (d, r) => {
+    fill(d, r, [30, 32, 40], 5);
+    disc(d, 7.5, 9, 6.5, (x, y) => put(d, x, y, vary([236, 238, 242], r, 5)));
+  });
+  make('penguin_face', (d, r) => {
+    fill(d, r, [30, 32, 40], 5);
+    for (let y = 6; y < 14; y++) for (let x = 3; x < 13; x++) put(d, x, y, [236, 238, 242]);
+    put(d, 5, 7, [10, 10, 10]); put(d, 10, 7, [10, 10, 10]);
+  });
+  make('penguin_beak', (d, r) => fill(d, r, [240, 150, 40], 6));
+
   // ------------------------------------------------- tableau de textures --
   T.count = () => T.names.length;
   T.pixels = function () {
@@ -877,7 +1396,7 @@
   T.buildIcons = function () {
     for (const b of CM.blocks) {
       if (!b || !b.tex || b.id === 0) continue;
-      T.icons[b.id] = b.render === 'cube' || b.render === 'glass' ? blockIcon(b) : flatIcon(b.tex.side);
+      T.icons[b.id] = b.render === 'cube' || b.render === 'glass' || b.render === 'ice' ? blockIcon(b) : flatIcon(b.tex.side);
     }
     for (const it of CM.items) if (it) T.icons[it.id] = flatIcon(it.tex);
   };

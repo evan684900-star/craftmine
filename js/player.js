@@ -51,6 +51,9 @@
       this.sprinting = false;
     }
 
+    get maxHealth() {
+      return 20 + (this.game.inventory.has(I.RUBY_CHARM) ? 4 : 0);
+    }
     get maxStamina() {
       return 100 + (this.game.inventory.has(I.STAMINA_CHARM) ? 50 : 0);
     }
@@ -103,6 +106,7 @@
       const wl = Math.hypot(wx, wz);
       if (wl > 0) { wx /= wl; wz /= wl; }
 
+      const under = CM.blocks[w.get(fx, Math.floor(this.y - 0.05), fz)];
       let speed = 4.3;
       this.sprinting = false;
       if ((k.ShiftLeft || k.ShiftRight) && f > 0 && !this.exhausted && this.stamina > 0) {
@@ -111,6 +115,8 @@
         this.spend(15 * dt);
       }
       if (this.inWater) speed = this.sprinting ? 3.6 : 2.6;
+      if (this.onGround && under.slow) speed *= under.slow;
+      if (this.onGround && under.slip) speed *= 1.15;
 
       // ----- ruée
       if (input.pressed.KeyF && this.dashCd <= 0) {
@@ -133,7 +139,7 @@
       // ----- accélération horizontale
       if (this.dashTime <= 0) {
         if (this.onGround || this.inWater) {
-          const acc = this.inWater ? 8 : 16;
+          const acc = this.inWater ? 8 : this.onGround && under.slip ? 1.2 : 16;
           this.vx += (wx * speed - this.vx) * Math.min(1, acc * dt);
           this.vz += (wz * speed - this.vz) * Math.min(1, acc * dt);
         } else {
@@ -234,11 +240,12 @@
         this.stamina = Math.min(this.maxStamina, this.stamina + rate * dt);
       }
       if (this.exhausted && this.stamina >= 30) this.exhausted = false;
-      if (this.health < 20 && this.stamina > 30) {
+      if (this.health > this.maxHealth) this.health = this.maxHealth;
+      if (this.health < this.maxHealth && this.stamina > 30) {
         this.regen += dt * (this.vigor > 0 ? 2.5 : 1);
         if (this.regen >= 4) {
           this.regen = 0;
-          this.health = Math.min(20, this.health + 1);
+          this.health = Math.min(this.maxHealth, this.health + 1);
         }
       }
 
@@ -255,10 +262,21 @@
       } else this.bobAmp = Math.max(0, this.bobAmp - dt * 4);
 
       if (this.y < -30) this.damage(100, null, null, 'Le vide');
+      if (this.invul <= 0 && this.touching((b) => b.hurts)) this.damage(1, null, null, 'Un cactus');
 
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
       this.updateActions(dt, input);
+    }
+
+    // Un bloc qui vérifie test() touche-t-il le joueur ?
+    touching(test) {
+      const w = this.game.world, e = 0.06;
+      const x0 = Math.floor(this.x - this.hw - e), x1 = Math.floor(this.x + this.hw + e);
+      const y0 = Math.floor(this.y - e), y1 = Math.floor(this.y + this.h);
+      const z0 = Math.floor(this.z - this.hw - e), z1 = Math.floor(this.z + this.hw + e);
+      for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (test(CM.blocks[w.get(x, y, z)])) return true;
+      return false;
     }
 
     matUnder() {
@@ -444,6 +462,7 @@
     breakBlock(x, y, z, id, harvest, primary) {
       const g = this.game, w = g.world;
       const b = CM.blocks[id];
+      if (id === B.CHEST) g.chestAt(x, y, z); // un coffre de ruine se remplit avant d'être cassé
       w.setBlock(x, y, z, 0);
       if (id === B.CHEST) g.spillChest(x, y, z);
       g.entities.blockParticles(id, x, y, z, primary ? 16 : 8);
@@ -451,7 +470,7 @@
       g.stats.mined[id] = (g.stats.mined[id] || 0) + 1;
       // plantes et torches posées dessus tombent aussi
       const above = w.get(x, y + 1, z);
-      if (above && (CM.blocks[above].plant || above === B.TORCH)) {
+      if (above && (CM.blocks[above].plant || above === B.TORCH || above === B.CACTUS)) {
         this.breakBlock(x, y + 1, z, above, true, false);
       }
       if (!primary) {
@@ -485,11 +504,12 @@
         // pioche de cristal : minage de filon
         if (info.toolType === 'pickaxe' && info.tier === 4 && b.ore) this.veinMine(x, y, z, id);
         // hache en fer ou mieux : abat l'arbre entier
-        if (info.toolType === 'axe' && info.tier >= 3 && id === B.LOG) this.fellTree(x, y, z);
+        const wood = CM.woodOf(id);
+        if (info.toolType === 'axe' && info.tier >= 3 && wood && id === wood.log) this.fellTree(x, y, z, wood);
       }
     }
 
-    fellTree(x, y, z) {
+    fellTree(x, y, z, wood) {
       const w = this.game.world;
       const logs = [];
       const leaves = [];
@@ -504,7 +524,7 @@
               const key = nx + ',' + ny + ',' + nz;
               if (seen.has(key)) continue;
               seen.add(key);
-              if (w.get(nx, ny, nz) === B.LOG) {
+              if (w.get(nx, ny, nz) === wood.log) {
                 logs.push([nx, ny, nz]);
                 queue.push([nx, ny, nz]);
               }
@@ -523,14 +543,14 @@
           const key = n.join(',');
           if (depth.has(key)) continue;
           depth.set(key, d + 1);
-          if (w.get(n[0], n[1], n[2]) === B.LEAVES) {
+          if (w.get(n[0], n[1], n[2]) === wood.leaves) {
             leaves.push(n);
             queue.push(n);
           }
         }
       }
-      for (const [lx, ly, lz] of logs) this.breakBlock(lx, ly, lz, B.LOG, true, false);
-      for (const [lx, ly, lz] of leaves) this.breakBlock(lx, ly, lz, B.LEAVES, true, false);
+      for (const [lx, ly, lz] of logs) this.breakBlock(lx, ly, lz, wood.log, true, false);
+      for (const [lx, ly, lz] of leaves) this.breakBlock(lx, ly, lz, wood.leaves, true, false);
       this.game.ui.toast('Timber ! L’arbre entier tombe (+' + logs.length + ' bûches)', 'gold');
     }
 
@@ -576,11 +596,11 @@
       if (!info) return;
       if (info.type === 'food') {
         if (!input.pressed.mouse2) return;
-        if (this.health >= 20 && this.stamina >= this.maxStamina - 1) {
+        if (this.health >= this.maxHealth && this.stamina >= this.maxStamina - 1) {
           g.ui.toast('Tu es en pleine forme.', 'info', 'full');
           return;
         }
-        this.health = Math.min(20, this.health + info.heal);
+        this.health = Math.min(this.maxHealth, this.health + info.heal);
         this.stamina = Math.min(this.maxStamina, this.stamina + info.stamina);
         if (info.vigor) {
           this.vigor = info.vigor;
@@ -607,9 +627,16 @@
       const cur = w.get(px, py, pz);
       if (cur !== 0 && !CM.blocks[cur].replaceable) return;
       const b = info.block;
+      const below = w.get(px, py - 1, pz);
       if (b.plant) {
-        const below = w.get(px, py - 1, pz);
-        if (below !== B.GRASS && below !== B.DIRT) return;
+        if (b.soilAny ? !CM.blocks[below].solid : !CM.blocks[below].soil) {
+          g.ui.toast(b.soilAny ? 'Il faut un bloc solide dessous' : 'Se plante sur de l’herbe ou de la terre', 'warn', 'plant');
+          return;
+        }
+      }
+      if (b.needsBelow === 'sand' && below !== B.SAND && below !== B.RED_SAND && below !== B.CACTUS) {
+        g.ui.toast('Le cactus se plante sur du sable', 'warn', 'cactus');
+        return;
       }
       if (b.render === 'torch') {
         const sup = w.solidAt(px, py - 1, pz) || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.solidAt(px + dx, py, pz + dz));
@@ -621,7 +648,7 @@
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
       }
       w.setBlock(px, py, pz, stack.id);
-      if (stack.id === B.SAPLING) g.saplings.add(px + ',' + py + ',' + pz);
+      if (CM.TAGS.saplings.includes(stack.id)) g.saplings.add(px + ',' + py + ',' + pz);
       g.stats.placed[stack.id] = (g.stats.placed[stack.id] || 0) + 1;
       CM.Audio.play('place', { mat: b.sound });
       this.swing = 1;
@@ -708,8 +735,8 @@
     heldLight() {
       const s = this.game.inventory.held();
       if (!s) return 0;
-      if (s.id === B.TORCH || s.id === B.LAMP || s.id === B.DAWN_HEART) return 1;
-      if (s.id === B.MUSHROOM || s.id === B.CRYSTAL_ORE) return 0.6;
+      if (CM.blocks[s.id] && s.id < 256 && CM.blocks[s.id].light >= 12) return 1;
+      if (s.id < 256 && CM.blocks[s.id].light >= 5) return 0.6;
       return 0;
     }
   }

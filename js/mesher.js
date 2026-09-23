@@ -180,7 +180,7 @@
     const count = fillPad(world, cx, sy, cz);
     if (count === 0) return { opaque: null, water: null };
     const defs = CM.blocks;
-    const WATER = CM.B.WATER;
+    const WATER = CM.B.WATER, ICE = CM.B.ICE;
     for (let ly = 0; ly < 16; ly++)
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
@@ -210,6 +210,26 @@
               }
               emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3]);
             }
+          } else if (r === 'ice') {
+            const layer = LAYERS[id][0];
+            for (let fi = 0; fi < 6; fi++) {
+              const f = FACES[fi];
+              const nid = padId[p + f.nOff];
+              if (nid === id || OPQ[nid]) continue;
+              faceLighting(p, f, false);
+              const fs = FACE_SHADE[fi];
+              for (let k = 0; k < 4; k++) {
+                const v = f.v[k];
+                const t = vs[k];
+                t[0] = bx + v[0] * 16;
+                t[1] = by + v[1] * 16;
+                t[2] = bz + v[2] * 16;
+                t[3] = v[3];
+                t[4] = v[4];
+                sh4[k] = Math.round(255 * fs);
+              }
+              emitQuad(waterBuf, layer, false);
+            }
           } else if (r === 'water') {
             const aboveWater = padId[p + PP] === WATER;
             const topH = aboveWater ? 16 : 14;
@@ -217,7 +237,7 @@
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
-              if (nid === WATER || OPQ[nid]) continue;
+              if (nid === WATER || nid === ICE || OPQ[nid]) continue;
               if (fi === 3 && nid !== 0) continue;
               faceLighting(p, f, false);
               const fs = FACE_SHADE[fi];

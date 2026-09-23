@@ -37,7 +37,9 @@
       this.changed();
       return count;
     }
+    // id peut être un identifiant ou un groupe ('planks', 'logs'…).
     count(id) {
+      if (typeof id === 'string') return CM.tagMembers(id).reduce((n, m) => n + this.count(m), 0);
       let n = 0;
       for (const s of this.slots) if (s && s.id === id) n += s.count;
       return n;
@@ -47,6 +49,16 @@
     }
     remove(id, n) {
       if (this.count(id) < n) return false;
+      if (typeof id === 'string') {
+        // on consomme d'abord l'essence dont on a le plus
+        const members = CM.tagMembers(id).slice().sort((a, b) => this.count(b) - this.count(a));
+        for (const m of members) {
+          const k = Math.min(n, this.count(m));
+          if (k > 0) this.remove(m, k);
+          n -= k;
+        }
+        return true;
+      }
       for (let i = 35; i >= 0 && n > 0; i--) {
         const s = this.slots[i];
         if (s && s.id === id) {
