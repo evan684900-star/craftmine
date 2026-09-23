@@ -44,6 +44,7 @@
       this.hurtFlash = 0;
       this.fallStart = this.y;
       this.dashCd = 0; this.dashTime = 0;
+      this.dashAir = false; // élan de ruée en l'air (encore dirigeable)
       this.usedDouble = false;
       this.jumpCd = 0;
       this.hook = null;
@@ -177,12 +178,23 @@
           this.vz = dz * 16;
           this.vy = Math.max(this.vy, 2);
           this.dashTime = 0.2;
+          this.dashAir = true;
           this.dashCd = 1;
           this.invul = Math.max(this.invul, 0.3);
           this.exhaust(EXH.dash);
           CM.Audio.play('dash');
           g.entities.burst(CM.Textures.layer.white, this.x, this.y + 0.9, this.z, 10, { speed: 2, grav: 0, life: 0.35, size: 0.06 });
         }
+      }
+
+      // ----- ruée dirigeable : pendant la poussée, la trajectoire suit les touches de
+      // déplacement (ou le regard si aucune n'est appuyée) ; ensuite, l'élan en l'air
+      // continue de tourner vers la direction voulue
+      if (this.dashTime > 0) {
+        if (wl) this.steer(wx, wz, 22 * dt);
+        else this.steer(-Math.sin(this.yaw), -Math.cos(this.yaw), 22 * dt);
+      } else if (this.dashAir && wl && !this.onGround && !this.inWater && !this.hook) {
+        this.steer(wx, wz, 8 * dt);
       }
 
       // ----- accélération horizontale
@@ -296,6 +308,7 @@
         if (!wasGround && fall > 1) CM.Audio.play('step', { mat: this.matUnder() });
       }
       if (this.onGround || this.inWater || this.hook || this.flying) {
+        if (this.dashTime <= 0) this.dashAir = false;
         this.fallStart = this.y;
         if (this.onGround) this.usedDouble = false;
       } else this.fallStart = Math.max(this.fallStart, this.y);
@@ -321,6 +334,26 @@
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
       this.updateActions(dt, input);
+    }
+
+    // Tourne la vitesse horizontale vers (tx, tz) sans changer sa valeur. k : part du virage (0-1).
+    steer(tx, tz, k) {
+      const s = Math.hypot(this.vx, this.vz);
+      if (s < 0.01) return;
+      const cx = this.vx / s, cz = this.vz / s;
+      k = Math.min(1, k);
+      let nx = cx + (tx - cx) * k, nz = cz + (tz - cz) * k;
+      const n = Math.hypot(nx, nz);
+      if (n < 0.15) {
+        // demi-tour : on passe directement à la nouvelle direction
+        nx = tx;
+        nz = tz;
+      } else {
+        nx /= n;
+        nz /= n;
+      }
+      this.vx = nx * s;
+      this.vz = nz * s;
     }
 
     updateVitals(dt, wasHeadIn) {
