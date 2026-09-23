@@ -53,7 +53,7 @@
       this.cz = cz;
       this.x0 = cx * 16;
       this.z0 = cz * 16;
-      this.blocks = new Uint8Array(CVOL);
+      this.blocks = new Uint16Array(CVOL);
       this.light = new Uint8Array(CVOL);
       this.top = new Uint8Array(256);
       this.nb = [null, null, null, null];
@@ -81,22 +81,29 @@
   const gD = new Float32Array(G * G * GY), gE = new Float32Array(G * G * GY);
 
   // ------------------------------------------------------------ biomes ---
+  // Les numéros existants ne changent pas (le nom s'affiche, rien n'est sauvegardé).
   const BIO = {
     PLAINS: 0, DESERT: 1, FOREST: 2, MOUNTAINS: 3, BIRCH: 4, TAIGA: 5, SNOWY_TAIGA: 6, TUNDRA: 7,
     SAVANNA: 8, JUNGLE: 9, SWAMP: 10, BADLANDS: 11, CRYSTAL: 12, OCEAN: 13, LAKE: 14,
+    DARK_FOREST: 15, CHERRY: 16, MANGROVE: 17, BAMBOO: 18, MUSHROOM: 19, VOLCANIC: 20,
+    FUNGUS: 21, ICE_SPIKES: 22, FLOWERS: 23, WARM_OCEAN: 24,
   };
   const BIOME_NAMES = [
     'Plaines', 'Désert', 'Forêt', 'Montagnes', 'Forêt de bouleaux', 'Taïga', 'Taïga enneigée', 'Toundra glacée',
     'Savane', 'Jungle', 'Marais', 'Canyon rouge', 'Sylve cristalline', 'Océan', 'Lac',
+    'Forêt de chênes noirs', 'Bosquet de cerisiers', 'Mangrove', 'Bambouseraie', 'Champignonnière', 'Terres volcaniques',
+    'Forêt fongique', 'Pics de glace', 'Prairie fleurie', 'Océan chaud',
   ];
   CM.BIO = BIO;
   CM.BIOME_NAMES = BIOME_NAMES;
+  const COLD_BIOMES = new Set([BIO.SNOWY_TAIGA, BIO.TUNDRA, BIO.ICE_SPIKES]);
 
-  // Arbres par biome : densité p, puis [essence, poids, proportion de grands arbres].
+  // Arbres par biome : densité p, puis [type, poids, proportion de grands arbres].
+  // any : pousse aussi hors de l'herbe (neige, nylium…).
   const TREES = [];
-  TREES[BIO.PLAINS] = { p: 0.004, kinds: [['OAK', 0.8], ['BIRCH', 0.2]] };
-  TREES[BIO.FOREST] = { p: 0.045, kinds: [['OAK', 0.78, 0.12], ['BIRCH', 0.22]] };
-  TREES[BIO.BIRCH] = { p: 0.05, kinds: [['BIRCH', 0.9], ['OAK', 0.1]] };
+  TREES[BIO.PLAINS] = { p: 0.004, kinds: [['OAK', 0.8], ['BIRCH', 0.2]], bees: 0.15 };
+  TREES[BIO.FOREST] = { p: 0.045, kinds: [['OAK', 0.72, 0.12], ['BIRCH', 0.22], ['DARK_OAK', 0.06]] };
+  TREES[BIO.BIRCH] = { p: 0.05, kinds: [['BIRCH', 0.9], ['OAK', 0.1]], bees: 0.03 };
   TREES[BIO.TAIGA] = { p: 0.05, kinds: [['SPRUCE', 1]] };
   TREES[BIO.SNOWY_TAIGA] = { p: 0.04, kinds: [['SPRUCE', 1]] };
   TREES[BIO.TUNDRA] = { p: 0.003, kinds: [['SPRUCE', 1]] };
@@ -104,22 +111,55 @@
   TREES[BIO.JUNGLE] = { p: 0.08, kinds: [['JUNGLE', 0.8, 0.25], ['OAK', 0.2]] };
   TREES[BIO.SWAMP] = { p: 0.022, kinds: [['WILLOW', 1]] };
   TREES[BIO.CRYSTAL] = { p: 0.035, kinds: [['CRYSTAL', 1]] };
+  TREES[BIO.DARK_FOREST] = { p: 0.075, kinds: [['DARK_OAK', 0.82], ['RED_MUSHROOM_TREE', 0.06], ['BROWN_MUSHROOM_TREE', 0.06], ['OAK', 0.06]] };
+  TREES[BIO.CHERRY] = { p: 0.028, kinds: [['CHERRY', 1]], bees: 0.1 };
+  TREES[BIO.MANGROVE] = { p: 0.05, kinds: [['MANGROVE', 1]], any: true };
+  TREES[BIO.BAMBOO] = { p: 0.02, kinds: [['JUNGLE', 0.7, 0.2], ['OAK', 0.3]] };
+  TREES[BIO.MUSHROOM] = { p: 0.014, kinds: [['RED_MUSHROOM_TREE', 0.5], ['BROWN_MUSHROOM_TREE', 0.5]], any: true };
+  TREES[BIO.FUNGUS] = { p: 0.05, kinds: [['FUNGUS', 1]], any: true };
+  TREES[BIO.ICE_SPIKES] = { p: 0.012, kinds: [['ICE_SPIKE', 1]], any: true };
+  TREES[BIO.FLOWERS] = { p: 0.006, kinds: [['OAK', 0.5], ['BIRCH', 0.5]], bees: 0.5 };
   const MAX_TREE_P = 0.08;
+  // Anciennes tables (mondes créés avant la version 4 : même paysage qu'avant).
+  const LEGACY_TREES = [];
+  LEGACY_TREES[BIO.PLAINS] = { p: 0.004, kinds: [['OAK', 0.8], ['BIRCH', 0.2]] };
+  LEGACY_TREES[BIO.FOREST] = { p: 0.045, kinds: [['OAK', 0.78, 0.12], ['BIRCH', 0.22]] };
+  LEGACY_TREES[BIO.BIRCH] = { p: 0.05, kinds: [['BIRCH', 0.9], ['OAK', 0.1]] };
+  for (const k of ['TAIGA', 'SNOWY_TAIGA', 'TUNDRA', 'SAVANNA', 'JUNGLE', 'SWAMP', 'CRYSTAL']) LEGACY_TREES[BIO[k]] = TREES[BIO[k]];
 
-  // Plantes par biome : [bloc, probabilité par colonne, hauteur max (cactus)].
+  // Plantes par biome : [bloc, probabilité par colonne, hauteur max (cactus, canne, bambou)].
   const PLANTS = [];
-  PLANTS[BIO.PLAINS] = [['TALLGRASS', 0.14], ['FLOWER', 0.009], ['DANDELION', 0.009], ['CORNFLOWER', 0.007], ['DAISY', 0.009], ['BERRYBUSH', 0.004], ['PUMPKIN', 0.002]];
-  PLANTS[BIO.FOREST] = [['TALLGRASS', 0.08], ['FERN', 0.02], ['FLOWER', 0.006], ['DANDELION', 0.005], ['BERRYBUSH', 0.012], ['RED_SHROOM', 0.005], ['BROWN_SHROOM', 0.006]];
-  PLANTS[BIO.BIRCH] = [['TALLGRASS', 0.09], ['DAISY', 0.01], ['DANDELION', 0.006], ['TULIP', 0.006], ['FERN', 0.01]];
+  PLANTS[BIO.PLAINS] = [['TALLGRASS', 0.14], ['FLOWER', 0.006], ['DANDELION', 0.008], ['CORNFLOWER', 0.005], ['DAISY', 0.006], ['AZURE_BLUET', 0.005], ['RED_TULIP', 0.002],
+    ['WHITE_TULIP', 0.002], ['PINK_TULIP', 0.002], ['SUNFLOWER', 0.002], ['BERRYBUSH', 0.003], ['PUMPKIN', 0.002]];
+  PLANTS[BIO.FOREST] = [['TALLGRASS', 0.08], ['FERN', 0.02], ['FLOWER', 0.005], ['DANDELION', 0.004], ['LILY_OF_THE_VALLEY', 0.004], ['LILAC', 0.002], ['ROSE_BUSH', 0.002],
+    ['PEONY', 0.002], ['BERRYBUSH', 0.01], ['RED_SHROOM', 0.005], ['BROWN_SHROOM', 0.006], ['AZALEA', 0.002]];
+  PLANTS[BIO.BIRCH] = [['TALLGRASS', 0.09], ['DAISY', 0.01], ['DANDELION', 0.006], ['TULIP', 0.006], ['FERN', 0.01], ['LILY_OF_THE_VALLEY', 0.004]];
   PLANTS[BIO.TAIGA] = [['FERN', 0.06], ['TALLGRASS', 0.03], ['BERRYBUSH', 0.02], ['BROWN_SHROOM', 0.01], ['PUMPKIN', 0.0015]];
   PLANTS[BIO.SNOWY_TAIGA] = [['FERN', 0.02], ['BERRYBUSH', 0.006]];
   PLANTS[BIO.TUNDRA] = [['FERN', 0.004]];
   PLANTS[BIO.SAVANNA] = [['TALLGRASS', 0.16], ['DEAD_BUSH', 0.004], ['TULIP', 0.002]];
-  PLANTS[BIO.JUNGLE] = [['TALLGRASS', 0.1], ['FERN', 0.1], ['MELON', 0.006], ['TULIP', 0.004]];
-  PLANTS[BIO.SWAMP] = [['TALLGRASS', 0.05], ['FERN', 0.02], ['RED_SHROOM', 0.01], ['BROWN_SHROOM', 0.012], ['CORNFLOWER', 0.003]];
+  PLANTS[BIO.JUNGLE] = [['TALLGRASS', 0.1], ['FERN', 0.1], ['MELON', 0.006], ['TULIP', 0.004], ['BAMBOO', 0.01, 8], ['AZALEA', 0.004], ['FLOWERING_AZALEA', 0.002]];
+  PLANTS[BIO.SWAMP] = [['TALLGRASS', 0.05], ['FERN', 0.02], ['RED_SHROOM', 0.01], ['BROWN_SHROOM', 0.012], ['CORNFLOWER', 0.003], ['BLUE_ORCHID', 0.008]];
   PLANTS[BIO.DESERT] = [['CACTUS', 0.006, 3], ['DEAD_BUSH', 0.01]];
   PLANTS[BIO.BADLANDS] = [['DEAD_BUSH', 0.02], ['CACTUS', 0.002, 2]];
   PLANTS[BIO.CRYSTAL] = [['CRYSTAL_FLOWER', 0.03], ['TALLGRASS', 0.04], ['FERN', 0.02]];
+  PLANTS[BIO.DARK_FOREST] = [['TALLGRASS', 0.05], ['FERN', 0.02], ['RED_SHROOM', 0.012], ['BROWN_SHROOM', 0.012], ['ROSE_BUSH', 0.003], ['LILAC', 0.002]];
+  PLANTS[BIO.CHERRY] = [['TALLGRASS', 0.1], ['PINK_TULIP', 0.012], ['ALLIUM', 0.006], ['LILAC', 0.005], ['PEONY', 0.005]];
+  PLANTS[BIO.MANGROVE] = [['FERN', 0.02], ['TALLGRASS', 0.03], ['BLUE_ORCHID', 0.004]];
+  PLANTS[BIO.BAMBOO] = [['BAMBOO', 0.14, 10], ['FERN', 0.06], ['TALLGRASS', 0.05], ['MELON', 0.004]];
+  PLANTS[BIO.MUSHROOM] = [['RED_SHROOM', 0.02], ['BROWN_SHROOM', 0.02]];
+  PLANTS[BIO.VOLCANIC] = [['DEAD_BUSH', 0.008], ['WITHER_ROSE', 0.002]];
+  PLANTS[BIO.FLOWERS] = [['TALLGRASS', 0.1], ['FLOWER', 0.02], ['DANDELION', 0.02], ['ALLIUM', 0.018], ['AZURE_BLUET', 0.018], ['RED_TULIP', 0.012], ['TULIP', 0.012],
+    ['WHITE_TULIP', 0.012], ['PINK_TULIP', 0.012], ['DAISY', 0.018], ['CORNFLOWER', 0.018], ['LILY_OF_THE_VALLEY', 0.014], ['LILAC', 0.008], ['PEONY', 0.008],
+    ['ROSE_BUSH', 0.008], ['SUNFLOWER', 0.008], ['TORCHFLOWER', 0.002]];
+
+  const LEGACY_PLANTS = [];
+  LEGACY_PLANTS[BIO.PLAINS] = [['TALLGRASS', 0.14], ['FLOWER', 0.009], ['DANDELION', 0.009], ['CORNFLOWER', 0.007], ['DAISY', 0.009], ['BERRYBUSH', 0.004], ['PUMPKIN', 0.002]];
+  LEGACY_PLANTS[BIO.FOREST] = [['TALLGRASS', 0.08], ['FERN', 0.02], ['FLOWER', 0.006], ['DANDELION', 0.005], ['BERRYBUSH', 0.012], ['RED_SHROOM', 0.005], ['BROWN_SHROOM', 0.006]];
+  LEGACY_PLANTS[BIO.BIRCH] = [['TALLGRASS', 0.09], ['DAISY', 0.01], ['DANDELION', 0.006], ['TULIP', 0.006], ['FERN', 0.01]];
+  LEGACY_PLANTS[BIO.JUNGLE] = [['TALLGRASS', 0.1], ['FERN', 0.1], ['MELON', 0.006], ['TULIP', 0.004]];
+  LEGACY_PLANTS[BIO.SWAMP] = [['TALLGRASS', 0.05], ['FERN', 0.02], ['RED_SHROOM', 0.01], ['BROWN_SHROOM', 0.012], ['CORNFLOWER', 0.003]];
+  for (const k of ['TAIGA', 'SNOWY_TAIGA', 'TUNDRA', 'SAVANNA', 'DESERT', 'BADLANDS', 'CRYSTAL']) LEGACY_PLANTS[BIO[k]] = PLANTS[BIO[k]];
 
   const VEINS = [
     // [bloc, filons par tronçon, y min, y max, longueur, biome réservé]
@@ -130,22 +170,36 @@
     ['GOLD_ORE', 1.6, 4, 32, 5],
     ['GOLD_ORE', 5, 30, 72, 5, BIO.BADLANDS],
     ['RUBY_ORE', 3, 40, 86, 3, BIO.MOUNTAINS],
+    ['DIAMOND_ORE', 0.9, 2, 14, 4],
+    ['LAPIS_ORE', 1.2, 4, 30, 5],
+    ['REDSTONE_ORE', 2.4, 3, 16, 6],
+    ['EMERALD_ORE', 2, 34, 86, 2, BIO.MOUNTAINS],
+    ['NETHER_QUARTZ_ORE', 6, 10, 80, 6, BIO.VOLCANIC],
+    ['NETHER_GOLD_ORE', 3, 10, 80, 5, BIO.VOLCANIC],
+    ['ANCIENT_DEBRIS', 0.6, 3, 20, 2, BIO.VOLCANIC],
   ];
-  // Roches qu'un filon peut remplacer
-  const ROCK = new Uint8Array(256);
+  // Roches qu'un filon peut remplacer, et version « ardoise des abîmes » des minerais
+  const ROCK = new Uint8Array(1024);
+  const DEEP_ORE = new Uint16Array(1024);
   const BANDS = [];
   const RUIN_REGION = 112;
+  const GEODE_REGION = 80;
   CM.initWorldTables = function () {
     const Bk = CM.B;
-    for (const k of ['STONE', 'DEEPSTONE', 'GRANITE', 'DIORITE', 'ANDESITE']) ROCK[Bk[k]] = 1;
+    for (const k of ['STONE', 'DEEPSTONE', 'GRANITE', 'DIORITE', 'ANDESITE', 'TUFF', 'NETHERRACK', 'BLACKSTONE', 'BASALT']) ROCK[Bk[k]] = 1;
+    for (const k of ['COAL', 'IRON', 'COPPER', 'GOLD', 'DIAMOND', 'EMERALD', 'LAPIS', 'REDSTONE']) DEEP_ORE[Bk[k + '_ORE']] = Bk['DEEPSLATE_' + k + '_ORE'];
     const T = Bk.TERRACOTTA, R = Bk.TERRACOTTA_RED, Y = Bk.TERRACOTTA_YELLOW, BR = Bk.TERRACOTTA_BROWN, WH = Bk.TERRACOTTA_WHITE;
-    BANDS.push(T, T, R, Y, T, WH, BR, T, R, R, Y, BR, T, WH, T, BR);
+    const O = Bk.TERRACOTTA_ORANGE, LG = Bk.TERRACOTTA_LIGHT_GRAY;
+    BANDS.push(T, T, R, Y, T, WH, BR, O, R, R, Y, BR, T, WH, LG, BR);
   };
   CM.initWorldTables();
 
   class World {
-    constructor(seed, edits) {
+    constructor(seed, edits, settings) {
       this.seed = seed >>> 0;
+      this.settings = Object.assign({ type: 'normal', biomeSize: 'normal' }, settings || {});
+      this.bscale = { small: 0.6, normal: 1, large: 1.6 }[this.settings.biomeSize] || 1;
+      this.type = this.settings.type;
       this.chunks = new Map();
       this.edits = new Map(); // clé de tronçon -> Map(index local -> bloc)
       this.dirty = new Map(); // clé de section -> 1 (lumière) ou 2 (bloc modifié)
@@ -160,6 +214,16 @@
       this.nD = new CM.Noise(s + 303);
       this.nE = new CM.Noise(s + 404);
       this.nF = new CM.Noise(s + 505);
+      // Décalage propre à chaque graine : sans lui, le bruit vaut 0 à l'origine pour
+      // toutes les graines et les points d'apparition se ressemblent tous.
+      const r = CM.rng(s ^ 0x9e3779b9);
+      this.ox = Math.floor((r() - 0.5) * 200000);
+      this.oz = Math.floor((r() - 0.5) * 200000);
+      // Monde d'une ancienne version : on garde l'ancien générateur de relief.
+      this.legacy = this.settings.gen === 1;
+      if (this.legacy) this.ox = this.oz = 0;
+      this.trees = this.legacy ? LEGACY_TREES : TREES;
+      this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
       if (edits) {
         for (const k in edits) {
           const [cx, cz] = k.split(',').map(Number);
@@ -199,6 +263,15 @@
       const c = this.chunkAt(x, z);
       return c ? CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]].solid : true;
     }
+    // Hauteur de la partie solide d'une case (0 : vide, 1 : bloc plein, 0.5 : dalle…).
+    solidHeight(x, y, z) {
+      if (y < 0) return 1;
+      if (y >= H) return 0;
+      const c = this.chunkAt(x, z);
+      if (!c) return 1;
+      const b = CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]];
+      return b.solid ? b.height : 0;
+    }
     skyAt(x, y, z) {
       if (y >= H) return 15;
       if (y < 0) return 0;
@@ -217,7 +290,8 @@
     }
 
     // ------------------------------------------------ relief et biomes ----
-    column(x, z) {
+    // Ancien générateur (version 3) : conservé pour que les vieux mondes ne changent pas.
+    columnV3(x, z) {
       const { nA, nB, nC, nD, nE, nF } = this;
       const Bk = CM.B;
       const cont = nA.fbm2(x / 480, z / 480, 4);
@@ -226,25 +300,23 @@
       let ridge = 1 - Math.abs(nB.noise2(x / 95, z / 95));
       ridge *= ridge;
       const mMask = CM.smoothstep(0.05, 0.45, nC.fbm2(x / 190 + 50, z / 190, 2));
-      // climat : grandes zones aux bords déformés
       const wx = x + nB.noise2(x / 90, z / 90) * 28, wz = z + nB.noise2(x / 90 + 50, z / 90) * 28;
-      const T = nD.fbm2(wx / 700, wz / 700, 2); // température
-      const M = nE.fbm2(wx / 550 + 30, wz / 550, 2); // humidité
-      const Wd = nF.fbm2(wx / 420, wz / 420, 2); // étrangeté (biomes rares)
+      const T = nD.fbm2(wx / 700, wz / 700, 2);
+      const M = nE.fbm2(wx / 550 + 30, wz / 550, 2);
+      const Wd = nF.fbm2(wx / 420, wz / 420, 2);
       const hot = CM.smoothstep(0.14, 0.3, T);
       const cold = CM.smoothstep(-0.22, -0.38, T);
       const swampW = CM.smoothstep(0.28, 0.42, M) * (1 - hot) * (1 - cold) * (1 - mMask);
       const mesaW = CM.smoothstep(0.3, 0.42, Wd) * hot * CM.smoothstep(0.06, -0.06, M);
       let landH = SEA + 4 + cont * 6 + hills * 5 + ridge * mMask * 40;
-      landH += (SEA + 1.3 + hills * 1.5 - landH) * swampW; // marais : au ras de l'eau
+      landH += (SEA + 1.3 + hills * 1.5 - landH) * swampW;
       if (mesaW > 0) {
         const plateau = CM.smoothstep(-0.05, 0.2, nC.noise2(x / 55, z / 55)) * 16;
         landH += mesaW * (plateau + 5);
-        landH += (Math.floor(landH / 4) * 4 - landH) * mesaW; // terrasses
+        landH += (Math.floor(landH / 4) * 4 - landH) * mesaW;
       }
       const seaH = SEA - 7 + cont * 8 + hills * 2;
       const h = Math.floor(CM.clamp(seaH + (landH - seaH) * land, 4, 86));
-
       let bi;
       if (h < SEA - 1) bi = land < 0.5 ? BIO.OCEAN : BIO.LAKE;
       else if (h > 62) bi = BIO.MOUNTAINS;
@@ -254,8 +326,6 @@
       else if (Wd < -0.48) bi = BIO.CRYSTAL;
       else if (swampW > 0.5) bi = BIO.SWAMP;
       else bi = M < -0.25 ? BIO.PLAINS : M < 0.12 ? BIO.FOREST : BIO.BIRCH;
-
-      // blocs de surface
       let topB, subB, subDepth = 3, deepSub = 0;
       if (h < SEA - 1) {
         const f = nB.noise2(x / 18, z / 18);
@@ -266,7 +336,7 @@
         subB = h <= SEA ? Bk.CLAY : Bk.DIRT;
       } else if (bi === BIO.BADLANDS) {
         topB = h > SEA + 6 ? this.band(x, h, z) : Bk.RED_SAND;
-        subB = -1; // bandes de terre cuite
+        subB = -1;
         subDepth = 14;
       } else if (h <= SEA + 1) {
         topB = cold > 0.5 ? Bk.GRAVEL : Bk.SAND;
@@ -287,12 +357,134 @@
           default: topB = Bk.GRASS; subB = Bk.DIRT;
         }
       }
-      return { h, bi, topB, subB, subDepth, deepSub, frozen: cold > 0.5 };
+      return { h, bi, topB, subB, subDepth, deepSub, frozen: cold > 0.5, variant: 0 };
+    }
+
+    column(x, z) {
+      const Bk = CM.B;
+      if (this.legacy) return this.columnV3(x, z);
+      if (this.type === 'flat') return { h: SEA + 8, bi: BIO.PLAINS, topB: Bk.GRASS, subB: Bk.DIRT, subDepth: 3, deepSub: 0, frozen: false, flat: true };
+      const { nA, nB, nC, nD, nE, nF } = this;
+      const X = x + this.ox, Z = z + this.oz;
+      const S = this.bscale;
+      let cont = nA.fbm2(X / 480, Z / 480, 4);
+      if (this.type === 'islands') cont = cont * 1.15 - 0.3;
+      const land = CM.smoothstep(-0.3, -0.06, cont);
+      const amp = this.type === 'amplified' ? 1.9 : 1;
+      const hills = nA.fbm2(X / 46 + 100, Z / 46 - 50, 4);
+      let ridge = 1 - Math.abs(nB.noise2(X / 95, Z / 95));
+      ridge *= ridge;
+      const mMask = CM.smoothstep(this.type === 'amplified' ? -0.1 : 0.05, 0.45, nC.fbm2(X / 190 + 50, Z / 190, 2));
+      // climat : zones aux bords déformés (taille réglable)
+      const wx = X + nB.noise2(X / 90, Z / 90) * 28, wz = Z + nB.noise2(X / 90 + 50, Z / 90) * 28;
+      const T = nD.fbm2(wx / (520 * S), wz / (520 * S), 2); // température
+      const M = nE.fbm2(wx / (420 * S) + 30, wz / (420 * S), 2); // humidité
+      const Wd = nF.fbm2(wx / (340 * S), wz / (340 * S), 2); // étrangeté (biomes rares)
+      const hot = CM.smoothstep(0.16, 0.32, T);
+      const cold = CM.smoothstep(-0.32, -0.48, T);
+      const swampW = CM.smoothstep(0.28, 0.42, M) * (1 - hot) * (1 - cold) * (1 - mMask);
+      const mangW = CM.smoothstep(0.34, 0.48, M) * hot * (1 - mMask);
+      const mesaW = CM.smoothstep(0.3, 0.42, Wd) * hot * CM.smoothstep(0.06, -0.06, M);
+      const volcW = CM.smoothstep(-0.34, -0.46, Wd) * hot * CM.smoothstep(0.12, -0.02, M);
+      let landH = SEA + 4 + cont * 6 + hills * 5 * amp + ridge * mMask * 40 * amp;
+      landH += (SEA + 1.3 + hills * 1.5 - landH) * Math.max(swampW, mangW); // marais : au ras de l'eau
+      if (mesaW > 0) {
+        const plateau = CM.smoothstep(-0.05, 0.2, nC.noise2(X / 55, Z / 55)) * 16;
+        landH += mesaW * (plateau + 5);
+        landH += (Math.floor(landH / 4) * 4 - landH) * mesaW; // terrasses
+      }
+      if (volcW > 0) landH += volcW * (ridge * 16 + Math.abs(hills) * 8 + 2); // reliefs volcaniques déchiquetés
+      const seaH = SEA - 7 + cont * 8 + hills * 2;
+      let h = seaH + (landH - seaH) * land;
+      // îles aux champignons au large
+      const mushN = nF.noise2(X / 260 + 77, Z / 260 - 33);
+      const mush = CM.smoothstep(0.5, 0.64, mushN) * CM.smoothstep(-0.12, -0.3, cont);
+      if (mush > 0) h += (SEA + 2 + hills * 3 - h) * mush;
+      h = Math.floor(CM.clamp(h, 4, 90));
+
+      let bi;
+      if (mush > 0.5 && h >= SEA) bi = BIO.MUSHROOM;
+      else if (h < SEA - 1) bi = land < 0.5 ? (hot > 0.5 ? BIO.WARM_OCEAN : BIO.OCEAN) : BIO.LAKE;
+      else if (h > 62) bi = BIO.MOUNTAINS;
+      else if (cold > 0.5) bi = Wd > 0.35 ? BIO.ICE_SPIKES : M > 0 ? BIO.SNOWY_TAIGA : BIO.TUNDRA;
+      else if (T < -0.28) bi = BIO.TAIGA;
+      else if (hot > 0.5) {
+        if (mesaW > 0.5) bi = BIO.BADLANDS;
+        else if (volcW > 0.5) bi = BIO.VOLCANIC;
+        else if (mangW > 0.5) bi = BIO.MANGROVE;
+        else if (M < -0.15) bi = BIO.DESERT;
+        else if (M < 0.2) bi = BIO.SAVANNA;
+        else bi = Wd > 0.25 ? BIO.BAMBOO : BIO.JUNGLE;
+      } else if (Wd < -0.53) bi = BIO.CRYSTAL;
+      else if (Wd > 0.5 && M < 0) bi = BIO.FUNGUS;
+      else if (swampW > 0.5) bi = BIO.SWAMP;
+      else if (M < -0.25) bi = Wd > 0.22 ? BIO.FLOWERS : BIO.PLAINS;
+      else if (M < 0.12) bi = Wd < -0.22 ? BIO.CHERRY : BIO.FOREST;
+      else bi = Wd > 0.15 ? BIO.DARK_FOREST : BIO.BIRCH;
+
+      // blocs de surface
+      let topB, subB, subDepth = 3, deepSub = 0, variant = 0;
+      if (h < SEA - 1) {
+        const f = nB.noise2(X / 18, Z / 18);
+        if (bi === BIO.WARM_OCEAN) topB = Bk.SAND;
+        else topB = f > 0.35 ? Bk.GRAVEL : f < -0.45 && h > SEA - 8 ? Bk.CLAY : h > SEA - 9 ? Bk.SAND : Bk.DIRT;
+        subB = topB === Bk.CLAY ? Bk.CLAY : topB;
+      } else if (bi === BIO.MUSHROOM) {
+        topB = Bk.MYCELIUM;
+        subB = Bk.DIRT;
+      } else if (bi === BIO.SWAMP) {
+        topB = h <= SEA ? Bk.MUD : Bk.SWAMP_GRASS;
+        subB = h <= SEA ? Bk.CLAY : Bk.DIRT;
+      } else if (bi === BIO.MANGROVE) {
+        topB = Bk.MUD;
+        subB = Bk.MUD;
+        subDepth = 4;
+        deepSub = Bk.CLAY;
+      } else if (bi === BIO.BADLANDS) {
+        topB = h > SEA + 6 ? this.band(x, h, z) : Bk.RED_SAND;
+        subB = -1; // bandes de terre cuite
+        subDepth = 14;
+      } else if (bi === BIO.VOLCANIC) {
+        const v = nC.noise2(X / 14, Z / 14), v2 = nB.noise2(X / 6, Z / 6);
+        topB = v2 > 0.62 ? Bk.MAGMA : v > 0.25 ? Bk.BASALT : v < -0.3 ? Bk.NETHERRACK : v2 < -0.6 ? Bk.SOUL_SAND : Bk.BLACKSTONE;
+        subB = Bk.BLACKSTONE;
+        subDepth = 5;
+        deepSub = Bk.NETHERRACK;
+      } else if (h <= SEA + 1 && bi !== BIO.ICE_SPIKES) {
+        topB = cold > 0.5 ? Bk.GRAVEL : Bk.SAND;
+        subB = topB;
+      } else if (bi === BIO.MOUNTAINS) {
+        const snowLine = (cold > 0.5 ? 58 : 67) + Math.floor(nD.noise2(X / 12, Z / 12) * 3);
+        const rocky = nC.noise2(X / 20, Z / 20);
+        topB = h >= snowLine ? Bk.SNOW : rocky > 0.45 ? Bk.ANDESITE : rocky < -0.5 ? Bk.GRAVEL : Bk.STONE;
+        subB = Bk.STONE;
+      } else {
+        switch (bi) {
+          case BIO.DESERT: topB = Bk.SAND; subB = Bk.SAND; deepSub = Bk.SANDSTONE; break;
+          case BIO.SAVANNA: topB = nB.noise2(X / 11, Z / 11) > 0.55 ? Bk.COARSE_DIRT : Bk.DRY_GRASS; subB = Bk.DIRT; break;
+          case BIO.JUNGLE: topB = Bk.LUSH_GRASS; subB = Bk.DIRT; break;
+          case BIO.BAMBOO: topB = nB.noise2(X / 9, Z / 9) > 0 ? Bk.PODZOL : Bk.LUSH_GRASS; subB = Bk.DIRT; break;
+          case BIO.TAIGA: topB = nB.noise2(X / 9, Z / 9) > 0.1 ? Bk.PODZOL : Bk.GRASS; subB = Bk.DIRT; break;
+          case BIO.DARK_FOREST: topB = nB.noise2(X / 7, Z / 7) > 0.5 ? Bk.PODZOL : Bk.GRASS; subB = Bk.DIRT; break;
+          case BIO.SNOWY_TAIGA:
+          case BIO.TUNDRA: topB = Bk.SNOWY_GRASS; subB = Bk.DIRT; break;
+          case BIO.ICE_SPIKES: topB = Bk.SNOW; subB = Bk.SNOW; subDepth = 2; break;
+          case BIO.CRYSTAL: topB = Bk.CRYSTAL_MOSS; subB = Bk.DIRT; break;
+          case BIO.FUNGUS:
+            variant = nC.noise2(X / 70, Z / 70) > 0 ? 1 : 0; // 1 : carmin, 0 : biscornu
+            topB = variant ? Bk.CRIMSON_NYLIUM : Bk.WARPED_NYLIUM;
+            subB = Bk.NETHERRACK;
+            subDepth = 4;
+            break;
+          default: topB = Bk.GRASS; subB = Bk.DIRT;
+        }
+      }
+      return { h, bi, topB, subB, subDepth, deepSub, frozen: cold > 0.5 || bi === BIO.ICE_SPIKES, variant };
     }
 
     // Couleur de terre cuite en bandes horizontales (canyons rouges).
     band(x, y, z) {
-      const o = Math.floor(this.nC.noise2(x / 40, z / 40) * 3);
+      const o = Math.floor(this.nC.noise2((x + this.ox) / 40, (z + this.oz) / 40) * 3);
       return BANDS[(((y + o) % 16) + 16) % 16];
     }
 
@@ -301,28 +493,60 @@
     }
 
     // ---------------------------------------------------------- arbres ----
-    // Type d'arbre d'une colonne (déterministe) : null ou { type, big }.
+    // Type d'arbre d'une colonne (déterministe) : null ou { type, big, bees }.
     treeAt(x, z, info) {
-      if (!CM.blocks[info.topB].soil && info.topB !== CM.B.GRASS) return null;
-      if (info.h + 17 >= H) return null;
-      const t = TREES[info.bi];
-      if (!t || CM.hash3(x, 7, z, this.seed) >= t.p) return null;
+      if (info.flat) return null;
+      const t = this.trees[info.bi];
+      if (!t) return null;
+      if (!t.any && !CM.blocks[info.topB].soil && info.topB !== CM.B.GRASS) return null;
+      if (info.h + 17 >= H || info.h <= SEA - 1) return null;
+      if (CM.hash3(x, 7, z, this.seed) >= t.p) return null;
       const k = CM.hash3(x, 8, z, this.seed);
       let acc = 0;
       for (const [type, w, big] of t.kinds) {
         acc += w;
-        if (k < acc) return { type, big: big && CM.hash3(x, 9, z, this.seed) < big };
+        if (k < acc) {
+          const real = type === 'FUNGUS' ? (info.variant ? 'CRIMSON' : 'WARPED') : type;
+          return { type: real, big: big && CM.hash3(x, 9, z, this.seed) < big, bees: t.bees && CM.hash3(x, 10, z, this.seed) < t.bees };
+        }
       }
       return null;
     }
 
     // Liste des blocs d'un arbre : [x, y, z, id, seulementDansLeVide].
-    treeShape(type, big, x, y, z) {
+    treeShape(type, big, x, y, z, bees) {
       const Bk = CM.B, seed = this.seed;
-      const w = CM.WOODS.find((v) => v.key === type);
-      const LOG = w.log, LEAF = w.leaves;
       const hsh = (k) => CM.hash3(x, k, z, seed + 21);
       const out = [];
+      // arbres qui ne sont pas des essences de bois : champignons géants, pics de glace
+      if (type === 'ICE_SPIKE') {
+        const th = 6 + Math.floor(hsh(1) * (hsh(2) < 0.15 ? 18 : 8));
+        const R = th > 14 ? 2.6 : 1.6;
+        for (let dy = -1; dy < th; dy++) {
+          const rr = R * (1 - Math.max(0, dy) / th);
+          const ir = Math.ceil(rr);
+          for (let dz = -ir; dz <= ir; dz++) for (let dx = -ir; dx <= ir; dx++) if (dx * dx + dz * dz <= rr * rr + 0.3) out.push([x + dx, y + dy, z + dz, Bk.PACKED_ICE, false]);
+        }
+        return out;
+      }
+      if (type === 'RED_MUSHROOM_TREE' || type === 'BROWN_MUSHROOM_TREE') {
+        const red = type === 'RED_MUSHROOM_TREE';
+        const cap = red ? Bk.RED_MUSHROOM_BLOCK : Bk.BROWN_MUSHROOM_BLOCK;
+        const th = 5 + Math.floor(hsh(1) * 3);
+        for (let i = 0; i < th; i++) out.push([x, y + i, z, Bk.MUSHROOM_STEM, false]);
+        if (red) {
+          for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+            if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+            out.push([x + dx, y + th, z + dz, cap, true]);
+            if (Math.abs(dx) === 2 || Math.abs(dz) === 2) for (let k = 1; k <= 3; k++) out.push([x + dx, y + th - k, z + dz, cap, true]);
+          }
+        } else {
+          for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (!(Math.abs(dx) === 3 && Math.abs(dz) === 3)) out.push([x + dx, y + th, z + dz, cap, true]);
+        }
+        return out;
+      }
+      const w = CM.WOODS.find((v) => v.key === type);
+      const LOG = w.log, LEAF = w.leaves;
       const leaf = (X, Y, Z) => out.push([X, Y, Z, LEAF, true]);
       const blob = (cx, cy, cz, R, low, high) => {
         for (let dy = low; dy <= high; dy++) {
@@ -334,7 +558,7 @@
             }
         }
       };
-      out.push([x, y - 1, z, Bk.DIRT, false]);
+      if (!w.nether && type !== 'MANGROVE') out.push([x, y - 1, z, Bk.DIRT, false]);
       let th;
       switch (type) {
         case 'SPRUCE': {
@@ -402,12 +626,84 @@
               for (let dx = -3; dx <= 3; dx++) if (dx * dx + dy * dy * 1.6 + dz * dz <= 7.5) leaf(x + dx, y + th + dy, z + dz);
           break;
         }
+        case 'DARK_OAK': {
+          // tronc 2x2 et large couronne plate
+          th = 6 + Math.floor(hsh(1) * 3);
+          for (let i = 0; i < th; i++) for (const [ox, oz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) out.push([x + ox, y + i, z + oz, LOG, false]);
+          for (const [ox, oz] of [[1, 0], [0, 1], [1, 1]]) out.push([x + ox, y - 1, z + oz, Bk.DIRT, false]);
+          for (let dy = -1; dy <= 1; dy++) {
+            const R = dy === 1 ? 2.6 : 4.2;
+            for (let dz = -4; dz <= 5; dz++)
+              for (let dx = -4; dx <= 5; dx++) {
+                const d = Math.hypot(dx - 0.5, dz - 0.5);
+                if (d <= R && (d < R - 0.8 || CM.hash3(x + dx, y + dy, z + dz, seed + 25) < 0.6)) leaf(x + dx, y + th + dy, z + dz);
+              }
+          }
+          break;
+        }
+        case 'CHERRY': {
+          th = 5 + Math.floor(hsh(1) * 3);
+          const [ddx, ddz] = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(hsh(2) * 4)];
+          for (let i = 0; i < th; i++) out.push([x + (i > th - 3 ? ddx : 0), y + i, z + (i > th - 3 ? ddz : 0), LOG, false]);
+          const cx = x + ddx, cz = z + ddz, cy = y + th;
+          for (let dy = -1; dy <= 2; dy++)
+            for (let dz = -4; dz <= 4; dz++)
+              for (let dx = -4; dx <= 4; dx++) {
+                const e = (dx * dx + dz * dz) / 16 + (dy - 0.3) * (dy - 0.3) / 3;
+                if (e <= 1 && (e < 0.75 || CM.hash3(cx + dx, cy + dy, cz + dz, seed + 26) < 0.55)) leaf(cx + dx, cy + dy, cz + dz);
+              }
+          // feuilles tombantes
+          for (let k = 0; k < 6; k++) {
+            const a = hsh(30 + k) * Math.PI * 2, rr = 3 + hsh(40 + k);
+            const lx = Math.round(cx + Math.cos(a) * rr), lz = Math.round(cz + Math.sin(a) * rr);
+            leaf(lx, cy - 2, lz);
+          }
+          break;
+        }
+        case 'MANGROVE': {
+          th = 5 + Math.floor(hsh(1) * 3);
+          const base = y + 2;
+          for (let i = 0; i < th; i++) out.push([x, base + i, z, LOG, false]);
+          // racines en échasses
+          for (const [ox, oz] of [[1, 1], [-1, 1], [1, -1], [-1, -1], [2, 0], [-2, 0]]) {
+            if (CM.hash3(x + ox, y, z + oz, seed + 27) < 0.25) continue;
+            out.push([x + Math.sign(ox), base, z + Math.sign(oz), LOG, false]);
+            for (let k = 1; k <= 4; k++) out.push([x + ox, base - k + 1, z + oz, LOG, false]);
+          }
+          blob(x, base + th, z, 3, -2, 1);
+          for (let k = 0; k < 5; k++) {
+            const a = hsh(50 + k) * Math.PI * 2;
+            const lx = Math.round(x + Math.cos(a) * 3), lz = Math.round(z + Math.sin(a) * 3);
+            for (let d = 1; d <= 2; d++) leaf(lx, base + th - 2 - d, lz);
+          }
+          break;
+        }
+        case 'CRIMSON':
+        case 'WARPED': {
+          // champignon géant du Nether : tige, chapeau de verrues, champilampes
+          th = 5 + Math.floor(hsh(1) * 6);
+          for (let i = 0; i < th; i++) out.push([x, y + i, z, LOG, false]);
+          const R = th > 8 ? 3 : 2;
+          for (let dy = -2; dy <= 0; dy++) {
+            const rr = dy === 0 ? R - 1 : R;
+            for (let dz = -rr; dz <= rr; dz++)
+              for (let dx = -rr; dx <= rr; dx++) {
+                const edge = Math.abs(dx) === rr || Math.abs(dz) === rr;
+                if (dy < 0 && !edge) continue;
+                if (Math.abs(dx) === rr && Math.abs(dz) === rr && CM.hash3(x + dx, y + dy, z + dz, seed + 28) < 0.5) continue;
+                out.push([x + dx, y + th + dy, z + dz, CM.hash3(x + dx, y + dy, z + dz, seed + 29) < 0.08 ? Bk.SHROOMLIGHT : LEAF, true]);
+              }
+          }
+          out.push([x, y + th, z, LEAF, true]);
+          break;
+        }
         default: {
           // chêne et bouleau
           const tall = type === 'BIRCH' ? 5 : 4;
           th = (big ? 7 : tall) + Math.floor(hsh(1) * 3);
           for (let i = 0; i < th; i++) out.push([x, y + i, z, LOG, false]);
           blob(x, y + th, z, big ? 3 : 2, -3, 1);
+          if (bees) out.push([x, y + th - 3, z + 1, Bk.BEEHIVE, true]);
         }
       }
       return out;
@@ -420,7 +716,8 @@
           const a = (k / n) * Math.PI * 2;
           const x = Math.round(Math.cos(a) * rad), z = Math.round(Math.sin(a) * rad);
           const info = this.column(x, z);
-          if (CM.blocks[info.topB].soil && info.h > SEA + 1 && info.bi !== BIO.MOUNTAINS && !this.treeAt(x, z, info)) return { x: x + 0.5, y: info.h + 1, z: z + 0.5 };
+          const b = CM.blocks[info.topB];
+          if ((b.soil || info.topB === CM.B.SNOW) && info.topB !== CM.B.CRIMSON_NYLIUM && info.topB !== CM.B.WARPED_NYLIUM && info.h > SEA + 1 && info.bi !== BIO.MOUNTAINS && info.bi !== BIO.VOLCANIC && !this.treeAt(x, z, info)) return { x: x + 0.5, y: info.h + 1, z: z + 0.5 };
         }
       }
       return { x: 0.5, y: 70, z: 0.5 };
@@ -453,6 +750,18 @@
       const blocks = c.blocks, seed = this.seed;
       const x0 = c.x0, z0 = c.z0;
       const infos = new Array(256);
+
+      if (this.type === 'flat') {
+        for (let i = 0; i < 256; i++) {
+          blocks[i] = Bk.BEDROCK;
+          for (let y = 1; y < SEA + 5; y++) blocks[(y << 8) | i] = Bk.STONE;
+          for (let y = SEA + 5; y < SEA + 8; y++) blocks[(y << 8) | i] = Bk.DIRT;
+          blocks[((SEA + 8) << 8) | i] = Bk.GRASS;
+        }
+        const e = this.edits.get(ckey(cx, cz));
+        if (e) for (const [i, id] of e) blocks[i] = id;
+        return c;
+      }
 
       // 1) colonnes : roche, sous-sol, surface, eau (ou glace)
       for (let lz = 0; lz < 16; lz++)
@@ -498,10 +807,15 @@
           else if (this.treeAt(x0 + lx, z0 + lz, info)) maxY = h - 3;
           for (let y = 3; y < h; y++) {
             const i = lidx(lx, y, lz);
-            if (blocks[i] !== Bk.STONE) continue;
+            const cur = blocks[i];
+            if (cur !== Bk.STONE && cur !== Bk.DEEPSTONE) continue;
             const d = tri(gD, lx, y, lz), e = tri(gE, lx, y, lz);
+            if (cur === Bk.DEEPSTONE) {
+              if (e > 0.52) blocks[i] = Bk.TUFF;
+              continue;
+            }
             if (d > 0.52) blocks[i] = Bk.GRANITE;
-            else if (d < -0.52) blocks[i] = Bk.DIORITE;
+            else if (d < -0.52) blocks[i] = y < 44 && d < -0.64 ? Bk.DRIPSTONE_BLOCK : Bk.DIORITE;
             else if (e > 0.55) blocks[i] = Bk.ANDESITE;
             else if (e < -0.6 && y < 60) blocks[i] = Bk.GRAVEL;
           }
@@ -538,7 +852,7 @@
                 if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && y >= 0 && y < H) {
                   const i = lidx(lx, y, lz);
                   const cur = blocks[i];
-                  if (ROCK[cur] && (cur !== Bk.DEEPSTONE || id !== Bk.COAL_ORE)) blocks[i] = id;
+                  if (ROCK[cur]) blocks[i] = (cur === Bk.DEEPSTONE || cur === Bk.TUFF) && DEEP_ORE[id] ? DEEP_ORE[id] : id;
                 }
                 const r = rand();
                 if (r < 0.33) x += rand() < 0.5 ? -1 : 1;
@@ -549,31 +863,67 @@
           });
         }
 
-      // 4) plantes (colonnes de ce tronçon sans arbre)
+      // 4) plantes (colonnes de ce tronçon sans arbre), coraux, neige
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
           const info = infos[(lz << 4) | lx];
           const h = info.h;
-          if (h + 4 >= H || h <= SEA) continue;
-          if (blocks[lidx(lx, h, lz)] !== info.topB || blocks[lidx(lx, h + 1, lz)] !== 0) continue;
           const x = x0 + lx, z = z0 + lz;
+          if (h + 12 >= H) continue;
+          // récifs de corail dans les océans chauds
+          if (info.bi === BIO.WARM_OCEAN && h < SEA - 2 && blocks[lidx(lx, h, lz)] === info.topB) {
+            const p = CM.hash3(x, 15, z, seed);
+            if (p < 0.2) {
+              const k = Math.floor(CM.hash3(x, 16, z, seed) * 5);
+              const tall = 1 + Math.floor(CM.hash3(x, 17, z, seed) * 3);
+              const coral = Bk.TUBE_CORAL_BLOCK + k;
+              let y = h + 1;
+              for (let t = 0; t < tall && y < SEA - 1; t++, y++) blocks[lidx(lx, y, lz)] = coral;
+              if (y < SEA - 1 && CM.hash3(x, 18, z, seed) < 0.7) blocks[lidx(lx, y, lz)] = Bk.TUBE_CORAL_FAN + k;
+            } else if (p < 0.3) blocks[lidx(lx, h + 1, lz)] = Bk.TUBE_CORAL_FAN + Math.floor(CM.hash3(x, 16, z, seed) * 5);
+            continue;
+          }
+          if (h <= SEA) continue;
+          if (blocks[lidx(lx, h, lz)] !== info.topB || blocks[lidx(lx, h + 1, lz)] !== 0) continue;
           if (this.treeAt(x, z, info)) continue;
-          const table = PLANTS[info.bi];
-          if (!table) continue;
-          let p = CM.hash3(x, 13, z, seed);
-          for (const [name, prob, n] of table) {
-            if (p >= prob) {
-              p -= prob;
+          // canne à sucre au bord de l'eau
+          if (!this.legacy && h <= SEA + 1 && (info.topB === Bk.SAND || CM.blocks[info.topB].soil) && lx > 0 && lx < 15 && lz > 0 && lz < 15) {
+            const nearWater = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => blocks[lidx(lx + dx, SEA, lz + dz)] === Bk.WATER);
+            if (nearWater && CM.hash3(x, 19, z, seed) < 0.12) {
+              const hh = 1 + Math.floor(CM.hash3(x, 20, z, seed) * 3);
+              for (let k = 1; k <= hh; k++) blocks[lidx(lx, h + k, lz)] = Bk.SUGAR_CANE;
               continue;
             }
-            const id = Bk[name];
-            if (id === Bk.CACTUS) {
-              if (info.topB !== Bk.SAND && info.topB !== Bk.RED_SAND) break;
-              const hh = 1 + Math.floor(CM.hash3(x, 14, z, seed) * (n || 3));
-              for (let k = 1; k <= hh; k++) blocks[lidx(lx, h + k, lz)] = id;
-            } else blocks[lidx(lx, h + 1, lz)] = id;
-            break;
           }
+          const table = this.plants[info.bi];
+          let placed = false;
+          if (table) {
+            let p = CM.hash3(x, 13, z, seed);
+            for (const [name, prob, n] of table) {
+              if (p >= prob) {
+                p -= prob;
+                continue;
+              }
+              const id = Bk[name];
+              if (id === Bk.CACTUS) {
+                if (info.topB !== Bk.SAND && info.topB !== Bk.RED_SAND) break;
+                const hh = 1 + Math.floor(CM.hash3(x, 14, z, seed) * (n || 3));
+                for (let k = 1; k <= hh; k++) blocks[lidx(lx, h + k, lz)] = id;
+              } else if (n) {
+                const hh = 2 + Math.floor(CM.hash3(x, 14, z, seed) * (n - 1));
+                for (let k = 1; k <= hh; k++) blocks[lidx(lx, h + k, lz)] = id;
+              } else blocks[lidx(lx, h + 1, lz)] = id;
+              placed = true;
+              break;
+            }
+          }
+          // forêts fongiques : racines et pousses
+          if (!placed && info.bi === BIO.FUNGUS) {
+            const p = CM.hash3(x, 21, z, seed);
+            if (p < 0.12) blocks[lidx(lx, h + 1, lz)] = info.variant ? Bk.CRIMSON_ROOTS : p < 0.06 ? Bk.WARPED_ROOTS : Bk.NETHER_SPROUTS;
+          }
+          // couche de neige dans les biomes froids
+          if (!placed && !this.legacy && COLD_BIOMES.has(info.bi) && info.topB !== Bk.SNOW && CM.hash3(x, 22, z, seed) < 0.45) blocks[lidx(lx, h + 1, lz)] = Bk.SNOW_LAYER;
         }
 
       // 5) arbres dont la couronne touche ce tronçon
@@ -584,10 +934,10 @@
           const inside = lx >= 0 && lx < 16 && lz >= 0 && lz < 16;
           const info = inside ? infos[(lz << 4) | lx] : this.column(x, z);
           const t = this.treeAt(x, z, info);
-          if (t) this.placeTree(c, t.type, t.big, x, info.h + 1, z);
+          if (t) this.placeTree(c, t.type, t.big, x, info.h + 1, z, t.bees);
         }
 
-      // 6) champignons rebond dans les grottes
+      // 6) champignons rebond, sculk dans les profondeurs
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
           const h = infos[(lz << 4) | lx].h;
@@ -595,7 +945,12 @@
           for (let y = 4; y < h - 6; y++) {
             const i = lidx(lx, y, lz);
             if (blocks[i] !== 0) continue;
-            if (!ROCK[blocks[i - 256]]) continue;
+            const below = blocks[i - 256];
+            if (!ROCK[below]) continue;
+            if (y < 13 && (below === Bk.DEEPSTONE || below === Bk.TUFF) && tri(gC, lx, y, lz) > 0.25 && CM.hash3(x, y, z, seed + 12) < 0.6) {
+              blocks[i - 256] = Bk.SCULK;
+              continue;
+            }
             if (CM.hash3(x, y, z, seed + 9) < 0.012) {
               blocks[i] = Bk.MUSHROOM;
               if (CM.hash3(x, y, z, seed + 10) < 0.3 && blocks[i + 256] === 0) blocks[i + 256] = Bk.MUSHROOM;
@@ -603,7 +958,8 @@
           }
         }
 
-      // 7) îles célestes et ruines
+      // 7) géodes d'améthyste, îles célestes et ruines
+      this.geodesFor(c);
       this.islandsFor(c);
       this.ruinsFor(c);
 
@@ -614,18 +970,62 @@
     }
 
     // Arbre découpé au tronçon c (seules les cases de c sont écrites).
-    placeTree(c, type, big, x, y, z) {
-      if (x + 5 < c.x0 || x - 5 > c.x0 + 15 || z + 5 < c.z0 || z - 5 > c.z0 + 15) return;
-      for (const [X, Y, Z, id, onlyAir] of this.treeShape(type, big, x, y, z)) {
+    placeTree(c, type, big, x, y, z, bees) {
+      if (x + 6 < c.x0 || x - 6 > c.x0 + 15 || z + 6 < c.z0 || z - 6 > c.z0 + 15) return;
+      for (const [X, Y, Z, id, onlyAir] of this.treeShape(type, big, x, y, z, bees)) {
         const lx = X - c.x0, lz = Z - c.z0;
         if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || Y < 0 || Y >= H) continue;
         const i = lidx(lx, Y, lz);
         if (onlyAir) {
           const cur = c.blocks[i];
-          if (cur !== 0 && !CM.blocks[cur].plant) continue;
+          if (cur !== 0 && !CM.blocks[cur].plant && cur !== CM.B.SNOW_LAYER) continue;
         }
         c.blocks[i] = id;
       }
+    }
+
+    // ---------------------------------------------------------- géodes ----
+    geodeAt(rx, rz) {
+      const rand = CM.rng((CM.hash3(rx, 171, rz, this.seed) * 4294967296) >>> 0);
+      if (rand() > 0.35) return null;
+      return {
+        x: rx * GEODE_REGION + 8 + Math.floor(rand() * (GEODE_REGION - 16)),
+        z: rz * GEODE_REGION + 8 + Math.floor(rand() * (GEODE_REGION - 16)),
+        y: 7 + Math.floor(rand() * 20),
+        r: 3.6 + rand() * 1.6,
+        s: Math.floor(rand() * 1e9),
+      };
+    }
+    geodesFor(c) {
+      const Bk = CM.B;
+      const r0x = Math.floor((c.x0 - 6) / GEODE_REGION), r1x = Math.floor((c.x0 + 21) / GEODE_REGION);
+      const r0z = Math.floor((c.z0 - 6) / GEODE_REGION), r1z = Math.floor((c.z0 + 21) / GEODE_REGION);
+      for (let rz = r0z; rz <= r1z; rz++)
+        for (let rx = r0x; rx <= r1x; rx++) {
+          const g = this.geodeAt(rx, rz);
+          if (!g) continue;
+          const R = Math.ceil(g.r);
+          for (let dz = -R; dz <= R; dz++)
+            for (let dx = -R; dx <= R; dx++) {
+              const X = g.x + dx, Z = g.z + dz;
+              const lx = X - c.x0, lz = Z - c.z0;
+              if (lx < 0 || lx > 15 || lz < 0 || lz > 15) continue;
+              for (let dy = -R; dy <= R; dy++) {
+                const Y = g.y + dy;
+                if (Y <= 2) continue;
+                const d = Math.hypot(dx, dy * 1.15, dz) + (CM.hash3(X, Y, Z, g.s) - 0.5) * 0.5;
+                if (d > g.r) continue;
+                const i = lidx(lx, Y, lz);
+                if (c.blocks[i] === Bk.BEDROCK) continue;
+                let id;
+                if (d > g.r - 0.8) id = Bk.SMOOTH_BASALT;
+                else if (d > g.r - 1.6) id = Bk.CALCITE;
+                else if (d > g.r - 2.4) id = CM.hash3(X, Y, Z, g.s + 1) < 0.1 ? Bk.BUDDING_AMETHYST : Bk.AMETHYST_BLOCK;
+                else id = 0;
+                c.blocks[i] = id;
+              }
+            }
+        }
     }
 
     // ---------------------------------------------------------- ruines ----
@@ -635,8 +1035,9 @@
       const x = rx * RUIN_REGION + 12 + Math.floor(rand() * (RUIN_REGION - 24));
       const z = rz * RUIN_REGION + 12 + Math.floor(rand() * (RUIN_REGION - 24));
       const info = this.column(x, z);
-      if (info.h <= SEA + 1 || info.bi === BIO.MOUNTAINS || info.bi === BIO.SWAMP) return null;
-      return { x, z, y: info.h, bi: info.bi, seed: Math.floor(rand() * 1e9) };
+      const ocean = (info.bi === BIO.OCEAN || info.bi === BIO.WARM_OCEAN) && info.h < SEA - 4;
+      if (!ocean && (info.h <= SEA + 1 || info.bi === BIO.MOUNTAINS || info.bi === BIO.SWAMP || info.bi === BIO.MANGROVE || info.flat)) return null;
+      return { x, z, y: info.h, bi: info.bi, ocean, seed: Math.floor(rand() * 1e9) };
     }
     ruinsFor(c) {
       const Bk = CM.B;
@@ -647,9 +1048,24 @@
           const ru = this.ruinAt(rx, rz);
           if (!ru || ru.x + 3 < c.x0 || ru.x - 3 > c.x0 + 15 || ru.z + 3 < c.z0 || ru.z - 3 > c.z0 + 15) continue;
           const sandy = ru.bi === BIO.DESERT || ru.bi === BIO.BADLANDS;
-          const mossy = ru.bi === BIO.JUNGLE || ru.bi === BIO.FOREST || ru.bi === BIO.CRYSTAL || ru.bi === BIO.BIRCH;
-          const floorSet = sandy ? [Bk.SANDSTONE, Bk.SANDSTONE, Bk.CARVED_SANDSTONE] : [Bk.STONEBRICK, Bk.COBBLE, mossy ? Bk.MOSSY_STONEBRICK : Bk.STONEBRICK];
-          const wallSet = sandy ? [Bk.SANDSTONE, Bk.CARVED_SANDSTONE, Bk.SANDSTONE] : [Bk.STONEBRICK, mossy ? Bk.MOSSY_STONEBRICK : Bk.COBBLE, mossy ? Bk.MOSSY_COBBLE : Bk.STONEBRICK];
+          const mossy = ru.bi === BIO.JUNGLE || ru.bi === BIO.FOREST || ru.bi === BIO.CRYSTAL || ru.bi === BIO.BIRCH || ru.bi === BIO.DARK_FOREST || ru.bi === BIO.BAMBOO;
+          const dark = ru.bi === BIO.VOLCANIC || ru.bi === BIO.FUNGUS;
+          let floorSet, wallSet, fill = 0, corner = null;
+          if (ru.ocean) {
+            floorSet = [Bk.PRISMARINE_BRICKS, Bk.PRISMARINE, Bk.DARK_PRISMARINE];
+            wallSet = [Bk.PRISMARINE_BRICKS, Bk.PRISMARINE, Bk.PRISMARINE_BRICKS];
+            fill = Bk.WATER;
+            corner = Bk.SEA_LANTERN;
+          } else if (sandy) {
+            floorSet = [Bk.SANDSTONE, Bk.SANDSTONE, Bk.CUT_SANDSTONE];
+            wallSet = [Bk.SANDSTONE, Bk.CARVED_SANDSTONE, Bk.CUT_SANDSTONE];
+          } else if (dark) {
+            floorSet = [Bk.POLISHED_BLACKSTONE_BRICKS, Bk.BLACKSTONE, Bk.CRACKED_POLISHED_BLACKSTONE_BRICKS];
+            wallSet = [Bk.POLISHED_BLACKSTONE_BRICKS, Bk.CHISELED_POLISHED_BLACKSTONE, Bk.GILDED_BLACKSTONE];
+          } else {
+            floorSet = [Bk.STONEBRICK, Bk.COBBLE, mossy ? Bk.MOSSY_STONEBRICK : Bk.CRACKED_STONEBRICK];
+            wallSet = [Bk.STONEBRICK, mossy ? Bk.MOSSY_STONEBRICK : Bk.COBBLE, mossy ? Bk.MOSSY_COBBLE : Bk.CRACKED_STONEBRICK];
+          }
           const pick = (set, X, Y, Z) => set[Math.floor(CM.hash3(X, Y, Z, ru.seed) * set.length)];
           const y0 = ru.y;
           for (let dz = -3; dz <= 3; dz++)
@@ -662,17 +1078,18 @@
                 const i = lidx(lx, y, lz);
                 const cur = c.blocks[i];
                 if (cur !== 0 && cur !== Bk.WATER && !CM.blocks[cur].plant) break;
-                c.blocks[i] = Bk.COBBLE;
+                c.blocks[i] = ru.ocean ? Bk.PRISMARINE : Bk.COBBLE;
               }
               c.blocks[lidx(lx, y0, lz)] = pick(floorSet, X, y0, Z);
-              for (let y = y0 + 1; y <= y0 + 5; y++) c.blocks[lidx(lx, y, lz)] = 0;
+              for (let y = y0 + 1; y <= y0 + 5; y++) c.blocks[lidx(lx, y, lz)] = y <= SEA ? fill : 0;
               const edge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
-              const corner = Math.abs(dx) === 3 && Math.abs(dz) === 3;
+              const isCorner = Math.abs(dx) === 3 && Math.abs(dz) === 3;
               if (edge) {
-                let hgt = corner ? 4 : Math.floor(CM.hash3(X, 1, Z, ru.seed) * 4);
+                let hgt = isCorner ? 4 : Math.floor(CM.hash3(X, 1, Z, ru.seed) * 4);
                 if (dx === 0 && dz === -3) hgt = 0; // entrée
-                for (let y = 1; y <= hgt; y++) c.blocks[lidx(lx, y0 + y, lz)] = pick(wallSet, X, y0 + y, Z);
+                for (let y = 1; y <= hgt; y++) c.blocks[lidx(lx, y0 + y, lz)] = isCorner && corner && y === hgt ? corner : pick(wallSet, X, y0 + y, Z);
               }
+              if (ru.ocean && dx === 1 && dz === 1 && CM.hash3(X, 2, Z, ru.seed) < 0.5) c.blocks[lidx(lx, y0 + 1, lz)] = Bk.WET_SPONGE;
               if (dx === 0 && dz === 0) c.blocks[lidx(lx, y0 + 1, lz)] = Bk.CHEST;
             }
         }
@@ -692,11 +1109,12 @@
       if (this.islandCache.has(k)) return this.islandCache.get(k);
       const rand = CM.rng((CM.hash3(rx, 91, rz, this.seed) * 4294967296) >>> 0);
       let isl = null;
-      if (rand() < 0.6) {
+      if (rand() < 0.6 && this.type !== 'flat') {
         const r = 6 + rand() * 6;
         const x = rx * REGION + 24 + Math.floor(rand() * (REGION - 48));
         const z = rz * REGION + 24 + Math.floor(rand() * (REGION - 48));
         const y = 72 + Math.floor(rand() * 9);
+        const end = rand() < 0.35; // île de l'End : pierre de l'End et pilier de purpur
         let ok = true;
         for (let dz = -r; dz <= r && ok; dz += 3)
           for (let dx = -r; dx <= r; dx += 3)
@@ -705,7 +1123,7 @@
               break;
             }
         if (ok) {
-          isl = { x, y, z, r, shards: [] };
+          isl = { x, y, z, r, shards: [], end };
           for (let t = 0; t < 400 && isl.shards.length < 7; t++) {
             const X = Math.round(x + (rand() - 0.5) * r * 1.6);
             const Z = Math.round(z + (rand() - 0.5) * r * 1.6);
@@ -751,6 +1169,7 @@
           if (isl.x + E < c.x0 || isl.x - E > c.x0 + 15 || isl.z + E < c.z0 || isl.z - E > c.z0 + 15) continue;
           const R = Math.ceil(isl.r);
           const tops = [];
+          const body = isl.end ? B.END_STONE : B.SKYSTONE;
           for (let dz = -R; dz <= R; dz++)
             for (let dx = -R; dx <= R; dx++) {
               const X = isl.x + dx, Z = isl.z + dz;
@@ -759,16 +1178,34 @@
               tops.push([X, col.top, Z]);
               if (!inC(X, Z)) continue;
               for (let y = col.top - col.depth; y <= col.top; y++) {
-                let id = B.SKYSTONE;
-                if (y === col.top) id = B.GRASS;
-                else if (y >= col.top - 2) id = B.DIRT;
+                let id = body;
+                if (!isl.end) {
+                  if (y === col.top) id = B.GRASS;
+                  else if (y >= col.top - 2) id = B.DIRT;
+                }
                 c.blocks[lidx(X - c.x0, y, Z - c.z0)] = id;
               }
             }
           for (const [X, Y, Z] of isl.shards) {
             if (!inC(X, Z)) continue;
             const i = lidx(X - c.x0, Y, Z - c.z0);
-            if (c.blocks[i] === B.SKYSTONE) c.blocks[i] = B.SHARD_ORE;
+            if (c.blocks[i] === body) c.blocks[i] = B.SHARD_ORE;
+          }
+          if (isl.end) {
+            // petit sanctuaire de purpur au centre de l'île
+            const col = this.islandCol(isl, isl.x, isl.z);
+            if (!col) continue;
+            for (let dz = -1; dz <= 1; dz++)
+              for (let dx = -1; dx <= 1; dx++) {
+                const X = isl.x + dx, Z = isl.z + dz;
+                if (!inC(X, Z) || col.top + 6 >= H) continue;
+                c.blocks[lidx(X - c.x0, col.top, Z - c.z0)] = B.END_STONE_BRICKS;
+                if (dx === 0 && dz === 0) {
+                  for (let k = 1; k <= 4; k++) c.blocks[lidx(X - c.x0, col.top + k, Z - c.z0)] = B.PURPUR_PILLAR;
+                  c.blocks[lidx(X - c.x0, col.top + 5, Z - c.z0)] = B.PURPUR_BLOCK;
+                } else if (Math.abs(dx) + Math.abs(dz) === 2) c.blocks[lidx(X - c.x0, col.top + 1, Z - c.z0)] = B.PURPUR_BLOCK;
+              }
+            continue;
           }
           const trees = [];
           for (const [X, top, Z] of tops) {
@@ -1083,7 +1520,17 @@
       for (let i = 0; i < 512 && t <= maxDist; i++) {
         if (y >= 0 && y < H) {
           const id = this.get(x, y, z);
-          if (id && filter(id)) return { x, y, z, nx, ny, nz, t, id };
+          if (id && filter(id)) {
+            const hb = CM.blocks[id].height;
+            if (hb >= 1) return { x, y, z, nx, ny, nz, t, id };
+            // bloc partiel : le rayon doit toucher sa boîte
+            const tb = CM.rayBox(ox, oy, oz, dx, dy, dz, x, y, z, x + 1, y + hb, z + 1);
+            if (tb >= 0 && tb <= maxDist) {
+              const hy = oy + dy * tb;
+              const top = Math.abs(hy - (y + hb)) < 1e-4;
+              return { x, y, z, nx: top ? 0 : nx, ny: top ? 1 : ny, nz: top ? 0 : nz, t: tb, id, h: hb };
+            }
+          }
         }
         if (tmx < tmy && tmx < tmz) {
           x += sx; t = tmx; tmx += tdx; nx = -sx; ny = 0; nz = 0;

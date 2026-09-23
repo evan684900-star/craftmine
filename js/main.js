@@ -4,8 +4,27 @@
   const $ = (id) => document.getElementById(id);
   const SAVE_KEY = 'craftmine_save_v2';
   const OPT_KEY = 'craftmine_options_v1';
-  const DAY_LEN = 600; // secondes pour un cycle complet
+  const SAVE_VERSION = 4;
   const B = CM.B;
+
+  // Réglages par défaut (modifiables dans Options).
+  CM.DEFAULT_BINDS = {
+    forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ',
+  };
+  CM.DEFAULT_OPTIONS = {
+    // graphismes
+    renderDist: 8, fov: 75, dynFov: true, brightness: 30, clouds: true, smoothLight: true, waving: true,
+    particles: 2, viewBob: true, showHand: true, resolution: 100, maxFps: 0,
+    // contrôles
+    sens: 1, invertY: false, toggleSprint: false, autoJump: false, binds: null,
+    // jeu
+    showQuests: true, keepInventory: false, dayLength: 10, autosave: 45, toasts: 2,
+    // audio
+    volume: 50, sfxVolume: 100, mobVolume: 100, uiVolume: 100,
+    // interface
+    guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
+  };
 
   function storageGet(k) {
     try {
@@ -23,15 +42,34 @@
     }
   }
   const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  // Graine vraiment aléatoire (et non Math.random seul).
+  function randomSeed() {
+    try {
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      return a[0] % 4000000000;
+    } catch (e) {
+      return Math.floor((Math.random() * 1e9 + Date.now()) % 4e9);
+    }
+  }
+
+  const KEY_NAMES = {
+    Space: 'Espace', ShiftLeft: 'Maj gauche', ShiftRight: 'Maj droite', ControlLeft: 'Ctrl gauche', ControlRight: 'Ctrl droit',
+    AltLeft: 'Alt', AltRight: 'Alt Gr', Tab: 'Tab', CapsLock: 'Verr. maj', Enter: 'Entrée', Backspace: 'Retour',
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+  };
 
   class Game {
     constructor() {
       this.canvas = $('game');
-      this.options = Object.assign({ renderDist: 8, sens: 1, fov: 75, volume: 50, invertY: false, showQuests: true }, JSON.parse(storageGet(OPT_KEY) || '{}'));
+      const saved = JSON.parse(storageGet(OPT_KEY) || '{}');
+      this.options = Object.assign({}, CM.DEFAULT_OPTIONS, saved);
+      this.binds = Object.assign({}, CM.DEFAULT_BINDS, this.options.binds || {});
+      this.mode = 'survival';
+      this.difficulty = 'normal';
       CM.Textures.buildIcons();
       CM.Mesher.init();
       this.renderer = new CM.Renderer(this.canvas);
-      this.applyOptions();
       this.input = { keys: {}, pressed: {}, mouse: [false, false, false] };
       this.noInput = { keys: {}, pressed: {}, mouse: [false, false, false] };
       this.state = 'menu';
@@ -48,6 +86,7 @@
         if (this.ui) this.ui.dirtyInv = true;
       };
       this.ui = new CM.UI(this);
+      this.applyOptions();
       this.batch = new CM.Batch();
       this.overlay = new CM.Batch();
       this.hand = new CM.Batch();
@@ -64,24 +103,61 @@
     crafted(id) {
       return (this.stats.crafted[id] || 0) > 0;
     }
+    keyName(code) {
+      if (!code) return '—';
+      if (KEY_NAMES[code]) return KEY_NAMES[code];
+      if (code.startsWith('Key')) return code.slice(3);
+      if (code.startsWith('Digit')) return code.slice(5);
+      if (code.startsWith('Numpad')) return 'Pavé ' + code.slice(6);
+      return code;
+    }
 
     // ------------------------------------------------------- options -----
     applyOptions() {
       const o = this.options;
-      this.renderer.renderDist = o.renderDist;
+      const r = this.renderer;
+      r.renderDist = o.renderDist;
+      r.resolution = o.resolution / 100;
+      r.brightness = o.brightness / 100;
+      r.clouds = o.clouds;
+      const mo = CM.Mesher.opts;
+      if (mo.smoothLight !== o.smoothLight || mo.waving !== o.waving) {
+        mo.smoothLight = o.smoothLight;
+        mo.waving = o.waving;
+        this.remeshAll();
+      }
       CM.Audio.setVolume(o.volume / 100);
+      CM.Audio.cat = { sfx: o.sfxVolume / 100, mob: o.mobVolume / 100, ui: o.uiVolume / 100 };
       $('objective').classList.toggle('hidden', !o.showQuests);
+      document.documentElement.style.setProperty('--gui', String(o.guiScale / 100));
+      $('crosshair').className = 'ch-' + o.crosshair;
+      o.binds = Object.assign({}, this.binds);
       storageSet(OPT_KEY, JSON.stringify(o));
+      if (this.ui) this.ui.optionsChanged();
+    }
+    remeshAll() {
+      if (!this.world) return;
+      for (const k of this.renderer.sections.keys()) this.world.dirty.set(k, 1);
+    }
+    get dayLen() {
+      return Math.max(1, this.options.dayLength) * 60;
     }
 
     // ------------------------------------------------ démarrage monde -----
-    async startWorld(seed, save) {
+    async startWorld(seed, save, settings) {
       this.ui.hide('menu');
+      this.ui.hide('newworld');
       this.ui.show('loading');
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      this.world = new CM.World(seed, save ? save.edits : null);
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 2 }, (save && save.settings) || settings || {});
+      // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
+      if (save && (save.v || 2) < 4) ws.gen = 1;
+      this.settings = ws;
+      this.mode = ws.mode;
+      this.difficulty = ws.difficulty;
+      this.world = new CM.World(seed, save ? save.edits : null, ws);
       this.entities = new CM.Entities(this);
       this.stats = this.freshStats();
       this.time = 0.03;
@@ -89,6 +165,7 @@
       this.dawnHearts = [];
       this.victory = false;
       this.chests = new Map();
+      this.noteBlocks = {};
       this.inventory.slots = new Array(36).fill(null);
       this.inventory.selected = 0;
       const sp = save && save.player && isFinite(save.player.x) ? save.player : this.world.spawn;
@@ -107,24 +184,38 @@
       this.world.dirty.clear();
       this.saplings = new Set();
       for (const id of CM.TAGS.saplings) for (const p of this.world.editedPositions(id)) this.saplings.add(p.join(','));
+      this.crops = new Set();
+      for (let s = 0; s < 3; s++) for (const p of this.world.editedPositions(B['WHEAT_' + s])) this.crops.add(p.join(','));
       this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
+        const v = save.v || 2;
         const p = save.player || {};
         Object.assign(this.player, {
           x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, pitch: p.pitch || 0,
-          health: p.health || 20, stamina: p.stamina || 100,
+          health: p.health || 20,
+          food: Number.isFinite(p.food) ? p.food : 20,
+          sat: Number.isFinite(p.sat) ? p.sat : 5,
+          flying: !!p.flying,
         });
         this.player.fallStart = this.player.y;
-        this.inventory.load(save.inv);
+        this.inventory.load(save.inv, v);
         this.time = save.time || 0.03;
         this.dayCount = save.dayCount || 0;
-        this.stats = Object.assign(this.freshStats(), save.stats || {});
+        this.stats = Object.assign(this.freshStats(), migrateStats(save.stats || {}, v));
         this.dawnHearts = save.dawnHearts || [];
         this.victory = !!save.victory;
         if (save.spawn) this.world.spawn = save.spawn;
-        for (const k in save.chests || {}) this.chests.set(k, save.chests[k].map((s) => (s && CM.itemInfo(s.id) ? s : null)));
-      }
+        this.noteBlocks = save.noteBlocks || {};
+        for (const k in save.chests || {}) {
+          this.chests.set(k, save.chests[k].map((s) => {
+            if (!s) return null;
+            const id = CM.migrateId(s.id, v);
+            return CM.itemInfo(id) ? Object.assign({}, s, { id }) : null;
+          }));
+        }
+      } else if (ws.bonusChest) this.placeBonusChest();
+      if (!save && ws.mode === 'creative') this.player.flying = false;
       this.inventory.changed();
       this.spawnInitialMobs();
       // pré-construction des maillages autour du joueur
@@ -140,14 +231,31 @@
       this.ui.hide('loading');
       this.state = 'playing';
       this.paused = false;
-      this.saveTimer = 45;
+      this.saveTimer = this.options.autosave;
       this.ui.show('hud');
-      this.ui.lastObj = undefined;
-      this.ui.updateObjective();
+      this.ui.worldStarted();
       if (this.autostart) {
         this.forceInput = true;
       } else this.ui.show('start');
-      if (save && save.v === 2) setTimeout(() => this.ui.toast('Mise à jour des biomes : le paysage autour de tes constructions a pu changer.', 'warn'), 800);
+      if (save && save.v < 4) setTimeout(() => this.ui.toast('Nouvelle version : plus de 500 blocs, la faim remplace l’endurance, mode créatif…', 'gold'), 800);
+    }
+
+    // Coffre de départ (option à la création du monde).
+    placeBonusChest() {
+      const w = this.world, sp = w.spawn;
+      const x = Math.floor(sp.x) + 2, z = Math.floor(sp.z) + 1;
+      if (!w.loaded(x, z)) return;
+      const y = w.groundBelow(x, CM.WORLD.H - 1, z) + 1;
+      if (y <= 0 || w.solidAt(x, y, z)) return;
+      w.setBlock(x, y, z, B.CHEST);
+      const I = CM.I;
+      const slots = new Array(27).fill(null);
+      const items = [[I.BREAD, 6], [I.APPLE, 4], [I.PICKAXE_1, 1], [I.AXE_1, 1], [B.TORCH, 12], [B.OAK_SAPLING || B.SAPLING, 3], [I.SEEDS, 6], [B.TABLE, 1], [B.LOG, 12]];
+      items.forEach(([id, n], i) => {
+        slots[i] = { id, count: n };
+        if (CM.itemInfo(id).type === 'tool') slots[i].xp = 0;
+      });
+      this.chests.set(x + ',' + y + ',' + z, slots);
     }
 
     spawnInitialMobs() {
@@ -170,11 +278,15 @@
     saveData() {
       const p = this.player;
       return {
-        v: 3,
+        v: SAVE_VERSION,
         seed: this.world.seed,
+        settings: Object.assign({}, this.settings, { mode: this.mode, difficulty: this.difficulty }),
         spawn: this.world.spawn,
         edits: this.world.editsObject(),
-        player: { x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z, yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, stamina: p.stamina },
+        player: {
+          x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z,
+          yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying,
+        },
         inv: this.inventory.serialize(),
         time: this.time,
         dayCount: this.dayCount,
@@ -182,6 +294,7 @@
         dawnHearts: this.dawnHearts,
         victory: this.victory,
         chests: Object.fromEntries(this.chests),
+        noteBlocks: this.noteBlocks,
         savedAt: new Date().toISOString(),
       };
     }
@@ -247,7 +360,7 @@
           throw new Error("le fichier n'est pas une sauvegarde CraftMine");
         }
         if (data && data.v === 1) throw new Error("cette sauvegarde vient d'une ancienne version du jeu (monde limité) et ne peut plus être chargée");
-        if (!data || (data.v !== 2 && data.v !== 3) || !Number.isFinite(data.seed) || typeof data.edits !== 'object' || !data.player) {
+        if (!data || !(data.v >= 2 && data.v <= SAVE_VERSION) || !Number.isFinite(data.seed) || typeof data.edits !== 'object' || !data.player) {
           throw new Error("le fichier n'est pas une sauvegarde CraftMine valide");
         }
         const existing = this.loadSave();
@@ -274,7 +387,7 @@
     loadSave() {
       try {
         const s = JSON.parse(storageGet(SAVE_KEY));
-        return s && (s.v === 2 || s.v === 3) ? s : null;
+        return s && s.v >= 2 && s.v <= SAVE_VERSION ? s : null;
       } catch (e) {
         return null;
       }
@@ -338,15 +451,22 @@
       );
       window.addEventListener('keydown', (e) => {
         CM.Audio.init();
+        if (this.ui.captureKey(e)) return;
         if (this.state !== 'playing') return;
-        if (e.target && e.target.tagName === 'INPUT') return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
         const c = e.code;
-        if (['Space', 'Tab', 'F3', 'KeyF'].includes(c) || c.startsWith('Arrow')) e.preventDefault();
+        const K = this.binds;
+        if (['Space', 'Tab', 'F3', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
         if (c === 'F3') {
           this.ui.toggleDebug();
           return;
         }
-        if (c === 'KeyE' && !this.paused && this.player.alive) {
+        if (c === 'F1') {
+          e.preventDefault();
+          this.ui.toggleHud();
+          return;
+        }
+        if (c === K.inventory && !this.paused && this.player.alive) {
           if (this.ui.invOpen) this.ui.closeInventory();
           else this.ui.openInventory();
           return;
@@ -364,7 +484,7 @@
           const n = +c.slice(5);
           if (n >= 1 && n <= 9) this.inventory.selected = n - 1;
         }
-        if (c === 'KeyQ') this.dropHeld(e.ctrlKey);
+        if (c === K.drop) this.dropHeld(e.ctrlKey);
         inp.keys[c] = true;
         if (!e.repeat) inp.pressed[c] = true;
       });
@@ -394,13 +514,22 @@
         if (s) this.startWorld(s.seed, s);
       });
       on('btn-new', () => {
+        this.ui.hide('menu');
+        this.ui.openNewWorld();
+      });
+      on('btn-nw-back', () => {
+        this.ui.hide('newworld');
+        this.ui.show('menu');
+      });
+      on('btn-nw-create', () => {
         if (this.loadSave() && !confirm('Une partie existe déjà. La remplacer par un nouveau monde ?')) return;
         const txt = $('seed').value.trim();
         let seed;
-        if (!txt) seed = Math.floor(Math.random() * 1e9);
-        else if (/^\d+$/.test(txt)) seed = +txt % 4294967296;
+        if (!txt) seed = randomSeed();
+        else if (/^-?\d+$/.test(txt)) seed = Math.abs(+txt) % 4294967296;
         else seed = CM.hashString(txt);
-        this.startWorld(seed, null);
+        $('seed').value = '';
+        this.startWorld(seed, null, this.ui.newWorldSettings());
       });
       on('btn-help', () => $('help').classList.toggle('hidden'));
       on('btn-export', () => this.exportSave(this.loadSave()));
@@ -419,6 +548,7 @@
       on('btn-opt-back', () => {
         this.ui.hide('options');
         this.ui.show(this.optionsFrom);
+        if (this.optionsFrom === 'pause') this.ui.refreshPause();
       });
       on('btn-start', () => {
         this.ui.hide('start');
@@ -444,47 +574,26 @@
         this.ui.hide('victory');
         this.captureMouse();
       });
-      const bind = (id, key, fmt, num) => {
-        const el = $(id);
-        el.value = this.options[key];
-        const upd = () => {
-          this.options[key] = num ? +el.value : el.value;
-          $(id + '-v').textContent = fmt(this.options[key]);
-          this.applyOptions();
-        };
-        el.addEventListener('input', upd);
-        $(id + '-v').textContent = fmt(this.options[key]);
-      };
-      bind('o-rd', 'renderDist', (v) => v + ' tronçons (' + v * 16 + ' blocs)', true);
-      bind('o-sens', 'sens', (v) => (+v).toFixed(1), true);
-      bind('o-fov', 'fov', (v) => v + '°', true);
-      bind('o-vol', 'volume', (v) => v + ' %', true);
-      $('o-inv').checked = this.options.invertY;
-      $('o-inv').addEventListener('change', (e) => {
-        this.options.invertY = e.target.checked;
-        this.applyOptions();
-      });
-      $('o-quests').checked = this.options.showQuests;
-      $('o-quests').addEventListener('change', (e) => {
-        this.options.showQuests = e.target.checked;
-        this.applyOptions();
-      });
     }
 
     refreshMenu() {
       const s = this.loadSave();
       $('btn-export').disabled = !s;
       $('btn-continue').classList.toggle('hidden', !s);
-      if (s) $('btn-continue').textContent = 'Continuer (jour ' + ((s.dayCount || 0) + 1) + ')';
+      if (s) {
+        const mode = s.settings && s.settings.mode === 'creative' ? ', créatif' : '';
+        $('btn-continue').textContent = 'Continuer (jour ' + ((s.dayCount || 0) + 1) + mode + ')';
+      }
     }
     openOptions(from) {
       this.optionsFrom = from;
       this.ui.hide(from);
-      this.ui.show('options');
+      this.ui.openOptions(from === 'pause');
     }
     pause() {
       this.paused = true;
       this.ui.hide('start');
+      this.ui.refreshPause();
       this.ui.show('pause');
       this.save(true);
     }
@@ -493,19 +602,29 @@
       this.ui.hide('pause');
       this.captureMouse();
     }
+    setMode(mode) {
+      this.mode = mode;
+      if (mode !== 'creative') this.player.flying = false;
+      this.ui.dirtyInv = true;
+      this.ui.toast(mode === 'creative' ? 'Mode créatif : blocs infinis, vol (double saut), pas de dégâts' : 'Mode survie', 'gold');
+    }
+    setDifficulty(d) {
+      this.difficulty = d;
+      if (d === 'peaceful') for (const m of this.entities.mobs) if (m.type === 'ombre') m.dead = true;
+    }
 
     // ------------------------------------------------ utilitaires jeu ----
     nearbyStations() {
       const p = this.player, w = this.world;
-      const out = { table: false, forge: false };
+      const out = { table: false, forge: false, smithing: false };
       const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
       for (let dy = -3; dy <= 4; dy++)
         for (let dz = -4; dz <= 4; dz++)
           for (let dx = -4; dx <= 4; dx++) {
-            const id = w.get(px + dx, py + dy, pz + dz);
-            if (id === B.TABLE) out.table = true;
-            else if (id === B.FORGE) out.forge = true;
+            const st = CM.blocks[w.get(px + dx, py + dy, pz + dz)].station;
+            if (st) out[st] = true;
           }
+      if (this.mode === 'creative') out.table = out.forge = out.smithing = true;
       return out;
     }
     dropNearPlayer(id, count, extra) {
@@ -541,14 +660,17 @@
         [B.TORCH, 0.6, 4, 12], [I.COAL, 0.5, 3, 8], [I.IRON_INGOT, 0.55, 1, 4], [I.COPPER_INGOT, 0.45, 2, 6],
         [I.GOLD_INGOT, 0.35, 1, 3], [I.APPLE, 0.4, 1, 3], [I.COOKED_MEAT, 0.35, 1, 3], [I.ROPE, 0.35, 1, 3],
         [I.CRYSTAL, 0.22, 1, 2], [I.RUBY, 0.12, 1, 2], [I.SKY_SHARD, 0.08, 1, 1], [I.GOLDEN_APPLE, 0.06, 1, 1],
-        [I.FEATHER, 0.25, 1, 4], [I.PUMPKIN_PIE, 0.2, 1, 2],
+        [I.FEATHER, 0.25, 1, 4], [I.PUMPKIN_PIE, 0.2, 1, 2], [I.BREAD, 0.4, 1, 4], [I.SEEDS, 0.35, 2, 6],
+        [I.DIAMOND, 0.12, 1, 2], [I.EMERALD, 0.15, 1, 3], [I.LAPIS, 0.2, 2, 6], [I.REDSTONE, 0.2, 2, 6],
+        [I.BOOK, 0.2, 1, 3], [I.SLIMEBALL, 0.12, 1, 3], [I.HONEYCOMB, 0.12, 1, 3], [I.NETHERITE_SCRAP, 0.03, 1, 1],
+        [I.AMETHYST_SHARD, 0.15, 1, 4], [I.GLOWSTONE_DUST, 0.15, 2, 5], [I.BONE_MEAL, 0.3, 2, 6], [I.LEATHER, 0.2, 1, 3],
       ];
       const items = [];
       for (const [id, p, a, b] of table) if (r() < p) items.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
       const saplings = CM.TAGS.saplings;
       if (r() < 0.4) items.push({ id: saplings[Math.floor(r() * saplings.length)], count: 1 + Math.floor(r() * 3) });
       const free = [...Array(27).keys()];
-      for (const it of items) slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
+      for (const it of items.slice(0, 27)) slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
     }
     spillChest(x, y, z) {
       const k = x + ',' + y + ',' + z;
@@ -557,7 +679,8 @@
       for (const s of c) if (s) this.entities.addDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.xp !== undefined ? { xp: s.xp } : null);
       this.chests.delete(k);
     }
-    growSaplings() {
+    // Pousses d'arbre et cultures (croissance lente, lumière nécessaire).
+    growPlants() {
       const w = this.world;
       for (const key of [...this.saplings]) {
         const [x, y, z] = key.split(',').map(Number);
@@ -569,12 +692,113 @@
         }
         if (Math.random() > 1 / 50) continue;
         if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
-        if (w.growTree(x, y, z, CM.woodOf(id).key)) {
-          this.saplings.delete(key);
-          this.entities.burst(CM.Textures.layer.leaves, x + 0.5, y + 1, z + 0.5, 12, { speed: 2, size: 0.07 });
+        this.growAt(x, y, z, false);
+      }
+      for (const key of [...this.crops]) {
+        const [x, y, z] = key.split(',').map(Number);
+        if (!w.loaded(x, z)) continue;
+        const b = CM.blocks[w.get(x, y, z)];
+        if (b.crop === undefined || b.crop >= 3) {
+          this.crops.delete(key);
+          continue;
         }
+        if (Math.random() > 1 / 45) continue;
+        if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
+        this.growAt(x, y, z, false);
       }
     }
+    // Fait pousser ce qui se trouve en (x, y, z). bonemeal : poudre d'os (effet immédiat).
+    growAt(x, y, z, bonemeal) {
+      const w = this.world;
+      const id = w.get(x, y, z);
+      const b = CM.blocks[id];
+      if (CM.TAGS.saplings.includes(id)) {
+        if (bonemeal && Math.random() < 0.55) return true; // la poudre ne suffit pas toujours
+        if (w.growTree(x, y, z, CM.woodOf(id).key)) {
+          this.saplings.delete(x + ',' + y + ',' + z);
+          this.entities.burst(CM.Textures.layer.leaves, x + 0.5, y + 1, z + 0.5, 12, { speed: 2, size: 0.07 });
+          return true;
+        }
+        return bonemeal;
+      }
+      if (b.crop !== undefined && b.crop < 3) {
+        const next = Math.min(3, b.crop + (bonemeal ? 1 + Math.floor(Math.random() * 2) : 1));
+        w.setBlock(x, y, z, B['WHEAT_' + next]);
+        if (next >= 3) this.crops.delete(x + ',' + y + ',' + z);
+        return true;
+      }
+      if (bonemeal && b.soil) {
+        // herbe et fleurs autour
+        const flowers = [B.TALLGRASS, B.TALLGRASS, B.TALLGRASS, B.FLOWER, B.DANDELION, B.DAISY, B.AZURE_BLUET];
+        let n = 0;
+        for (let k = 0; k < 24; k++) {
+          const X = x + Math.floor(Math.random() * 7) - 3, Z = z + Math.floor(Math.random() * 7) - 3;
+          for (let Y = y + 2; Y >= y - 2; Y--) {
+            if (CM.blocks[w.get(X, Y, Z)].soil && w.get(X, Y + 1, Z) === 0) {
+              w.setBlock(X, Y + 1, Z, flowers[Math.floor(Math.random() * flowers.length)]);
+              n++;
+              break;
+            }
+          }
+        }
+        return n > 0;
+      }
+      return false;
+    }
+    // ---------------------------------------------------------- TNT -----
+    primeTnt(x, y, z) {
+      this.world.setBlock(x, y, z, 0);
+      this.entities.addTnt(x + 0.5, y, z + 0.5, 3.2);
+      CM.Audio.play('fuse');
+    }
+    explode(x, y, z, power) {
+      const w = this.world;
+      const R = Math.ceil(power);
+      CM.Audio.play('explode');
+      this.entities.burst(CM.Textures.layer.smoke, x, y, z, 40, { speed: 9, grav: -1, life: 1.4, size: 0.5, spread: 2 });
+      this.entities.burst(CM.Textures.layer.white, x, y, z, 30, { speed: 12, grav: 4, life: 0.5, size: 0.12, emissive: true });
+      const chain = [];
+      for (let dy = -R; dy <= R; dy++)
+        for (let dz = -R; dz <= R; dz++)
+          for (let dx = -R; dx <= R; dx++) {
+            const d = Math.hypot(dx, dy, dz);
+            if (d > power + (CM.hash3(x + dx, y + dy, z + dz, 7) - 0.5)) continue;
+            const X = Math.floor(x) + dx, Y = Math.floor(y) + dy, Z = Math.floor(z) + dz;
+            const id = w.get(X, Y, Z);
+            if (!id || id === B.WATER) continue;
+            const b = CM.blocks[id];
+            if (b.unbreakable || b.hardness >= 10) continue;
+            if (b.tnt) {
+              chain.push([X, Y, Z]);
+              continue;
+            }
+            if (b.container) {
+              this.chestAt(X, Y, Z);
+              w.setBlock(X, Y, Z, 0);
+              this.spillChest(X, Y, Z);
+              continue;
+            }
+            w.setBlock(X, Y, Z, 0);
+            if (Math.random() < 0.3 && this.mode !== 'creative') for (const [did, n] of CM.blockDrops(id, Math.random)) this.entities.addDrop(did, n, X + 0.5, Y + 0.5, Z + 0.5);
+          }
+      for (const [X, Y, Z] of chain) {
+        w.setBlock(X, Y, Z, 0);
+        this.entities.addTnt(X + 0.5, Y, Z + 0.5, 0.5 + Math.random() * 1);
+      }
+      // dégâts aux créatures et au joueur
+      const hurt = (ex, ey, ez) => Math.max(0, 1 - Math.hypot(ex - x, ey - y, ez - z) / (power * 2));
+      const p = this.player;
+      const hp = hurt(p.x, p.y + 0.9, p.z);
+      if (hp > 0) {
+        p.damage(Math.round(hp * 22), x, z, 'Une explosion', true);
+        p.vy += hp * 10;
+      }
+      for (const m of this.entities.mobs) {
+        const k = hurt(m.x, m.y + 0.5, m.z);
+        if (k > 0) this.entities.hurtMob(m, k * 30, [x, z]);
+      }
+    }
+
     nearDawnHeart(x, z, r) {
       for (const [hx, , hz] of this.dawnHearts) if (Math.hypot(hx - x, hz - z) < r) return true;
       return false;
@@ -646,6 +870,9 @@
     // ---------------------------------------------------------- boucle ---
     frame(now) {
       requestAnimationFrame((t) => this.frame(t));
+      // limite d'images par seconde (option)
+      const cap = this.options.maxFps;
+      if (cap > 0 && now - this.last < 1000 / cap - 1.5) return;
       let dt = (now - this.last) / 1000;
       this.last = now;
       if (!(dt > 0)) dt = 0.016;
@@ -669,7 +896,7 @@
     update(dt) {
       this.clock += dt;
       this.stats.playTime += dt;
-      this.time += (dt / DAY_LEN) * (this.daylight < 0.35 ? 1.5 : 1);
+      if (this.settings.dayCycle !== false) this.time += (dt / this.dayLen) * (this.daylight < 0.35 ? 1.5 : 1);
       if (this.time >= 1) {
         this.time -= 1;
         this.dayCount++;
@@ -677,7 +904,10 @@
       }
       const prevDay = this.daylight;
       this.daylight = CM.smoothstep(-0.18, 0.22, Math.sin(this.time * Math.PI * 2));
-      if (prevDay >= 0.35 && this.daylight < 0.35) this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
+      if (prevDay >= 0.35 && this.daylight < 0.35 && this.difficulty !== 'peaceful') {
+        this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
+        this.entities.nightfall = true;
+      }
       const active = (this.locked || this.forceInput) && !this.ui.invOpen;
       this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5);
       this.player.update(dt, active ? this.input : this.noInput);
@@ -685,19 +915,20 @@
       this.growTimer -= dt;
       if (this.growTimer <= 0) {
         this.growTimer = 1;
-        this.growSaplings();
+        this.growPlants();
       }
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       this.saveTimer -= dt;
       if (this.saveTimer <= 0) {
-        this.saveTimer = 45;
+        this.saveTimer = this.options.autosave;
         this.save(true);
       }
     }
 
     render() {
       const p = this.player;
-      const cam = [p.x, p.y + p.eyeH + Math.sin(p.bob * 2) * 0.025 * p.bobAmp, p.z];
+      const bobOn = this.options.viewBob ? 1 : 0;
+      const cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn, p.z];
       const env = this.computeEnv(cam);
       const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
       const right = [cy, 0, -sy];
@@ -732,23 +963,38 @@
         const m = p.mining;
         const M = this.crackM || (this.crackM = CM.mat4.create());
         CM.mat4.compose(M, m.x, m.y, m.z, 0, 0, 0, 1);
-        this.overlay.box(M, -0.003, -0.003, -0.003, 1.003, 1.003, 1.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
+        this.overlay.box(M, -0.003, -0.003, -0.003, 1.003, (m.h || 1) + 0.003, 1.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
       }
       if (p.alive) p.buildHand(this.hand, this.clock);
       const t = p.target;
+      const dyn = this.options.dynFov;
+      const targetFov = this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0);
+      this.fovCur += (targetFov - (this.fovCur || this.options.fov)) * 0.2;
       this.renderer.render({
         env,
         cam,
         yaw: p.yaw,
         pitch: p.pitch,
-        fov: (this.fovCur += (this.options.fov + (p.sprinting ? 6 : 0) + (p.dashTime > 0 ? 12 : 0) - (this.fovCur || this.options.fov)) * 0.2),
+        fov: this.fovCur,
         batch: this.batch,
         overlay: this.overlay,
         hand: this.hand,
         translucent: this.translucent,
-        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z } : null,
+        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height } : null,
       });
     }
+  }
+
+  // Anciennes sauvegardes : les objets comptés dans les statistiques changent d'identifiant.
+  function migrateStats(st, v) {
+    if (v >= 4) return st;
+    const out = Object.assign({}, st);
+    for (const k of ['crafted', 'placed', 'mined']) {
+      const m = {};
+      for (const id in st[k] || {}) m[CM.migrateId(+id, v)] = st[k][id];
+      out[k] = m;
+    }
+    return out;
   }
 
   window.addEventListener('load', () => {
@@ -759,7 +1005,8 @@
       if (params.has('autostart')) {
         game.autostart = true;
         const v = params.get('autostart');
-        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null);
+        const mode = params.get('mode') === 'creative' ? 'creative' : 'survival';
+        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal' });
       }
     } catch (err) {
       console.error(err);

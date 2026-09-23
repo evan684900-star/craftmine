@@ -23,7 +23,7 @@
   <div id="hud" class="hidden">
     <div id="vignette"></div>
     <div id="water-overlay"></div>
-    <div id="crosshair"></div>
+    <div id="crosshair" class="ch-cross"></div>
     <div id="combo" class="hidden"><span id="combo-text">COMBO x2</span><div id="combo-bar"><div id="combo-fill"></div></div></div>
     <div id="objective">
       <div class="obj-head">Objectif <span id="obj-count"></span></div>
@@ -37,12 +37,18 @@
     <div id="bottom">
       <div id="item-name"></div>
       <div id="status">
-        <div id="hearts"></div>
-        <div id="abilities">
-          <div id="ab-dash" class="ability" title="Ruée (F)"><b>F</b> Ruée</div>
-          <div id="ab-double" class="ability hidden" title="Double saut (Espace en l'air)">⇈ Double saut</div>
+        <div class="stat-left">
+          <div id="hearts"></div>
         </div>
-        <div id="stamina"><div id="stamina-fill"></div><span id="stamina-label">Endurance</span></div>
+        <div id="abilities">
+          <div id="ab-dash" class="ability" title="Ruée"><b id="ab-dash-key">F</b> Ruée</div>
+          <div id="ab-double" class="ability hidden" title="Double saut (saut en l'air)">⇈ Double saut</div>
+          <div id="ab-fly" class="ability hidden">✈ Vol</div>
+        </div>
+        <div class="stat-right">
+          <div id="air" class="hidden"></div>
+          <div id="food"></div>
+        </div>
       </div>
       <div id="hotbar"></div>
     </div>
@@ -57,15 +63,17 @@
         <div class="sep"></div>
         <div id="inv-hot" class="grid"></div>
         <div class="hint">Clic : prendre/poser · Clic droit : moitié / un seul · Maj+clic : déplacer rapidement</div>
+        <div id="inv-vitals" class="inv-vitals"></div>
       </div>
       <div class="panel side-panel">
         <div id="chest-panel" class="hidden">
-          <h2>Coffre</h2>
+          <h2 id="chest-title">Coffre</h2>
           <div id="chest-grid" class="grid"></div>
           <div class="hint">Maj+clic : transférer entre le coffre et l'inventaire</div>
         </div>
         <div class="tabs">
           <button data-tab="craft" class="active">Fabrication</button>
+          <button data-tab="creative" id="tab-btn-creative" class="hidden">Créatif</button>
           <button data-tab="journal">Journal</button>
           <button data-tab="guide">Mécaniques</button>
         </div>
@@ -75,11 +83,31 @@
             <button data-f="tout" class="active">Tout</button>
             <button data-f="outils">Outils</button>
             <button data-f="blocs">Blocs</button>
+            <button data-f="deco">Déco</button>
             <button data-f="objets">Objets</button>
+            <button data-f="nourriture">Nourriture</button>
             <label><input type="checkbox" id="only-can" /> Réalisables</label>
             <input id="recipe-search" type="search" placeholder="Rechercher une recette…" />
           </div>
+          <div id="recipe-count" class="hint"></div>
           <div id="recipes"></div>
+        </div>
+        <div id="tab-creative" class="tab hidden">
+          <div class="filters">
+            <select id="creative-cat">
+              <option value="all">Tout</option>
+              <option value="build">Construction</option>
+              <option value="color">Couleurs</option>
+              <option value="nature">Nature</option>
+              <option value="ores">Minerais et métaux</option>
+              <option value="deco">Utilitaires et lumières</option>
+              <option value="items">Objets et outils</option>
+            </select>
+            <input id="creative-search" type="search" placeholder="Rechercher un bloc ou un objet…" />
+          </div>
+          <div id="creative-count" class="hint"></div>
+          <div id="creative-grid" class="cgrid"></div>
+          <div class="hint">Clic : prendre une pile · Maj+clic : directement dans l'inventaire · Clic molette en jeu : copier le bloc visé</div>
         </div>
         <div id="tab-journal" class="tab hidden"></div>
         <div id="tab-guide" class="tab hidden"></div>
@@ -97,7 +125,6 @@
       <div id="menu-main" class="menu-col">
         <button id="btn-continue" class="big hidden">Continuer</button>
         <button id="btn-new" class="big">Nouveau monde</button>
-        <div class="seed-row"><label for="seed">Graine :</label><input id="seed" placeholder="aléatoire" maxlength="24" /></div>
         <div class="row2">
           <button id="btn-help">Comment jouer</button>
           <button id="btn-options">Options</button>
@@ -110,7 +137,51 @@
         <div id="menu-msg" class="menu-msg hidden"></div>
       </div>
       <div id="help" class="help hidden"></div>
-      <div class="foot">Minage, fabrication et survie — avec un grappin, des combos, des outils qui progressent et des Ombres qui craignent la lumière.</div>
+      <div class="foot">Minage, fabrication et survie — plus de 500 blocs, la faim, un grappin, des combos, des outils qui progressent et des Ombres qui craignent la lumière.</div>
+    </div>
+  </div>
+
+  <div id="newworld" class="screen hidden">
+    <div class="menu-box">
+      <h1>Nouveau monde</h1>
+      <div class="nw-grid">
+        <label for="seed">Graine</label>
+        <input id="seed" placeholder="aléatoire (laisser vide)" maxlength="24" autocomplete="off" />
+        <label for="nw-mode">Mode de jeu</label>
+        <select id="nw-mode">
+          <option value="survival">Survie</option>
+          <option value="creative">Créatif</option>
+        </select>
+        <label for="nw-diff">Difficulté</label>
+        <select id="nw-diff">
+          <option value="peaceful">Paisible (pas d'Ombres, pas de faim)</option>
+          <option value="easy">Facile</option>
+          <option value="normal" selected>Normale</option>
+          <option value="hard">Difficile</option>
+        </select>
+        <label for="nw-type">Type de monde</label>
+        <select id="nw-type">
+          <option value="normal">Normal</option>
+          <option value="amplified">Amplifié (montagnes immenses)</option>
+          <option value="flat">Plat</option>
+          <option value="islands">Archipel (beaucoup d'océan)</option>
+        </select>
+        <label for="nw-biome">Taille des biomes</label>
+        <select id="nw-biome">
+          <option value="small">Petits (plus de variété)</option>
+          <option value="normal" selected>Normaux</option>
+          <option value="large">Grands</option>
+        </select>
+        <label for="nw-bonus">Coffre de départ</label>
+        <input id="nw-bonus" type="checkbox" />
+        <label for="nw-daycycle">Cycle jour/nuit</label>
+        <input id="nw-daycycle" type="checkbox" checked />
+      </div>
+      <div id="nw-desc" class="small-note"></div>
+      <div class="row2">
+        <button id="btn-nw-back">Retour</button>
+        <button id="btn-nw-create" class="big">Créer le monde</button>
+      </div>
     </div>
   </div>
 
@@ -126,14 +197,7 @@
     <div class="menu-box">
       <div class="logo small">CRAFT<span>MINE</span></div>
       <button id="btn-start" class="big">Cliquer pour jouer</button>
-      <div class="keys">
-        <div><b>ZQSD / WASD</b> se déplacer</div>
-        <div><b>Espace</b> sauter · <b>Maj</b> courir</div>
-        <div><b>F</b> ruée · <b>E</b> inventaire &amp; fabrication</div>
-        <div><b>Clic gauche</b> miner / frapper</div>
-        <div><b>Clic droit</b> poser / utiliser / grappin</div>
-        <div><b>1-9 / molette</b> barre rapide · <b>Échap</b> pause</div>
-      </div>
+      <div id="start-keys" class="keys"></div>
     </div>
   </div>
 
@@ -147,19 +211,19 @@
         <button id="btn-export2">Exporter la sauvegarde (.zip)</button>
         <button id="btn-quit">Sauvegarder et quitter</button>
       </div>
+      <div id="pause-info" class="small-note"></div>
     </div>
   </div>
 
   <div id="options" class="screen hidden">
-    <div class="menu-box">
+    <div class="menu-box wide">
       <h1>Options</h1>
-      <div class="opt"><label>Distance d'affichage <span id="o-rd-v"></span></label><input id="o-rd" type="range" min="3" max="16" step="1" /></div>
-      <div class="opt"><label>Sensibilité de la souris <span id="o-sens-v"></span></label><input id="o-sens" type="range" min="0.2" max="3" step="0.1" /></div>
-      <div class="opt"><label>Champ de vision <span id="o-fov-v"></span></label><input id="o-fov" type="range" min="50" max="110" step="1" /></div>
-      <div class="opt"><label>Volume <span id="o-vol-v"></span></label><input id="o-vol" type="range" min="0" max="100" step="1" /></div>
-      <div class="opt check"><label><input id="o-inv" type="checkbox" /> Inverser l'axe vertical</label></div>
-      <div class="opt check"><label><input id="o-quests" type="checkbox" /> Afficher les objectifs à l'écran</label></div>
-      <button id="btn-opt-back" class="big">Retour</button>
+      <div id="opt-tabs" class="tabs"></div>
+      <div id="opt-body"></div>
+      <div class="row2">
+        <button id="btn-opt-reset">Réglages par défaut</button>
+        <button id="btn-opt-back" class="big">Retour</button>
+      </div>
     </div>
   </div>
 
@@ -167,7 +231,7 @@
     <div class="menu-box">
       <h1>Vous êtes mort</h1>
       <div id="death-cause"></div>
-      <div class="small-note">Vos objets sont tombés sur place. Allez vite les récupérer !</div>
+      <div id="death-note" class="small-note">Vos objets sont tombés sur place. Allez vite les récupérer !</div>
       <button id="btn-respawn" class="big">Réapparaître</button>
     </div>
   </div>

@@ -1,7 +1,10 @@
 'use strict';
 // Effets sonores synthétisés avec WebAudio (aucun fichier audio).
 (function () {
-  const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null });
+  const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
+  let MUL = 1; // volume de la catégorie du son en cours
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa']);
+  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note']);
 
   A.init = function () {
     if (A.ctx) {
@@ -27,7 +30,7 @@
   function envGain(t, attack, decay, peak) {
     const g = A.ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * MUL), t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
     g.connect(A.master);
     return g;
@@ -62,10 +65,14 @@
     sand: ['bandpass', 1100, 0.6],
     gravel: ['bandpass', 800, 0.8],
     glass: ['highpass', 3200, 1.0],
+    wool: ['lowpass', 700, 0.6],
+    metal: ['bandpass', 2600, 4],
   };
 
   A.play = function (name, opt) {
     if (!A.ctx || A.volume <= 0) return;
+    MUL = MOB_SOUNDS.has(name) ? A.cat.mob : UI_SOUNDS.has(name) ? A.cat.ui : A.cat.sfx;
+    if (MUL <= 0.001) return;
     const t = A.ctx.currentTime + 0.001;
     opt = opt || {};
     const m = MAT[opt.mat] || MAT.stone;
@@ -154,6 +161,17 @@
         break;
       case 'burn':
         noise(t, 0.2, 'highpass', 1800, 0.5, 0.08);
+        break;
+      case 'note':
+        tone(t, 0.6, 'triangle', 185 * Math.pow(2, (opt.note || 0) / 12), 0, 0.2, 0.004);
+        tone(t, 0.3, 'sine', 370 * Math.pow(2, (opt.note || 0) / 12), 0, 0.06);
+        break;
+      case 'fuse':
+        noise(t, 1.2, 'highpass', 3500, 0.5, 0.12);
+        break;
+      case 'explode':
+        noise(t, 1.1, 'lowpass', 700, 0.7, 0.9, 80);
+        tone(t, 0.6, 'sine', 90, 30, 0.6);
         break;
     }
   };

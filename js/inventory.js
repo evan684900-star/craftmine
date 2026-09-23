@@ -100,9 +100,13 @@
     serialize() {
       return { slots: this.slots.map((s) => (s ? Object.assign({}, s) : null)), selected: this.selected };
     }
-    load(data) {
+    load(data, v) {
       if (!data || !Array.isArray(data.slots)) return;
-      this.slots = data.slots.map((s) => (s && CM.itemInfo(s.id) ? s : null));
+      this.slots = data.slots.map((s) => {
+        if (!s) return null;
+        const id = CM.migrateId(s.id, v || 4);
+        return CM.itemInfo(id) ? Object.assign({}, s, { id }) : null;
+      });
       while (this.slots.length < 36) this.slots.push(null);
       this.selected = data.selected || 0;
       this.changed();

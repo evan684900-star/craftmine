@@ -4,10 +4,13 @@
   const { H } = CM.WORLD;
   const P = 18; // taille de la copie locale avec bordure
   const PP = P * P;
-  const BORDER = 255;
+  const BORDER = 0xffff;
 
-  // Format de sommet (12 octets) : int16 x,y,z (1/16 de bloc), int16 uv (u*32+v)
-  //                                 uint8 couche, ciel, bloc, ombrage
+  // Format de sommet (16 octets) : int16 x,y,z (1/16 de bloc), int16 uv (u*32+v)
+  //                                 uint16 couche, uint8 ciel, bloc, ombrage, drapeaux, 2 octets libres
+  // Drapeaux : 1 = ondule au vent (feuilles, plantes), 2 = eau (vagues), 4 = plante (pied fixe)
+  const STRIDE = 16;
+  CM.VERTEX_STRIDE = STRIDE;
   class QuadBuf {
     constructor(cap) {
       this.alloc(cap);
@@ -16,8 +19,9 @@
     alloc(cap) {
       const old = this.u8;
       this.cap = cap;
-      this.buf = new ArrayBuffer(cap * 48);
+      this.buf = new ArrayBuffer(cap * STRIDE * 4);
       this.i16 = new Int16Array(this.buf);
+      this.u16 = new Uint16Array(this.buf);
       this.u8 = new Uint8Array(this.buf);
       if (old) this.u8.set(old.subarray(0, Math.min(old.length, this.u8.length)));
     }
@@ -25,26 +29,27 @@
       this.n = 0;
     }
     // Ajoute un quad : 4 sommets [x,y,z,u,v] + lumières par sommet.
-    quad(vs, layer, sky, blk, shade) {
+    quad(vs, layer, sky, blk, shade, flags) {
       if (this.n >= this.cap) this.alloc(this.cap * 2);
       const base = this.n * 4;
       for (let k = 0; k < 4; k++) {
         const v = vs[k];
-        const o16 = (base + k) * 6;
-        const o8 = (base + k) * 12;
+        const o16 = (base + k) * 8;
+        const o8 = (base + k) * STRIDE;
         this.i16[o16] = v[0];
         this.i16[o16 + 1] = v[1];
         this.i16[o16 + 2] = v[2];
         this.i16[o16 + 3] = v[3] * 32 + v[4];
-        this.u8[o8 + 8] = layer;
-        this.u8[o8 + 9] = sky[k];
-        this.u8[o8 + 10] = blk[k];
-        this.u8[o8 + 11] = shade[k];
+        this.u16[o16 + 4] = layer;
+        this.u8[o8 + 10] = sky[k];
+        this.u8[o8 + 11] = blk[k];
+        this.u8[o8 + 12] = shade[k];
+        this.u8[o8 + 13] = flags || 0;
       }
       this.n++;
     }
     result() {
-      return { data: this.u8.slice(0, this.n * 48), quads: this.n };
+      return { data: this.u8.slice(0, this.n * 4 * STRIDE), quads: this.n };
     }
   }
 
@@ -79,30 +84,35 @@
     });
   }
 
-  let OPQ = null; // opaque visuellement (cube plein)
+  // Tables par identifiant de bloc (65536 entrées pour couvrir la valeur BORDER).
+  const OPQ = new Uint8Array(65536); // cube plein opaque (cache les faces voisines)
+  const SHAPE_H = new Uint8Array(65536); // hauteur (1/16) des blocs partiels opaques (dalles, tapis)
+  const WAVE = new Uint8Array(65536); // ondule au vent
   let LAYERS = null; // couches de texture par bloc et par face
+  const opts = { smoothLight: true, waving: true };
   CM.Mesher = {
+    opts,
     init() {
-      OPQ = new Uint8Array(256);
+      OPQ.fill(0);
+      SHAPE_H.fill(0);
+      WAVE.fill(0);
+      OPQ[BORDER] = 1;
       LAYERS = [];
-      for (let id = 0; id < 256; id++) {
+      const L = CM.Textures.layer;
+      for (let id = 0; id < CM.blocks.length; id++) {
         const b = CM.blocks[id];
-        if (!b) {
-          OPQ[id] = id === BORDER ? 1 : 0;
-          continue;
-        }
+        if (!b) continue;
         OPQ[id] = b.opaque && b.render === 'cube' ? 1 : 0;
-        if (b.tex) {
-          const L = CM.Textures.layer;
-          LAYERS[id] = [L[b.tex.side], L[b.tex.side], L[b.tex.top], L[b.tex.bottom], L[b.tex.front], L[b.tex.front]];
-        }
+        if ((b.render === 'slab' || b.render === 'carpet') && b.opaque) SHAPE_H[id] = Math.round(b.height * 16);
+        WAVE[id] = b.wave ? 1 : 0;
+        if (b.tex) LAYERS[id] = [L[b.tex.side], L[b.tex.side], L[b.tex.top], L[b.tex.bottom], L[b.tex.front], L[b.tex.back || b.tex.side]];
       }
       CM.blockLayers = LAYERS;
     },
     build,
   };
 
-  const padId = new Uint8Array(P * P * P);
+  const padId = new Uint16Array(P * P * P);
   const padL = new Uint8Array(P * P * P);
   const opaqueBuf = new QuadBuf(4096);
   const waterBuf = new QuadBuf(1024);
@@ -157,20 +167,42 @@
     return solidCount;
   }
 
-  // Lumière douce et AO pour une face de cube.
-  function faceLighting(p, f, smoothAO) {
-    const n = p + f.nOff;
+  // Lumière douce et AO pour une face de cube. self : lumière lue dans la case elle-même
+  // (faces internes des blocs partiels, qui ne touchent pas la case voisine).
+  function faceLighting(p, f, smoothAO, self) {
+    const n = self ? p : p + f.nOff;
+    const smooth = opts.smoothLight;
     for (let k = 0; k < 4; k++) {
       const [s1, s2, c] = f.ao[k];
+      let ls = padL[n] >> 4, lb = padL[n] & 15;
+      if (!smooth || self) {
+        ao4[k] = 3;
+        sky4[k] = Math.round(ls * 17);
+        blk4[k] = Math.round(lb * 17);
+        continue;
+      }
       const o1 = OPQ[padId[p + s1]], o2 = OPQ[padId[p + s2]], oc = OPQ[padId[p + c]];
       ao4[k] = smoothAO ? (o1 && o2 ? 0 : 3 - o1 - o2 - oc) : 3;
       let cnt = 1;
-      let ls = padL[n] >> 4, lb = padL[n] & 15;
       if (!o1) { cnt++; ls += padL[p + s1] >> 4; lb += padL[p + s1] & 15; }
       if (!o2) { cnt++; ls += padL[p + s2] >> 4; lb += padL[p + s2] & 15; }
       if (!oc && !(o1 && o2)) { cnt++; ls += padL[p + c] >> 4; lb += padL[p + c] & 15; }
       sky4[k] = Math.round((ls / cnt) * 17);
       blk4[k] = Math.round((lb / cnt) * 17);
+    }
+  }
+
+  function setVerts(f, bx, by, bz, fs, hgt, useAO) {
+    for (let k = 0; k < 4; k++) {
+      const v = f.v[k];
+      const t = vs[k];
+      t[0] = bx + v[0] * 16;
+      t[1] = by + v[1] * hgt;
+      t[2] = bz + v[2] * 16;
+      t[3] = v[3];
+      // faces latérales des blocs partiels : bas de la texture
+      t[4] = hgt < 16 && f.n[1] === 0 ? (v[4] ? 16 : 16 - hgt) : v[4];
+      sh4[k] = Math.round(255 * fs * (useAO ? AO_CURVE[ao4[k]] : 1));
     }
   }
 
@@ -180,7 +212,8 @@
     const count = fillPad(world, cx, sy, cz);
     if (count === 0) return { opaque: null, water: null };
     const defs = CM.blocks;
-    const WATER = CM.B.WATER, ICE = CM.B.ICE;
+    const WATER = CM.B.WATER;
+    const waving = opts.waving;
     for (let ly = 0; ly < 16; ly++)
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
@@ -190,57 +223,63 @@
           const b = defs[id];
           const bx = lx * 16, by = ly * 16, bz = lz * 16;
           const r = b.render;
+          const wflag = waving && WAVE[id] ? 1 : 0;
           if (r === 'cube' || r === 'glass') {
             const layers = LAYERS[id];
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
               if (OPQ[nid] || (nid === id && r === 'glass')) continue;
-              faceLighting(p, f, true);
-              const fs = FACE_SHADE[fi];
-              for (let k = 0; k < 4; k++) {
-                const v = f.v[k];
-                const t = vs[k];
-                t[0] = bx + v[0] * 16;
-                t[1] = by + v[1] * 16;
-                t[2] = bz + v[2] * 16;
-                t[3] = v[3];
-                t[4] = v[4];
-                sh4[k] = Math.round(255 * fs * AO_CURVE[ao4[k]]);
-              }
-              emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3]);
+              faceLighting(p, f, true, false);
+              setVerts(f, bx, by, bz, FACE_SHADE[fi], 16, true);
+              emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3], wflag);
             }
-          } else if (r === 'ice') {
-            const layer = LAYERS[id][0];
+          } else if (r === 'slab' || r === 'carpet') {
+            const layers = LAYERS[id];
+            const hgt = Math.round(b.height * 16);
+            for (let fi = 0; fi < 6; fi++) {
+              const f = FACES[fi];
+              const nid = padId[p + f.nOff];
+              if (fi === 2) {
+                // dessus : à mi-hauteur, jamais caché par le voisin du dessus
+                faceLighting(p, f, false, true);
+                setVerts(f, bx, by, bz, FACE_SHADE[fi], hgt, false);
+                emitQuad(opaqueBuf, layers[fi], false, 0);
+                continue;
+              }
+              if (OPQ[nid]) continue;
+              if (fi !== 3 && SHAPE_H[nid] >= hgt) continue;
+              faceLighting(p, f, fi === 3, fi !== 3);
+              setVerts(f, bx, by, bz, FACE_SHADE[fi], hgt, fi === 3);
+              emitQuad(opaqueBuf, layers[fi], false, 0);
+            }
+          } else if (r === 'tglass') {
+            // verre teinté, glace, miel, slime : translucides, dessinés avec l'eau
+            const layers = LAYERS[id];
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
               if (nid === id || OPQ[nid]) continue;
-              faceLighting(p, f, false);
-              const fs = FACE_SHADE[fi];
-              for (let k = 0; k < 4; k++) {
-                const v = f.v[k];
-                const t = vs[k];
-                t[0] = bx + v[0] * 16;
-                t[1] = by + v[1] * 16;
-                t[2] = bz + v[2] * 16;
-                t[3] = v[3];
-                t[4] = v[4];
-                sh4[k] = Math.round(255 * fs);
-              }
-              emitQuad(waterBuf, layer, false);
+              // pas de face contre l'eau sous la glace (évite les faces superposées)
+              if (nid === WATER && fi === 3) continue;
+              faceLighting(p, f, false, false);
+              setVerts(f, bx, by, bz, FACE_SHADE[fi], 16, false);
+              emitQuad(waterBuf, layers[fi], false, 0);
             }
           } else if (r === 'water') {
-            const aboveWater = padId[p + PP] === WATER;
-            const topH = aboveWater ? 16 : 14;
+            const above = padId[p + PP];
+            // sous la glace, la surface monte jusqu'en haut du bloc (pas de fente)
+            const underT = above !== BORDER && defs[above] && defs[above].render === 'tglass';
+            const topH = above === WATER || underT ? 16 : 14;
             const layer = LAYERS[id][2];
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
-              if (nid === WATER || nid === ICE || OPQ[nid]) continue;
+              if (nid === WATER || OPQ[nid]) continue;
+              // contre la glace : seule la surface reste visible
+              if (fi !== 2 && nid !== BORDER && defs[nid] && defs[nid].render === 'tglass') continue;
               if (fi === 3 && nid !== 0) continue;
-              faceLighting(p, f, false);
-              const fs = FACE_SHADE[fi];
+              faceLighting(p, f, false, false);
               for (let k = 0; k < 4; k++) {
                 const v = f.v[k];
                 const t = vs[k];
@@ -249,9 +288,15 @@
                 t[2] = bz + v[2] * 16;
                 t[3] = v[3];
                 t[4] = v[4];
-                sh4[k] = Math.round(255 * fs);
+                sh4[k] = Math.round(255 * FACE_SHADE[fi]);
               }
-              emitQuad(waterBuf, layer, false);
+              const flag = fi === 2 && topH === 14 ? 2 : 0;
+              waterBuf.quad(vs, layer, sky4, blk4, sh4, flag);
+              // surface visible aussi depuis le dessous (sous l'eau)
+              if (fi === 2) {
+                vtmp[0] = vs[3]; vtmp[1] = vs[2]; vtmp[2] = vs[1]; vtmp[3] = vs[0];
+                waterBuf.quad(vtmp, layer, sky4, blk4, sh4, flag);
+              }
             }
           } else if (r === 'cross') {
             const l = padL[p];
@@ -263,8 +308,9 @@
             }
             const layer = LAYERS[id][0];
             const a = 2, c = 14;
-            crossQuad(bx + a, bz + a, bx + c, bz + c, by, layer);
-            crossQuad(bx + c, bz + a, bx + a, bz + c, by, layer);
+            const pf = wflag ? 5 : 0; // plante : ondule, pied fixe
+            crossQuad(bx + a, bz + a, bx + c, bz + c, by, layer, pf);
+            crossQuad(bx + c, bz + a, bx + a, bz + c, by, layer, pf);
           } else if (r === 'torch') {
             for (let k = 0; k < 4; k++) {
               sky4[k] = 255;
@@ -280,23 +326,23 @@
     };
   }
 
-  function emitQuad(buf, layer, flip) {
+  function emitQuad(buf, layer, flip, flags) {
     if (flip) {
       vtmp[0] = vs[1]; vtmp[1] = vs[2]; vtmp[2] = vs[3]; vtmp[3] = vs[0];
       const s0 = sky4[0], b0 = blk4[0], h0 = sh4[0];
       sky4[0] = sky4[1]; sky4[1] = sky4[2]; sky4[2] = sky4[3]; sky4[3] = s0;
       blk4[0] = blk4[1]; blk4[1] = blk4[2]; blk4[2] = blk4[3]; blk4[3] = b0;
       sh4[0] = sh4[1]; sh4[1] = sh4[2]; sh4[2] = sh4[3]; sh4[3] = h0;
-      buf.quad(vtmp, layer, sky4, blk4, sh4);
-    } else buf.quad(vs, layer, sky4, blk4, sh4);
+      buf.quad(vtmp, layer, sky4, blk4, sh4, flags);
+    } else buf.quad(vs, layer, sky4, blk4, sh4, flags);
   }
 
   // Plan diagonal double face pour les plantes.
-  function crossQuad(x0, z0, x1, z1, y, layer) {
+  function crossQuad(x0, z0, x1, z1, y, layer, flags) {
     const q = [[x0, y, z0, 0, 16], [x1, y, z1, 16, 16], [x1, y + 16, z1, 16, 0], [x0, y + 16, z0, 0, 0]];
-    opaqueBuf.quad(q, layer, sky4, blk4, sh4);
+    opaqueBuf.quad(q, layer, sky4, blk4, sh4, flags);
     const r = [q[1], q[0], q[3], q[2]];
-    opaqueBuf.quad(r, layer, sky4, blk4, sh4);
+    opaqueBuf.quad(r, layer, sky4, blk4, sh4, flags);
   }
 
   // Petite boîte (torche) avec coordonnées de texture personnalisées.
@@ -310,7 +356,7 @@
         if (fi === 2) vv = v[4] ? v0 + 2 : v0;
         return [v[0] ? x1 : x0, v[1] ? y1 : y0, v[2] ? z1 : z0, u, vv];
       });
-      buf.quad(q, layer, sky4, blk4, sh4);
+      buf.quad(q, layer, sky4, blk4, sh4, 0);
     }
   }
 })();

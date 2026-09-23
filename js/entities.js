@@ -7,20 +7,40 @@
 
   // ---------------------------------------------------------- physique ---
   const EPS = 1e-4;
+  // Les blocs partiels (dalles, tapis) occupent le bas de leur case : [y, y + hauteur].
   CM.Physics = {
-    overlaps(world, x, y, z, hw, h) {
+    // Parcourt les cases solides qui chevauchent la boîte ; fn(x, y, z, hauteur) peut renvoyer true pour arrêter.
+    each(world, x, y, z, hw, h, fn) {
       const x0 = Math.floor(x - hw), x1 = Math.floor(x + hw - 1e-7);
       const y0 = Math.floor(y), y1 = Math.floor(y + h - 1e-7);
       const z0 = Math.floor(z - hw), z1 = Math.floor(z + hw - 1e-7);
       for (let yy = y0; yy <= y1; yy++)
         for (let zz = z0; zz <= z1; zz++)
-          for (let xx = x0; xx <= x1; xx++) if (world.solidAt(xx, yy, zz)) return true;
+          for (let xx = x0; xx <= x1; xx++) {
+            const sh = world.solidHeight(xx, yy, zz);
+            if (sh <= 0) continue;
+            if (yy + sh <= y || yy >= y + h) continue;
+            if (fn(xx, yy, zz, sh)) return true;
+          }
       return false;
     },
+    overlaps(world, x, y, z, hw, h) {
+      return this.each(world, x, y, z, hw, h, () => true);
+    },
+    // Hauteur du plus haut obstacle chevauché (ou -Infinity).
+    topOf(world, x, y, z, hw, h) {
+      let top = -Infinity;
+      this.each(world, x, y, z, hw, h, (xx, yy, zz, sh) => {
+        top = Math.max(top, yy + sh);
+      });
+      return top;
+    },
     // Déplace une boîte (e.x, e.y, e.z = centre du bas ; e.hw demi-largeur ; e.h hauteur).
+    // e.stepUp : hauteur qu'on peut franchir sans sauter (dalles, tapis).
     move(world, e, dx, dy, dz) {
       e.hitX = e.hitY = e.hitZ = false;
       e.landed = false;
+      const canStep = e.stepUp && e.onGround;
       const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) / 0.4));
       dx /= steps;
       dy /= steps;
@@ -30,28 +50,37 @@
           e.y += dy;
           if (this.overlaps(world, e.x, e.y, e.z, e.hw, e.h)) {
             if (dy < 0) {
-              e.y = Math.floor(e.y) + 1 + EPS;
+              e.y = this.topOf(world, e.x, e.y, e.z, e.hw, e.h) + EPS;
               e.landed = true;
-            } else e.y = Math.floor(e.y + e.h) - e.h - EPS;
+            } else {
+              let low = Infinity;
+              this.each(world, e.x, e.y, e.z, e.hw, e.h, (xx, yy) => {
+                low = Math.min(low, yy);
+              });
+              e.y = low - e.h - EPS;
+            }
             e.hitY = true;
             dy = 0;
           }
         }
-        if (dx) {
-          e.x += dx;
-          if (this.overlaps(world, e.x, e.y, e.z, e.hw, e.h)) {
-            e.x = dx > 0 ? Math.floor(e.x + e.hw) - e.hw - EPS : Math.floor(e.x - e.hw) + 1 + e.hw + EPS;
-            e.hitX = true;
-            dx = 0;
+        for (const axis of ['x', 'z']) {
+          const dv = axis === 'x' ? dx : dz;
+          if (!dv) continue;
+          e[axis] += dv;
+          if (!this.overlaps(world, e.x, e.y, e.z, e.hw, e.h)) continue;
+          // petite marche : on monte dessus si la place est libre
+          if (canStep) {
+            const top = this.topOf(world, e.x, e.y, e.z, e.hw, e.h);
+            const rise = top - e.y;
+            if (rise > 0 && rise <= e.stepUp && !this.overlaps(world, e.x, top + EPS, e.z, e.hw, e.h)) {
+              e.y = top + EPS;
+              e.stepped = (e.stepped || 0) + rise;
+              continue;
+            }
           }
-        }
-        if (dz) {
-          e.z += dz;
-          if (this.overlaps(world, e.x, e.y, e.z, e.hw, e.h)) {
-            e.z = dz > 0 ? Math.floor(e.z + e.hw) - e.hw - EPS : Math.floor(e.z - e.hw) + 1 + e.hw + EPS;
-            e.hitZ = true;
-            dz = 0;
-          }
+          const cell = Math.floor(dv > 0 ? e[axis] + e.hw : e[axis] - e.hw);
+          e[axis] = dv > 0 ? cell - e.hw - EPS : cell + 1 + e.hw + EPS;
+          if (axis === 'x') { e.hitX = true; dx = 0; } else { e.hitZ = true; dz = 0; }
         }
       }
       // au sol ?
@@ -90,7 +119,7 @@
       this.type = type;
       this.x = x; this.y = y; this.z = z;
       this.vx = 0; this.vy = 0; this.vz = 0;
-      this.hw = def.hw; this.h = def.h;
+      this.hw = def.hw; this.h = def.h; this.stepUp = 0.55;
       this.hp = def.hp; this.maxHp = def.hp;
       this.yaw = Math.random() * Math.PI * 2;
       this.onGround = false;
@@ -110,6 +139,8 @@
       this.drops = [];
       this.particles = [];
       this.spawnTimer = 0;
+      this.tnts = [];
+      this.nightfall = false;
       this.rand = Math.random;
       this.M = mat4.create();
       this.P = mat4.create();
@@ -119,6 +150,11 @@
       this.mobs.length = 0;
       this.drops.length = 0;
       this.particles.length = 0;
+      this.tnts.length = 0;
+    }
+    // TNT allumée : tombe, clignote puis explose.
+    addTnt(x, y, z, fuse) {
+      this.tnts.push({ x, y, z, vx: 0, vy: 3, vz: 0, hw: 0.49, h: 0.98, fuse, onGround: false });
     }
 
     addMob(type, x, y, z) {
@@ -142,6 +178,9 @@
     // Particules : petits carrés texturés.
     burst(layer, x, y, z, n, o) {
       o = o || {};
+      const q = this.game.options.particles;
+      if (q === 0) return;
+      if (q === 1) n = Math.ceil(n / 3);
       const r = this.rand;
       for (let i = 0; i < n; i++) {
         const sp = o.speed || 3;
@@ -189,6 +228,17 @@
           p.z = nz;
         }
       }
+      for (const t of this.tnts) {
+        t.fuse -= dt;
+        t.vy = Math.max(t.vy - 28 * dt, -40);
+        CM.Physics.move(w, t, 0, t.vy * dt, 0);
+        if (t.hitY) t.vy = 0;
+        if (t.fuse <= 0) {
+          t.dead = true;
+          g.explode(t.x, t.y + 0.5, t.z, 3.3);
+        } else if (this.rand() < dt * 20) this.burst(CM.Textures.layer.smoke, t.x, t.y + 1.1, t.z, 1, { speed: 0.5, grav: -2, life: 0.6, size: 0.12 });
+      }
+      this.tnts = this.tnts.filter((t) => !t.dead);
       this.mobs = this.mobs.filter((m) => !m.dead);
       this.drops = this.drops.filter((d) => !d.dead);
       this.particles = this.particles.filter((p) => p.life > 0);
@@ -308,6 +358,8 @@
           p.damage(3, m.x, m.z, 'Une Ombre');
         }
         if (distP < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
+        // la nuit, de petites étincelles violettes trahissent leur présence
+        if (g.daylight < 0.4 && distP < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
       }
 
       if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz)) jump = true;
@@ -367,9 +419,11 @@
       if (m.type === 'mouflon') {
         this.addDrop(I.RAW_MEAT, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
         if (r() < 0.7) this.addDrop(B.WOOL, 1, m.x, m.y + 0.5, m.z);
+        if (r() < 0.35) this.addDrop(I.LEATHER, 1, m.x, m.y + 0.5, m.z);
         this.burst(CM.Textures.layer.mouflon_wool, m.x, m.y + 0.6, m.z, 16, { speed: 3 });
       } else if (m.type === 'boar') {
         this.addDrop(I.RAW_MEAT, 1 + Math.floor(r() * 3), m.x, m.y + 0.5, m.z);
+        if (r() < 0.7) this.addDrop(I.LEATHER, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.5, m.z);
         this.burst(CM.Textures.layer.boar_hide, m.x, m.y + 0.5, m.z, 14, { speed: 3 });
       } else if (m.type === 'penguin') {
         this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
@@ -445,28 +499,46 @@
           }
         }
       }
-      const maxO = Math.min(10, 3 + g.dayCount);
-      if (nOmbre < maxO && p.alive && r() < 0.5) {
-        for (let t = 0; t < 6; t++) {
-          const a = r() * Math.PI * 2, dd = 14 + r() * 22;
-          const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
-          if (!w.loaded(x, z)) continue;
-          if (g.nearDawnHeart(x, z, 48)) continue;
-          const yTop = Math.min(H - 3, Math.floor(p.y) + 10);
-          for (let y = yTop; y > Math.max(2, Math.floor(p.y) - 16); y--) {
-            if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
-            if (w.get(x, y, z) === B.WATER) continue;
-            const bl = w.blockLightAt(x, y, z);
-            const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
-            if (bl < 4 && sky < 4) {
-              const m = this.addMob('ombre', x + 0.5, y, z + 0.5);
-              this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 10, { speed: 1.5, grav: -1, life: 1, size: 0.3 });
-              t = 99;
-              break;
-            }
+      // Ombres : plus nombreuses selon la difficulté et les jours passés.
+      if (g.difficulty === 'peaceful' || g.mode === 'creative') return;
+      const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
+      const night = g.daylight < 0.45;
+      const maxO = Math.round(Math.min(16, (night ? 6 : 3) + g.dayCount * 0.7) * dif);
+      // tombée de la nuit : une première vague apparaît d'un coup
+      let tries = nOmbre < maxO && p.alive && r() < 0.8 ? 1 : 0;
+      if (this.nightfall) {
+        this.nightfall = false;
+        tries = Math.max(0, Math.min(maxO - nOmbre, 3 + Math.round(dif)));
+      }
+      for (let n = 0; n < tries; n++) this.spawnOmbre(p, w, r);
+    }
+
+    spawnOmbre(p, w, r) {
+      const g = this.game;
+      const { H } = CM.WORLD;
+      for (let t = 0; t < 8; t++) {
+        const a = r() * Math.PI * 2, dd = 16 + r() * 22;
+        const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
+        if (!w.loaded(x, z)) continue;
+        if (g.nearDawnHeart(x, z, 48)) continue;
+        // d'abord en surface (la nuit), sinon dans les grottes proches du joueur
+        const surf = w.groundBelow(x, H - 1, z) + 1;
+        const cands = [];
+        if (Math.abs(surf - p.y) < 24) cands.push(surf);
+        for (let y = Math.min(H - 3, Math.floor(p.y) + 8); y > Math.max(2, Math.floor(p.y) - 16); y--) cands.push(y);
+        for (const y of cands) {
+          if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
+          if (w.get(x, y, z) === B.WATER || w.get(x, y - 1, z) === B.WATER) continue;
+          const bl = w.blockLightAt(x, y, z);
+          const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
+          if (bl < 4 && sky < 4) {
+            const m = this.addMob('ombre', x + 0.5, y, z + 0.5);
+            this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 10, { speed: 1.5, grav: -1, life: 1, size: 0.3 });
+            return true;
           }
         }
       }
+      return false;
     }
 
     // Animal typique d'un biome (null s'il n'y en a pas).
@@ -474,14 +546,21 @@
       const BIO = CM.BIO, r = this.rand();
       switch (bi) {
         case BIO.SNOWY_TAIGA:
+        case BIO.ICE_SPIKES:
         case BIO.TUNDRA: return 'penguin';
         case BIO.FOREST:
         case BIO.BIRCH:
         case BIO.TAIGA:
         case BIO.JUNGLE:
+        case BIO.BAMBOO:
+        case BIO.DARK_FOREST:
+        case BIO.MANGROVE:
         case BIO.SWAMP:
         case BIO.CRYSTAL: return r < 0.6 ? 'boar' : 'mouflon';
         case BIO.PLAINS:
+        case BIO.FLOWERS:
+        case BIO.CHERRY:
+        case BIO.MUSHROOM:
         case BIO.SAVANNA:
         case BIO.MOUNTAINS: return 'mouflon';
         default: return null;
@@ -561,6 +640,13 @@
           this.part(batch, this.M, 0, 1.52, 0, 0, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], [body, body, body, body, body, L.ombre_face], l, flags, ff);
         }
       }
+      for (const t of this.tnts) {
+        const l = this.lightAt(t.x, t.y + 0.5, t.z);
+        const flash = (t.fuse * 4) % 1 < 0.5 ? 1 : 0;
+        const sc = 1 + Math.max(0, 0.4 - t.fuse) * 0.3;
+        mat4.compose(this.M, t.x, t.y, t.z, 0, 0, 0, sc);
+        batch.box(this.M, -0.5, 0, -0.5, 0.5, 1, 0.5, CM.blockLayers[B.TNT], flash ? 1 : l[0], flash ? 1 : l[1], flash);
+      }
       for (const d of this.drops) {
         if (!this.game.world.loaded(d.x, d.z)) continue;
         const l = this.lightAt(d.x, d.y + 0.2, d.z);
@@ -592,9 +678,9 @@
     // Dessine un objet (cube pour un bloc, plaque pour un objet) centré en bas.
     drawItem(batch, m, id, l, size) {
       const h = size / 2;
-      if (id < 256) {
+      if (id < CM.ITEM_BASE) {
         const b = CM.blocks[id];
-        if (b.render === 'cube' || b.render === 'glass') {
+        if (b.render === 'cube' || b.render === 'glass' || b.render === 'tglass' || b.render === 'slab' || b.render === 'carpet') {
           batch.box(m, -h, 0, -h, h, size, h, CM.blockLayers[id], l[0], l[1], b.light ? 1 : 0);
           return;
         }

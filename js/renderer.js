@@ -13,7 +13,9 @@
       float held = uHeld.w * curve(clamp((14.5 - d) / 15.0, 0.0, 1.0));
       blk = max(blk, held);
       vec3 l = max(uSkyTint * sky, vec3(1.0, 0.82, 0.58) * blk);
-      return clamp(l + vec3(0.03, 0.03, 0.045), 0.0, 1.1);
+      // luminosité (option) : courbe gamma + lumière ambiante minimale
+      l = pow(l, vec3(1.15 - uBright * 0.5));
+      return clamp(l + vec3(0.03, 0.03, 0.045) * (0.6 + uBright * 1.4), 0.0, 1.1);
     }
     vec3 applyFog(vec3 col, vec3 pos) {
       float dist = length(pos - uCam);
@@ -22,6 +24,7 @@
     }
   `;
   const COMMON_UNIFORMS = `
+    uniform float uBright;
     uniform float uDay;
     uniform vec3 uSkyTint;
     uniform vec4 uHeld;
@@ -33,13 +36,13 @@
   const CHUNK_VS = `#version 300 es
     precision highp float;
     layout(location=0) in ivec4 aPos;
-    layout(location=1) in vec4 aData;
+    layout(location=1) in float aLayer;
+    layout(location=2) in vec4 aData;
     uniform mat4 uViewProj;
     uniform vec3 uOffset;
     uniform float uTime;
-    uniform float uWater;
-    uniform float uWaterLayer;
     uniform vec2 uWaveOrigin;
+    uniform float uWaving;
     out vec3 vUV;
     out vec2 vLight;
     out float vShade;
@@ -50,15 +53,24 @@
       float uvp = float(aPos.w);
       float u = floor(uvp / 32.0);
       float v = uvp - u * 32.0;
-      vIsWater = (uWater > 0.5 && abs(aData.x - uWaterLayer) < 0.5) ? 1.0 : 0.0;
+      int fl = int(aData.w + 0.5);
+      vIsWater = (fl & 2) != 0 ? 1.0 : 0.0;
+      vec2 wp = p.xz + uWaveOrigin;
       if (vIsWater > 0.5) {
         // vagues calées sur le monde (et non sur la caméra)
-        vec2 wp = p.xz + uWaveOrigin;
         p.y += (sin(wp.x * 1.3 + uTime * 1.7) + cos(wp.y * 1.1 + uTime * 1.3)) * 0.025 - 0.05;
+      } else if ((fl & 1) != 0 && uWaving > 0.5) {
+        // feuillage et plantes : léger balancement calculé d'après la position
+        // (deux sommets au même endroit bougent pareil : pas de fente entre les blocs).
+        // Les plantes (drapeau 4) gardent le pied fixe.
+        float amp = (fl & 4) != 0 ? ((v < 8.0) ? 0.06 : 0.0) : 0.022;
+        float sw = sin(uTime * 1.6 + wp.x * 0.7 + wp.y * 0.45 + p.y * 0.3) * amp;
+        p.x += sw;
+        p.z += sw * 0.6;
       }
-      vUV = vec3(u / 16.0, v / 16.0, aData.x);
-      vLight = aData.yz / 255.0;
-      vShade = aData.w / 255.0;
+      vUV = vec3(u / 16.0, v / 16.0, aLayer);
+      vLight = aData.xy / 255.0;
+      vShade = aData.z / 255.0;
       vPos = p;
       gl_Position = uViewProj * vec4(p, 1.0);
     }`;
@@ -145,6 +157,7 @@
     uniform float uTime;
     uniform vec3 uCamPos;
     uniform float uUnderwater;
+    uniform float uClouds;
     in vec2 vNdc;
     out vec4 outColor;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -181,7 +194,7 @@
         }
       }
       // nuages cubiques
-      if (h > 0.015) {
+      if (h > 0.015 && uClouds > 0.5) {
         float t = (118.0 - uCamPos.y) / h;
         if (t > 0.0) {
           vec2 cp = uCamPos.xz + dir.xz * t;
@@ -307,6 +320,9 @@
       this.sections = new Map();
       this.renderDist = 6;
       this.fov = 75;
+      this.resolution = 1;
+      this.brightness = 0.3;
+      this.clouds = true;
       this.batch = new Batch();
       this.overlay = new Batch();
       this.hand = new Batch();
@@ -321,6 +337,8 @@
       const gl = this.gl;
       const T = CM.Textures;
       const n = T.count();
+      const maxLayers = gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS);
+      if (n > maxLayers) throw new Error('trop de textures pour cette carte graphique (' + n + ' > ' + maxLayers + ')');
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
       gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, 16, 16, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, T.pixels());
@@ -391,9 +409,12 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER, mesh.data, gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0);
-      gl.vertexAttribIPointer(0, 4, gl.SHORT, 12, 0);
+      const S = CM.VERTEX_STRIDE;
+      gl.vertexAttribIPointer(0, 4, gl.SHORT, S, 0);
       gl.enableVertexAttribArray(1);
-      gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, false, 12, 8);
+      gl.vertexAttribPointer(1, 1, gl.UNSIGNED_SHORT, false, S, 8);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, false, S, 10);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
       gl.bindVertexArray(null);
       return { vao, vbo, quads: mesh.quads };
@@ -464,7 +485,7 @@
     }
 
     resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * (this.resolution || 1);
       const w = Math.floor(this.canvas.clientWidth * dpr);
       const h = Math.floor(this.canvas.clientHeight * dpr);
       if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -478,6 +499,7 @@
       const gl = this.gl;
       const u = prog.u;
       gl.uniform1f(u.uDay, env.day);
+      gl.uniform1f(u.uBright, this.brightness);
       gl.uniform3fv(u.uSkyTint, env.skyTint);
       gl.uniform4fv(u.uHeld, env.held);
       gl.uniform3fv(u.uFogColor, env.fogColor);
@@ -549,6 +571,7 @@
       gl.uniform1f(su.uTime, env.time);
       gl.uniform3f(su.uCamPos, cam[0] % 14000, cam[1], cam[2] % 14000);
       gl.uniform1f(su.uUnderwater, env.underwater ? 1 : 0);
+      gl.uniform1f(su.uClouds, this.clouds ? 1 : 0);
       gl.bindVertexArray(this.skyVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.depthMask(true);
@@ -565,7 +588,7 @@
       gl.uniformMatrix4fv(cp.u.uViewProj, false, this.viewProj);
       gl.uniform1f(cp.u.uTime, env.time);
       gl.uniform1f(cp.u.uWater, 0);
-      gl.uniform1f(cp.u.uWaterLayer, CM.Textures.layer.water);
+      gl.uniform1f(cp.u.uWaving, CM.Mesher.opts.waving ? 1 : 0);
       gl.uniform2f(cp.u.uWaveOrigin, cam[0] % ((2 * Math.PI * 1000) / 1.3), cam[2] % ((2 * Math.PI * 1000) / 1.1));
       let drawn = 0, quads = 0;
       const waterList = [];
@@ -605,9 +628,11 @@
         gl.depthMask(true);
       }
 
-      // Eau (transparente, de l'arrière vers l'avant)
+      // Eau, glace et verre teinté (transparents, de l'arrière vers l'avant).
+      // Faces arrière masquées : un bloc translucide ne montre pas ses faces cachées.
       waterList.sort((a, b) => b[0] - a[0]);
       gl.depthMask(false);
+      gl.enable(gl.CULL_FACE);
       gl.useProgram(cp.p);
       gl.uniform1f(cp.u.uWater, 1);
       for (const [, sec, x0, y0, z0] of waterList) {
@@ -616,6 +641,7 @@
         gl.drawElements(gl.TRIANGLES, sec.water.quads * 6, gl.UNSIGNED_INT, 0);
       }
       gl.bindVertexArray(null);
+      gl.disable(gl.CULL_FACE);
       if (state.translucent && state.translucent.n) this.drawBatch(state.translucent, this.viewProj, env, { alpha: 0.85 });
       gl.depthMask(true);
 

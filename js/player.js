@@ -1,5 +1,5 @@
 'use strict';
-// Joueur : déplacements, endurance, ruée, double saut, grappin, minage, combat.
+// Joueur : déplacements, faim, souffle, ruée, double saut, grappin, minage, combat, mode créatif.
 (function () {
   const B = CM.B;
   const I = CM.I;
@@ -8,6 +8,9 @@
   const GRAVITY = 28;
   const REACH = 5;
   const GRAPPLE_RANGE = 34;
+  const MAX_AIR = 15; // secondes de souffle sous l'eau
+  // Faim (comme dans Minecraft) : 20 points, saturation, épuisement.
+  const EXH = { sprint: 0.1, swim: 0.012, jump: 0.05, sprintJump: 0.2, mine: 0.005, attack: 0.1, hurt: 0.1, heal: 6, dash: 1.2, double: 0.6, grapple: 0.4 };
 
   class Player {
     constructor(game) {
@@ -15,6 +18,7 @@
       this.hw = 0.3;
       this.h = 1.8;
       this.eyeH = 1.62;
+      this.stepUp = 0.55;
       this.M = mat4.create();
       this.P = mat4.create();
       this.R = mat4.create();
@@ -27,14 +31,17 @@
       this.yaw = 0; this.pitch = 0;
       this.onGround = false;
       this.health = 20;
-      this.stamina = 100;
-      this.exhausted = false;
+      this.food = 20;
+      this.sat = 5;
+      this.exh = 0;
+      this.air = MAX_AIR;
+      this.regenT = 0;
+      this.starveT = 0;
+      this.drownT = 0;
+      this.regenEffect = 0;
       this.alive = true;
       this.invul = 1;
       this.hurtFlash = 0;
-      this.staminaDelay = 0;
-      this.vigor = 0;
-      this.regen = 0;
       this.fallStart = this.y;
       this.dashCd = 0; this.dashTime = 0;
       this.usedDouble = false;
@@ -42,40 +49,51 @@
       this.hook = null;
       this.mining = null;
       this.combo = 0; this.comboTimer = 0; this.lastBreak = -10;
-      this.attackCd = 0; this.useCd = 0;
+      this.attackCd = 0; this.useCd = 0; this.breakCd = 0;
       this.swing = 0;
       this.bob = 0; this.bobAmp = 0;
       this.stepDist = 0;
       this.inWater = false; this.headInWater = false;
       this.target = null;
       this.sprinting = false;
+      this.sprintToggle = false;
+      this.sneaking = false;
+      this.flying = false;
+      this.lastJumpTap = -10;
+      this.eyeOffset = 0;
     }
 
+    get creative() {
+      return this.game.mode === 'creative';
+    }
     get maxHealth() {
       return 20 + (this.game.inventory.has(I.RUBY_CHARM) ? 4 : 0);
     }
-    get maxStamina() {
-      return 100 + (this.game.inventory.has(I.STAMINA_CHARM) ? 50 : 0);
-    }
     eye() {
-      return [this.x, this.y + this.eyeH, this.z];
+      return [this.x, this.y + this.eyeH - this.eyeOffset, this.z];
     }
     look() {
       const cp = Math.cos(this.pitch);
       return [-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp];
     }
-    spend(n) {
-      this.stamina = Math.max(0, this.stamina - n);
-      this.staminaDelay = 0.9;
-      if (this.stamina <= 0 && !this.exhausted) {
-        this.exhausted = true;
-        this.game.ui.toast('Épuisé ! Repose-toi un instant…', 'warn');
+    // Ajoute de l'épuisement (fait baisser la saturation puis la faim).
+    exhaust(n) {
+      if (this.creative || this.game.difficulty === 'peaceful') return;
+      if (this.game.inventory.has(I.STAMINA_CHARM)) n *= 0.5;
+      this.exh += n;
+      while (this.exh >= 4) {
+        this.exh -= 4;
+        if (this.sat > 0) this.sat = Math.max(0, this.sat - 1);
+        else this.food = Math.max(0, this.food - 1);
       }
+    }
+    canSprint() {
+      return this.creative || this.food > 6;
     }
 
     // --------------------------------------------------------------------
     update(dt, input) {
-      const g = this.game, w = g.world;
+      const g = this.game, w = g.world, K = g.binds;
       if (!this.alive) return;
       this.invul = Math.max(0, this.invul - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
@@ -84,11 +102,12 @@
       this.jumpCd = Math.max(0, this.jumpCd - dt);
       this.attackCd = Math.max(0, this.attackCd - dt);
       this.useCd = Math.max(0, this.useCd - dt);
-      this.staminaDelay = Math.max(0, this.staminaDelay - dt);
-      this.vigor = Math.max(0, this.vigor - dt);
+      this.breakCd = Math.max(0, this.breakCd - dt);
+      this.regenEffect = Math.max(0, this.regenEffect - dt);
       this.swing = Math.max(0, this.swing - dt * 3.2);
       this.comboTimer = Math.max(0, this.comboTimer - dt);
       if (this.comboTimer <= 0) this.combo = 0;
+      if (!this.creative) this.flying = false;
 
       const k = input.keys;
       const fx = Math.floor(this.x), fz = Math.floor(this.z);
@@ -99,28 +118,50 @@
       this.wasInWater = this.inWater;
 
       // ----- direction souhaitée
-      const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);
-      const s = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
+      const f = (k[K.forward] ? 1 : 0) - (k[K.back] ? 1 : 0);
+      const s = (k[K.right] ? 1 : 0) - (k[K.left] ? 1 : 0);
       let wx = -Math.sin(this.yaw) * f + Math.cos(this.yaw) * s;
       let wz = -Math.cos(this.yaw) * f - Math.sin(this.yaw) * s;
       const wl = Math.hypot(wx, wz);
       if (wl > 0) { wx /= wl; wz /= wl; }
 
+      // ----- vol (mode créatif) : double appui sur saut
+      if (this.creative && input.pressed[K.jump]) {
+        if (g.clock - this.lastJumpTap < 0.3) {
+          this.flying = !this.flying;
+          this.vy = 0;
+          this.lastJumpTap = -10;
+          g.ui.toast(this.flying ? 'Vol activé (saut : monter, ' + g.keyName(K.sneak) + ' : descendre)' : 'Vol désactivé', 'info', 'fly');
+        } else this.lastJumpTap = g.clock;
+      }
+
       const under = CM.blocks[w.get(fx, Math.floor(this.y - 0.05), fz)];
+      this.sneaking = !this.flying && !!k[K.sneak] && !this.inWater;
+      this.eyeOffset += ((this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
+      // course : maintenir ou basculer (option)
+      const sprintKey = !!k[K.sprint];
+      if (g.options.toggleSprint) {
+        if (input.pressed[K.sprint]) this.sprintToggle = !this.sprintToggle;
+        if (f <= 0) this.sprintToggle = false;
+      }
+      const wantSprint = g.options.toggleSprint ? this.sprintToggle : sprintKey;
       let speed = 4.3;
       this.sprinting = false;
-      if ((k.ShiftLeft || k.ShiftRight) && f > 0 && !this.exhausted && this.stamina > 0) {
+      if (wantSprint && f > 0 && !this.sneaking && this.canSprint()) {
         speed = 6.6;
         this.sprinting = true;
-        this.spend(15 * dt);
+      } else if (wantSprint && f > 0 && !this.canSprint() && this.onGround) {
+        g.ui.toast('Trop faim pour courir : mange quelque chose !', 'warn', 'nosprint');
       }
+      if (this.sneaking) speed = 1.6;
       if (this.inWater) speed = this.sprinting ? 3.6 : 2.6;
       if (this.onGround && under.slow) speed *= under.slow;
       if (this.onGround && under.slip) speed *= 1.15;
+      if (this.flying) speed = this.sprinting ? 21 : 11;
 
       // ----- ruée
-      if (input.pressed.KeyF && this.dashCd <= 0) {
-        if (this.exhausted || this.stamina < 20) g.ui.toast("Pas assez d'endurance pour la ruée", 'warn');
+      if (input.pressed[K.dash] && this.dashCd <= 0 && !this.flying) {
+        if (!this.canSprint()) g.ui.toast('Trop faim pour la ruée', 'warn', 'nodash');
         else {
           let dx = wx, dz = wz;
           if (!wl) { dx = -Math.sin(this.yaw); dz = -Math.cos(this.yaw); }
@@ -128,18 +169,23 @@
           this.vz = dz * 16;
           this.vy = Math.max(this.vy, 2);
           this.dashTime = 0.2;
-          this.dashCd = 0.8;
+          this.dashCd = 1;
           this.invul = Math.max(this.invul, 0.3);
-          this.spend(20);
+          this.exhaust(EXH.dash);
           CM.Audio.play('dash');
           g.entities.burst(CM.Textures.layer.white, this.x, this.y + 0.9, this.z, 10, { speed: 2, grav: 0, life: 0.35, size: 0.06 });
         }
       }
 
       // ----- accélération horizontale
+      const px0 = this.x, pz0 = this.z;
       if (this.dashTime <= 0) {
-        if (this.onGround || this.inWater) {
-          const acc = this.inWater ? 8 : this.onGround && under.slip ? 1.2 : 16;
+        if (this.flying) {
+          this.vx += (wx * speed - this.vx) * Math.min(1, 10 * dt);
+          this.vz += (wz * speed - this.vz) * Math.min(1, 10 * dt);
+        } else if (this.onGround || this.inWater) {
+          const slip = this.onGround && under.slip;
+          const acc = this.inWater ? 8 : slip ? 1.2 * (1 - under.slip) * 60 : 16;
           this.vx += (wx * speed - this.vx) * Math.min(1, acc * dt);
           this.vz += (wz * speed - this.vz) * Math.min(1, acc * dt);
         } else {
@@ -159,32 +205,42 @@
         }
       }
 
-      // ----- saut / nage / double saut
+      // ----- saut / nage / double saut / vol
       const standBlock = w.get(fx, Math.floor(this.y - 0.05), fz);
-      if (this.inWater) {
-        if (k.Space) this.vy = Math.min(this.vy + 16 * dt, Math.max(this.vy, 3.4));
+      if (this.flying) {
+        const up = (k[K.jump] ? 1 : 0) - (k[K.sneak] ? 1 : 0);
+        this.vy += (up * 9 - this.vy) * Math.min(1, 10 * dt);
+      } else if (this.inWater) {
+        if (k[K.jump]) this.vy = Math.min(this.vy + 16 * dt, Math.max(this.vy, 3.4));
         else this.vy = Math.max(this.vy - 7 * dt, -2.8);
         this.vy -= 2 * dt;
         // s'extraire de l'eau en nageant contre un rebord
-        if (k.Space && (this.hitX || this.hitZ) && !this.headInWater) this.vy = 9.5;
+        if (k[K.jump] && (this.hitX || this.hitZ) && !this.headInWater) this.vy = 9.5;
       } else {
         const grav = this.hook ? GRAVITY * 0.45 : this.dashTime > 0 ? GRAVITY * 0.3 : GRAVITY;
         this.vy -= grav * dt;
-        if (k.Space && this.onGround && this.jumpCd <= 0) {
-          const bounce = standBlock === B.MUSHROOM;
-          this.vy = bounce ? 14 : 8.6;
+        // saut automatique (option) : face à une marche d'un bloc en avançant
+        let autoJump = false;
+        if (g.options.autoJump && this.onGround && f > 0 && (this.hitX || this.hitZ)) {
+          const ax = Math.floor(this.x + wx * 0.7), az = Math.floor(this.z + wz * 0.7), ay = Math.floor(this.y + 0.05);
+          autoJump = w.solidHeight(ax, ay, az) >= 1 && !w.solidAt(ax, ay + 1, az) && !w.solidAt(ax, ay + 2, az);
+        }
+        if ((k[K.jump] || autoJump) && this.onGround && this.jumpCd <= 0) {
+          const bounce = standBlock === B.MUSHROOM || standBlock === B.SLIME_BLOCK;
+          const honey = standBlock === B.HONEY_BLOCK;
+          this.vy = bounce ? 14 : honey ? 5 : 8.6;
           this.jumpCd = 0.15;
           if (bounce) CM.Audio.play('bounce');
-          this.stamina = Math.max(0, this.stamina - 1);
-        } else if (input.pressed.Space && !this.onGround) {
+          this.exhaust(this.sprinting ? EXH.sprintJump : EXH.jump);
+        } else if (input.pressed[K.jump] && !this.onGround) {
           if (this.hook) {
             this.releaseHook(true);
-          } else if (!this.usedDouble && g.inventory.has(I.FEATHER_CHARM)) {
-            if (this.exhausted || this.stamina < 12) g.ui.toast("Pas assez d'endurance", 'warn');
+          } else if (!this.usedDouble && g.inventory.has(I.FEATHER_CHARM) && !this.creative) {
+            if (!this.canSprint()) g.ui.toast('Trop faim pour le double saut', 'warn', 'nodouble');
             else {
               this.vy = 8.8;
               this.usedDouble = true;
-              this.spend(12);
+              this.exhaust(EXH.double);
               CM.Audio.play('jump2');
               g.entities.burst(CM.Textures.layer.white, this.x, this.y, this.z, 12, { speed: 2.5, grav: 2, life: 0.5, size: 0.07 });
             }
@@ -196,58 +252,48 @@
       // ----- grappin
       if (this.hook) this.updateHook(dt);
 
-      // ----- déplacement + collisions
+      // ----- déplacement + collisions (accroupi : on ne tombe pas du bord)
       const prevVy = this.vy;
       const wasGround = this.onGround;
-      CM.Physics.move(w, this, this.vx * dt, this.vy * dt, this.vz * dt);
+      if (this.sneaking && this.onGround) {
+        const ox = this.x, oz = this.z;
+        CM.Physics.move(w, this, this.vx * dt, 0, 0);
+        if (!CM.Physics.overlaps(w, this.x, this.y - 0.6, this.z, this.hw, 0.6)) { this.x = ox; this.vx = 0; }
+        CM.Physics.move(w, this, 0, 0, this.vz * dt);
+        if (!CM.Physics.overlaps(w, this.x, this.y - 0.6, this.z, this.hw, 0.6)) { this.z = oz; this.vz = 0; }
+        this.onGround = true;
+        CM.Physics.move(w, this, 0, this.vy * dt, 0);
+      } else CM.Physics.move(w, this, this.vx * dt, this.vy * dt, this.vz * dt);
       if (this.hitY) this.vy = 0;
       if (this.hitX && this.hook) this.vx *= 0.5;
       if (this.hitZ && this.hook) this.vz *= 0.5;
+      if (this.flying && this.onGround && !k[K.jump]) this.flying = false;
+      const moved = Math.hypot(this.x - px0, this.z - pz0);
+      if (this.sprinting) this.exhaust(EXH.sprint * moved);
+      else if (this.inWater) this.exhaust(EXH.swim * moved);
 
       // ----- chute, rebond
       if (this.landed) {
-        const under = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
+        const under2 = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
         const fall = this.fallStart - this.y;
-        if (under === B.MUSHROOM && prevVy < -4) {
+        const bouncy = under2 === B.MUSHROOM || under2 === B.SLIME_BLOCK;
+        if (bouncy && prevVy < -4 && !this.sneaking) {
           this.vy = Math.min(24, -prevVy * 0.85);
           this.onGround = false;
           CM.Audio.play('bounce');
-          g.entities.burst(CM.blockLayers[B.MUSHROOM][2], this.x, this.y, this.z, 8, { speed: 3 });
-        } else if (fall > 3.6 && !this.inWater) {
+          g.entities.burst(CM.blockLayers[under2][2], this.x, this.y, this.z, 8, { speed: 3 });
+        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK) {
           this.damage(Math.floor(fall - 3), null, null, 'La gravité');
         }
         if (!wasGround && fall > 1) CM.Audio.play('step', { mat: this.matUnder() });
       }
-      if (this.onGround || this.inWater || this.hook) {
+      if (this.onGround || this.inWater || this.hook || this.flying) {
         this.fallStart = this.y;
         if (this.onGround) this.usedDouble = false;
       } else this.fallStart = Math.max(this.fallStart, this.y);
 
-      // ----- endurance, souffle, santé
-      if (this.headInWater) {
-        this.stamina = Math.max(0, this.stamina - 7 * dt);
-        this.staminaDelay = 0.5;
-        if (this.stamina <= 0) {
-          this.drown = (this.drown || 0) + dt;
-          if (this.drown > 1) {
-            this.drown = 0;
-            this.damage(2, null, null, 'La noyade');
-          }
-        }
-        if (!wasHeadIn) g.ui.toast('Sous l’eau, ton endurance sert de souffle !', 'info', 'water');
-      } else if (this.staminaDelay <= 0) {
-        const rate = (this.vigor > 0 ? 45 : 24) * (this.onGround || this.inWater ? 1 : 0.35);
-        this.stamina = Math.min(this.maxStamina, this.stamina + rate * dt);
-      }
-      if (this.exhausted && this.stamina >= 30) this.exhausted = false;
-      if (this.health > this.maxHealth) this.health = this.maxHealth;
-      if (this.health < this.maxHealth && this.stamina > 30) {
-        this.regen += dt * (this.vigor > 0 ? 2.5 : 1);
-        if (this.regen >= 4) {
-          this.regen = 0;
-          this.health = Math.min(this.maxHealth, this.health + 1);
-        }
-      }
+      // ----- souffle, faim, santé
+      this.updateVitals(dt, wasHeadIn);
 
       // ----- pas et balancement
       const hs = Math.hypot(this.vx, this.vz);
@@ -261,12 +307,64 @@
         }
       } else this.bobAmp = Math.max(0, this.bobAmp - dt * 4);
 
-      if (this.y < -30) this.damage(100, null, null, 'Le vide');
-      if (this.invul <= 0 && this.touching((b) => b.hurts)) this.damage(1, null, null, 'Un cactus');
+      if (this.y < -30) this.damage(100, null, null, 'Le vide', true);
+      if (this.invul <= 0 && this.touching((b) => b.hurts)) this.damage(1, null, null, this.touching((b) => b.id === B.MAGMA) ? 'Le magma' : 'Un cactus');
 
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
       this.updateActions(dt, input);
+    }
+
+    updateVitals(dt, wasHeadIn) {
+      const g = this.game;
+      if (this.creative) {
+        this.air = MAX_AIR;
+        this.food = 20;
+        this.health = Math.max(this.health, this.maxHealth);
+        return;
+      }
+      if (this.headInWater) {
+        this.air = Math.max(0, this.air - dt);
+        if (this.air <= 0) {
+          this.drownT += dt;
+          if (this.drownT > 1) {
+            this.drownT = 0;
+            this.damage(2, null, null, 'La noyade');
+          }
+        }
+        if (!wasHeadIn) g.ui.toast('Sous l’eau : surveille tes bulles d’air !', 'info', 'water');
+      } else this.air = Math.min(MAX_AIR, this.air + dt * 6);
+      // Mode paisible : la faim remonte toute seule.
+      if (g.difficulty === 'peaceful') {
+        this.regenT += dt;
+        if (this.regenT >= 1) {
+          this.regenT = 0;
+          this.food = Math.min(20, this.food + 1);
+          if (this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + 1);
+        }
+        return;
+      }
+      if (this.health > this.maxHealth) this.health = this.maxHealth;
+      // Régénération : faim presque pleine (plus rapide avec la saturation ou la pomme dorée).
+      if (this.health < this.maxHealth && (this.food >= 18 || this.regenEffect > 0)) {
+        const fast = (this.food >= 20 && this.sat > 0) || this.regenEffect > 0;
+        this.regenT += dt;
+        if (this.regenT >= (fast ? 0.6 : 4)) {
+          this.regenT = 0;
+          this.health = Math.min(this.maxHealth, this.health + 1);
+          if (this.regenEffect <= 0) this.exhaust(fast ? Math.min(6, this.sat + 1) : EXH.heal);
+        }
+      } else this.regenT = 0;
+      // Famine : faim à zéro -> dégâts (s'arrête à 10 PV en facile, 1 en normal).
+      if (this.food <= 0) {
+        this.starveT += dt;
+        if (this.starveT >= 4) {
+          this.starveT = 0;
+          const floor = g.difficulty === 'easy' ? 10 : g.difficulty === 'normal' ? 1 : 0;
+          if (this.health > floor) this.damage(1, null, null, 'La faim', true);
+          g.ui.toast('Tu meurs de faim : mange quelque chose !', 'warn', 'starve');
+        }
+      } else this.starveT = 0;
     }
 
     // Un bloc qui vérifie test() touche-t-il le joueur ?
@@ -286,7 +384,7 @@
 
     updateTarget() {
       const e = this.eye(), d = this.look();
-      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], REACH, (id) => id !== B.WATER);
+      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => id !== B.WATER);
     }
 
     // ------------------------------------------------------------ grappin --
@@ -294,10 +392,6 @@
       const g = this.game;
       if (this.hook) {
         this.releaseHook(false);
-        return;
-      }
-      if (this.exhausted || this.stamina < 8) {
-        g.ui.toast("Pas assez d'endurance pour le grappin", 'warn');
         return;
       }
       const e = this.eye(), d = this.look();
@@ -308,7 +402,7 @@
         return;
       }
       this.hook = { x: e[0] + d[0] * hit.t, y: e[1] + d[1] * hit.t, z: e[2] + d[2] * hit.t, bx: hit.x, by: hit.y, bz: hit.z, t: 0 };
-      this.spend(8);
+      this.exhaust(EXH.grapple);
       this.swing = 1;
       CM.Audio.play('grapple');
       g.stats.grapples = (g.stats.grapples || 0) + 1;
@@ -360,20 +454,21 @@
     // Temps pour casser un bloc avec l'objet en main.
     breakInfo(id) {
       const b = CM.blocks[id];
+      if (this.creative) return { time: 0, harvest: false };
       if (b.hardness <= 0) return { time: 0.05, harvest: true };
       const stack = this.game.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
       let speed = 1;
       let harvest = b.tier === 0;
       if (info && info.type === 'tool' && b.tool && info.toolType === b.tool) {
-        speed = CM.TOOL_SPEED[info.tier] * (1 + 0.12 * (this.masteryOf(stack) - 1));
+        speed = info.speed * (1 + 0.12 * (this.masteryOf(stack) - 1));
         harvest = info.tier >= b.tier;
       }
       let time = (b.hardness * 1.5) / speed;
       if (!harvest) time *= 3.3;
       time /= this.comboMult();
-      if (this.exhausted) time *= 1.6;
       if (this.inWater && !this.onGround) time *= 2;
+      if (!this.onGround && !this.inWater && !this.flying) time *= 1.5;
       return { time, harvest };
     }
     comboMult() {
@@ -393,13 +488,22 @@
         }
         this.swing = 1;
       }
+      // choisir le bloc visé (clic molette)
+      if (input.pressed.mouse1 && this.target) this.pickBlock(this.target.id);
       // minage
       if (input.mouse[0] && this.target) {
         const t = this.target;
         const b = CM.blocks[t.id];
         if (!b.unbreakable && b.hardness >= 0) {
+          if (this.creative) {
+            if (this.breakCd <= 0) {
+              this.breakBlock(t.x, t.y, t.z, t.id, false, true);
+              this.breakCd = 0.22;
+              this.swing = 1;
+            }
+          } else {
           if (!this.mining || this.mining.x !== t.x || this.mining.y !== t.y || this.mining.z !== t.z || this.mining.id !== t.id) {
-            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0 };
+            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0, h: b.height };
           }
           const bi = this.breakInfo(t.id);
           this.mining.progress += dt / bi.time;
@@ -414,6 +518,7 @@
             this.breakBlock(t.x, t.y, t.z, t.id, bi.harvest, true);
             this.mining = null;
           }
+          }
         }
       } else this.mining = null;
 
@@ -423,13 +528,32 @@
       }
     }
 
+    // Mode créatif : met le bloc visé dans la main.
+    pickBlock(id) {
+      const inv = this.game.inventory;
+      const drop = CM.blocks[id];
+      if (!drop || id === B.WATER) return;
+      for (let i = 0; i < 9; i++) {
+        if (inv.slots[i] && inv.slots[i].id === id) {
+          inv.selected = i;
+          return;
+        }
+      }
+      if (!this.creative) return;
+      let slot = inv.slots.findIndex((s, i) => i < 9 && !s);
+      if (slot < 0) slot = inv.selected;
+      inv.slots[slot] = { id, count: 64 };
+      inv.selected = slot;
+      inv.changed();
+    }
+
     attack(mob) {
       const g = this.game;
       const stack = g.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
       let dmg = 1;
       if (info && info.type === 'tool') {
-        dmg = info.toolType === 'sword' ? CM.SWORD_DAMAGE[info.tier] : info.tier + 1;
+        dmg = info.damage;
         if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
       }
       let crit = false;
@@ -441,14 +565,17 @@
         dmg += 2;
         crit = true;
       }
+      if (this.creative) dmg = Math.max(dmg, 50);
       this.attackCd = 0.38;
       this.swing = 1;
+      this.exhaust(EXH.attack);
       g.entities.hurtMob(mob, dmg, [this.x, this.z]);
       if (crit) g.entities.burst(CM.Textures.layer.white, mob.x, mob.y + mob.h * 0.7, mob.z, 10, { speed: 4, grav: 4, life: 0.5, size: 0.05, emissive: true });
       if (info && info.toolType === 'sword') this.gainXp(stack, mob.dead ? 4 : 1);
     }
 
     gainXp(stack, n) {
+      if (this.creative) return;
       const before = CM.masteryLevel(stack.xp || 0);
       stack.xp = (stack.xp || 0) + n;
       const after = CM.masteryLevel(stack.xp);
@@ -462,17 +589,19 @@
     breakBlock(x, y, z, id, harvest, primary) {
       const g = this.game, w = g.world;
       const b = CM.blocks[id];
-      if (id === B.CHEST) g.chestAt(x, y, z); // un coffre de ruine se remplit avant d'être cassé
+      if (b.container) g.chestAt(x, y, z); // un coffre de ruine se remplit avant d'être cassé
       w.setBlock(x, y, z, 0);
-      if (id === B.CHEST) g.spillChest(x, y, z);
+      if (b.container) g.spillChest(x, y, z);
       g.entities.blockParticles(id, x, y, z, primary ? 16 : 8);
       CM.Audio.play('break', { mat: b.sound });
       g.stats.mined[id] = (g.stats.mined[id] || 0) + 1;
-      // plantes et torches posées dessus tombent aussi
+      // plantes, torches et tapis posés dessus tombent aussi
       const above = w.get(x, y + 1, z);
-      if (above && (CM.blocks[above].plant || above === B.TORCH || above === B.CACTUS)) {
-        this.breakBlock(x, y + 1, z, above, true, false);
+      const ab = CM.blocks[above];
+      if (above && (ab.plant || ab.render === 'torch' || above === B.CACTUS || ab.render === 'carpet' || above === B.SUGAR_CANE || above === B.BAMBOO)) {
+        this.breakBlock(x, y + 1, z, above, !this.creative, false);
       }
+      if (this.creative) return;
       if (!primary) {
         if (harvest) for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n, x + 0.5, y + 0.4, z + 0.5);
         return;
@@ -493,16 +622,16 @@
       if (harvest) {
         for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n * mult, x + 0.5, y + 0.4, z + 0.5);
       } else if (b.tier > 0) {
-        g.ui.toast('Il faut un meilleur outil pour récolter : ' + b.name, 'warn', 'tool' + id);
+        g.ui.toast('Il faut une pioche en ' + CM.TIER_NAMES[b.tier] + ' (ou mieux) pour récolter : ' + b.name, 'warn', 'tool' + id);
       }
-      this.spend(0.6);
+      this.exhaust(EXH.mine);
       // maîtrise de l'outil
       const stack = g.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
       if (info && info.type === 'tool' && info.toolType === b.tool) {
         this.gainXp(stack, b.ore ? 2 : 1);
         // pioche de cristal : minage de filon
-        if (info.toolType === 'pickaxe' && info.tier === 4 && b.ore) this.veinMine(x, y, z, id);
+        if (info.toolType === 'pickaxe' && info.mat === 'CRYSTAL' && b.ore) this.veinMine(x, y, z, id);
         // hache en fer ou mieux : abat l'arbre entier
         const wood = CM.woodOf(id);
         if (info.toolType === 'axe' && info.tier >= 3 && wood && id === wood.log) this.fellTree(x, y, z, wood);
@@ -515,7 +644,7 @@
       const leaves = [];
       const seen = new Set([x + ',' + y + ',' + z]);
       let queue = [[x, y, z]];
-      while (queue.length && logs.length < 48) {
+      while (queue.length && logs.length < 64) {
         const [cx, cy, cz] = queue.shift();
         for (let dx = -1; dx <= 1; dx++)
           for (let dy = 0; dy <= 1; dy++)
@@ -534,7 +663,7 @@
       // feuillage accroché aux bûches abattues
       queue = logs.slice();
       const depth = new Map(logs.map((l) => [l.join(','), 0]));
-      while (queue.length && leaves.length < 160) {
+      while (queue.length && leaves.length < 200) {
         const c = queue.shift();
         const d = depth.get(c.join(','));
         if (d >= 3) continue;
@@ -578,35 +707,59 @@
       if (found.length) this.game.ui.toast('Filon ! +' + found.length + ' blocs', 'gold');
     }
 
+    // Consomme un objet tenu (sauf en créatif).
+    consume(n) {
+      if (!this.creative) this.game.inventory.consumeHeld(n || 1);
+    }
+
     use(input) {
       const g = this.game, w = g.world, inv = g.inventory;
       const t = this.target;
       const stack = inv.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
       this.useCd = 0.22;
-      const shift = input.keys.ShiftLeft || input.keys.ShiftRight;
-      if (input.pressed.mouse2 && t && CM.blocks[t.id].station && !(info && info.isBlock && shift)) {
-        g.ui.openInventory();
-        return;
-      }
-      if (input.pressed.mouse2 && t && t.id === B.CHEST && !(info && info.isBlock && shift)) {
-        g.ui.openChest(g.chestAt(t.x, t.y, t.z));
-        return;
+      const sneak = this.sneaking;
+      const tb = t ? CM.blocks[t.id] : null;
+      // interactions avec le bloc visé (accroupi : on pose un bloc à la place)
+      if (input.pressed.mouse2 && t && !(info && info.isBlock && sneak)) {
+        if (tb.station) {
+          g.ui.openInventory();
+          return;
+        }
+        if (tb.container) {
+          g.ui.openChest(g.chestAt(t.x, t.y, t.z), tb.name);
+          return;
+        }
+        if (tb.note) {
+          const n = ((t.x * 7 + t.y * 3 + t.z * 5) % 24 + 24) % 24;
+          g.noteBlocks = g.noteBlocks || {};
+          const k = t.x + ',' + t.y + ',' + t.z;
+          g.noteBlocks[k] = ((g.noteBlocks[k] === undefined ? n : g.noteBlocks[k]) + 1) % 25;
+          CM.Audio.play('note', { note: g.noteBlocks[k] });
+          g.entities.burst(CM.Textures.layer.white, t.x + 0.5, t.y + 1.2, t.z + 0.5, 3, { speed: 1, grav: -2, life: 0.6, size: 0.08, emissive: true });
+          this.swing = 1;
+          return;
+        }
+        if (tb.tnt && info && (info.type === 'igniter' || stack.id === B.TORCH)) {
+          g.primeTnt(t.x, t.y, t.z);
+          this.swing = 1;
+          return;
+        }
       }
       if (!info) return;
       if (info.type === 'food') {
         if (!input.pressed.mouse2) return;
-        if (this.health >= this.maxHealth && this.stamina >= this.maxStamina - 1) {
-          g.ui.toast('Tu es en pleine forme.', 'info', 'full');
+        if (this.food >= 20 && !info.always && !this.creative) {
+          g.ui.toast('Tu n’as pas faim.', 'info', 'full');
           return;
         }
-        this.health = Math.min(this.maxHealth, this.health + info.heal);
-        this.stamina = Math.min(this.maxStamina, this.stamina + info.stamina);
-        if (info.vigor) {
-          this.vigor = info.vigor;
-          g.ui.toast('Vigueur : récupération accélérée (' + info.vigor + ' s)', 'gold');
+        this.food = Math.min(20, this.food + info.food);
+        this.sat = Math.min(this.food, this.sat + info.sat);
+        if (info.regen) {
+          this.regenEffect = info.regen;
+          g.ui.toast('Régénération (' + info.regen + ' s)', 'gold');
         }
-        inv.consumeHeld(1);
+        this.consume(1);
         this.swing = 1;
         this.useCd = 0.5;
         CM.Audio.play('eat');
@@ -617,23 +770,85 @@
         if (input.pressed.mouse2) this.fireHook();
         return;
       }
+      if (!t) return;
+      // outils utilisés sur un bloc
+      if (info.type === 'tool') {
+        if (!input.pressed.mouse2) return;
+        // hache : écorcer une bûche
+        const wd = CM.woodOf(t.id);
+        if (info.toolType === 'axe' && wd && (t.id === wd.log || t.id === wd.wood)) {
+          w.setBlock(t.x, t.y, t.z, t.id === wd.log ? wd.strippedLog : wd.strippedWood);
+          CM.Audio.play('break', { mat: 'wood' });
+          g.entities.blockParticles(t.id, t.x, t.y, t.z, 8);
+          this.swing = 1;
+          return;
+        }
+        // houe : labourer la terre
+        if (info.toolType === 'hoe' && (tb.soil || t.id === B.DIRT) && t.id !== B.FARMLAND && !CM.blocks[w.get(t.x, t.y + 1, t.z)].solid) {
+          const above = w.get(t.x, t.y + 1, t.z);
+          if (above && CM.blocks[above].plant) w.setBlock(t.x, t.y + 1, t.z, 0);
+          w.setBlock(t.x, t.y, t.z, B.FARMLAND);
+          CM.Audio.play('step', { mat: 'gravel' });
+          this.swing = 1;
+          this.gainXp(stack, 1);
+          return;
+        }
+        return;
+      }
+      if (info.type === 'seeds') {
+        if (!input.pressed.mouse2) return;
+        if (t.id === B.FARMLAND && t.ny === 1 && w.get(t.x, t.y + 1, t.z) === 0) {
+          w.setBlock(t.x, t.y + 1, t.z, B.WHEAT_0);
+          g.crops.add(t.x + ',' + (t.y + 1) + ',' + t.z);
+          this.consume(1);
+          CM.Audio.play('place', { mat: 'grass' });
+          this.swing = 1;
+        } else g.ui.toast('Les graines se plantent sur de la terre labourée (houe + clic droit sur la terre)', 'info', 'seeds');
+        return;
+      }
+      if (info.type === 'bonemeal') {
+        if (!input.pressed.mouse2) return;
+        if (g.growAt(t.x, t.y, t.z, true)) {
+          this.consume(1);
+          this.swing = 1;
+          g.entities.burst(CM.Textures.layer.white, t.x + 0.5, t.y + 0.8, t.z + 0.5, 12, { speed: 2, grav: -1, life: 0.8, size: 0.06, emissive: true });
+        }
+        return;
+      }
+      if (info.type === 'igniter') return;
       if (!info.isBlock || !t) return;
+      const b = info.block;
+      // dalle posée sur une dalle identique : bloc plein
+      if (b.render === 'slab' && t.id === stack.id && t.ny === 1) {
+        w.setBlock(t.x, t.y, t.z, b.full);
+        this.afterPlace(b, stack.id, t.x, t.y, t.z);
+        return;
+      }
       // position de pose
       let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-      if (CM.blocks[t.id].replaceable && t.id !== B.WATER) {
+      if (tb.replaceable && t.id !== B.WATER) {
         px = t.x; py = t.y; pz = t.z;
       }
       if (!w.inside(px, py, pz)) return;
       const cur = w.get(px, py, pz);
-      if (cur !== 0 && !CM.blocks[cur].replaceable) return;
-      const b = info.block;
+      if (cur !== 0 && !CM.blocks[cur].replaceable) {
+        // dalle posée à côté d'une dalle identique (case déjà occupée par la même dalle)
+        if (cur === stack.id && b.render === 'slab') {
+          w.setBlock(px, py, pz, b.full);
+          this.afterPlace(b, stack.id, px, py, pz);
+        }
+        return;
+      }
       const below = w.get(px, py - 1, pz);
+      const bb = CM.blocks[below];
       if (b.plant) {
-        if (b.soilAny ? !CM.blocks[below].solid : !CM.blocks[below].soil) {
-          g.ui.toast(b.soilAny ? 'Il faut un bloc solide dessous' : 'Se plante sur de l’herbe ou de la terre', 'warn', 'plant');
+        if (b.needsFarmland ? below !== B.FARMLAND : b.soilAny ? !bb.solid : !bb.soil) {
+          g.ui.toast(b.needsFarmland ? 'Se plante sur de la terre labourée' : b.soilAny ? 'Il faut un bloc solide dessous' : 'Se plante sur de l’herbe ou de la terre', 'warn', 'plant');
           return;
         }
       }
+      if (b.render === 'carpet' && !bb.solid) return;
+      if (stack.id === B.SUGAR_CANE && below !== B.SUGAR_CANE && !(bb.soil || below === B.SAND || below === B.RED_SAND)) return;
       if (b.needsBelow === 'sand' && below !== B.SAND && below !== B.RED_SAND && below !== B.CACTUS) {
         g.ui.toast('Le cactus se plante sur du sable', 'warn', 'cactus');
         return;
@@ -643,25 +858,47 @@
         if (!sup || cur === B.WATER) return;
       }
       if (b.solid) {
-        const hit = (ex, ey, ez, hw, h) => ex + hw > px && ex - hw < px + 1 && ey + h > py && ey < py + 1 && ez + hw > pz && ez - hw < pz + 1;
-        if (hit(this.x, this.y, this.z, this.hw, this.h)) return;
+        const top = py + b.height;
+        const hit = (ex, ey, ez, hw, h) => ex + hw > px && ex - hw < px + 1 && ey + h > py && ey < top && ez + hw > pz && ez - hw < pz + 1;
+        if (hit(this.x, this.y, this.z, this.hw, this.h)) {
+          // un tapis ou une dalle sous les pieds : on se hisse dessus
+          if (b.height <= 0.55 && this.y < top && !CM.Physics.overlaps(w, this.x, top + 0.001, this.z, this.hw, this.h)) this.y = top + 0.001;
+          else return;
+        }
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
       }
-      w.setBlock(px, py, pz, stack.id);
-      if (CM.TAGS.saplings.includes(stack.id)) g.saplings.add(px + ',' + py + ',' + pz);
-      g.stats.placed[stack.id] = (g.stats.placed[stack.id] || 0) + 1;
-      CM.Audio.play('place', { mat: b.sound });
-      this.swing = 1;
-      if (stack.id === B.DAWN_HEART) g.onDawnHeart(px, py, pz);
-      inv.consumeHeld(1);
+      let place = stack.id;
+      // poudre de béton au contact de l'eau : béton
+      if (b.becomes && [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => w.get(px + dx, py + dy, pz + dz) === B.WATER)) place = b.becomes;
+      w.setBlock(px, py, pz, place);
+      this.afterPlace(b, stack.id, px, py, pz);
     }
 
-    damage(n, sx, sz, cause) {
+    afterPlace(b, id, px, py, pz) {
       const g = this.game;
-      if (!this.alive || this.invul > 0 || n <= 0) return;
+      if (CM.TAGS.saplings.includes(id)) g.saplings.add(px + ',' + py + ',' + pz);
+      if (b.crop !== undefined) g.crops.add(px + ',' + py + ',' + pz);
+      g.stats.placed[id] = (g.stats.placed[id] || 0) + 1;
+      CM.Audio.play('place', { mat: b.sound });
+      this.swing = 1;
+      if (id === B.DAWN_HEART) g.onDawnHeart(px, py, pz);
+      this.consume(1);
+    }
+
+    damage(n, sx, sz, cause, bypass) {
+      const g = this.game;
+      if (!this.alive || n <= 0) return;
+      if (this.creative && cause !== 'Le vide') return;
+      if (this.invul > 0 && !bypass) return;
+      if (sx !== null && sx !== undefined) {
+        // difficulté : dégâts des créatures
+        n *= g.difficulty === 'easy' ? 0.6 : g.difficulty === 'hard' ? 1.4 : 1;
+        n = Math.max(1, Math.round(n));
+      }
       this.health -= n;
       this.invul = 0.55;
       this.hurtFlash = 0.45;
+      this.exhaust(EXH.hurt);
       CM.Audio.play('hurt');
       if (sx !== null && sx !== undefined) {
         const dx = this.x - sx, dz = this.z - sz;
@@ -680,15 +917,18 @@
       const g = this.game;
       this.alive = false;
       this.hook = null;
+      this.flying = false;
       const inv = g.inventory;
-      for (let i = 0; i < 36; i++) {
-        const s = inv.slots[i];
-        if (!s) continue;
-        const extra = s.xp !== undefined ? { xp: s.xp } : null;
-        g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra);
-        inv.slots[i] = null;
+      if (!g.options.keepInventory) {
+        for (let i = 0; i < 36; i++) {
+          const s = inv.slots[i];
+          if (!s) continue;
+          const extra = s.xp !== undefined ? { xp: s.xp } : null;
+          g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra);
+          inv.slots[i] = null;
+        }
+        inv.changed();
       }
-      inv.changed();
       g.stats.deaths = (g.stats.deaths || 0) + 1;
       g.ui.showDeath(cause);
     }
@@ -703,13 +943,15 @@
 
     // ------------------------------------------------- main à l'écran ----
     buildHand(batch, time) {
+      if (!this.game.options.showHand) return;
       const stack = this.game.inventory.held();
       const l = [this.game.world.skyAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15,
         this.game.world.blockLightAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15];
       const sw = Math.sin(Math.min(1, 1 - this.swing) * Math.PI);
       const swingOn = this.swing > 0 ? sw : 0;
-      const bx = Math.sin(this.bob) * 0.035 * this.bobAmp;
-      const by = -Math.abs(Math.cos(this.bob)) * 0.03 * this.bobAmp;
+      const bobOn = this.game.options.viewBob ? 1 : 0;
+      const bx = Math.sin(this.bob) * 0.035 * this.bobAmp * bobOn;
+      const by = -Math.abs(Math.cos(this.bob)) * 0.03 * this.bobAmp * bobOn;
       const M = this.M;
       const L = CM.Textures.layer;
       if (!stack) {
@@ -719,14 +961,16 @@
         return;
       }
       const info = CM.itemInfo(stack.id);
-      const cubeish = info.isBlock && (info.block.render === 'cube' || info.block.render === 'glass');
+      const r = info.isBlock ? info.block.render : '';
+      const cubeish = info.isBlock && (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet');
       if (cubeish) {
         mat4.compose(M, 0.44 + bx - swingOn * 0.12, -0.38 + by + swingOn * 0.1, -0.7 - swingOn * 0.2, 0.75 + swingOn * 0.3, 0.12 - swingOn * 0.6, 0, 1);
-        batch.box(M, -0.16, -0.16, -0.16, 0.16, 0.16, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
+        const hh = 0.32 * Math.max(info.block.height, 0.1);
+        batch.box(M, -0.16, -0.16, -0.16, 0.16, -0.16 + hh, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
       } else {
         const layer = info.isBlock ? CM.blockLayers[stack.id][0] : L[info.tex];
         mat4.compose(M, 0.52 + bx - swingOn * 0.1, -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, -0.55, -0.2 - swingOn * 1.1, 0.3, 1);
-        const emi = (info.isBlock && info.block.light) || stack.id === B.TORCH ? 1 : 0;
+        const emi = info.isBlock && info.block.light ? 1 : 0;
         batch.box(M, -0.2, -0.2, 0, 0.2, 0.2, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], emi);
       }
     }
@@ -734,9 +978,11 @@
     // Lumière dynamique : tenir une torche ou une lanterne éclaire autour.
     heldLight() {
       const s = this.game.inventory.held();
-      if (!s) return 0;
-      if (CM.blocks[s.id] && s.id < 256 && CM.blocks[s.id].light >= 12) return 1;
-      if (s.id < 256 && CM.blocks[s.id].light >= 5) return 0.6;
+      if (!s || s.id >= CM.ITEM_BASE) return 0;
+      const b = CM.blocks[s.id];
+      if (!b) return 0;
+      if (b.light >= 12) return 1;
+      if (b.light >= 5) return 0.6;
       return 0;
     }
   }
