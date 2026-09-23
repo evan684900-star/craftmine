@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CraftMine — L'Aube des Éclats</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ============================== HUD ============================== -->
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="water-overlay"></div>
+    <div id="crosshair"></div>
+    <div id="combo" class="hidden"><span id="combo-text">COMBO x2</span><div id="combo-bar"><div id="combo-fill"></div></div></div>
+    <div id="objective">
+      <div class="obj-head">Objectif <span id="obj-count"></span></div>
+      <div id="obj-title"></div>
+      <div id="obj-desc"></div>
+    </div>
+    <div id="clock"></div>
+    <div id="toasts"></div>
+    <div id="pickups"></div>
+    <div id="debug" class="hidden"></div>
+    <div id="bottom">
+      <div id="item-name"></div>
+      <div id="status">
+        <div id="hearts"></div>
+        <div id="abilities">
+          <div id="ab-dash" class="ability" title="Ruée (F)"><b>F</b> Ruée</div>
+          <div id="ab-double" class="ability hidden" title="Double saut (Espace en l'air)">⇈ Double saut</div>
+        </div>
+        <div id="stamina"><div id="stamina-fill"></div><span id="stamina-label">Endurance</span></div>
+      </div>
+      <div id="hotbar"></div>
+    </div>
+  </div>
+
+  <!-- =========================== Inventaire =========================== -->
+  <div id="inventory" class="screen hidden">
+    <div class="inv-wrap">
+      <div class="panel inv-panel">
+        <h2>Inventaire</h2>
+        <div id="inv-main" class="grid"></div>
+        <div class="sep"></div>
+        <div id="inv-hot" class="grid"></div>
+        <div class="hint">Clic : prendre/poser · Clic droit : moitié / un seul · Maj+clic : déplacer rapidement</div>
+      </div>
+      <div class="panel side-panel">
+        <div id="chest-panel" class="hidden">
+          <h2>Coffre</h2>
+          <div id="chest-grid" class="grid"></div>
+          <div class="hint">Maj+clic : transférer entre le coffre et l'inventaire</div>
+        </div>
+        <div class="tabs">
+          <button data-tab="craft" class="active">Fabrication</button>
+          <button data-tab="journal">Journal</button>
+          <button data-tab="guide">Mécaniques</button>
+        </div>
+        <div id="tab-craft" class="tab">
+          <div id="stations"></div>
+          <div class="filters">
+            <button data-f="tout" class="active">Tout</button>
+            <button data-f="outils">Outils</button>
+            <button data-f="blocs">Blocs</button>
+            <button data-f="objets">Objets</button>
+            <label><input type="checkbox" id="only-can" /> Réalisables</label>
+          </div>
+          <div id="recipes"></div>
+        </div>
+        <div id="tab-journal" class="tab hidden"></div>
+        <div id="tab-guide" class="tab hidden"></div>
+      </div>
+    </div>
+    <div id="cursor-stack" class="slot hidden"></div>
+    <div id="tooltip" class="hidden"></div>
+  </div>
+
+  <!-- ============================== Menus ============================= -->
+  <div id="menu" class="screen">
+    <div class="menu-box">
+      <div class="logo">CRAFT<span>MINE</span></div>
+      <div class="subtitle">L'Aube des Éclats</div>
+      <div id="menu-main" class="menu-col">
+        <button id="btn-continue" class="big hidden">Continuer</button>
+        <button id="btn-new" class="big">Nouveau monde</button>
+        <div class="seed-row"><label for="seed">Graine :</label><input id="seed" placeholder="aléatoire" maxlength="24" /></div>
+        <div class="row2">
+          <button id="btn-help">Comment jouer</button>
+          <button id="btn-options">Options</button>
+        </div>
+      </div>
+      <div id="help" class="help hidden"></div>
+      <div class="foot">Minage, fabrication et survie — avec un grappin, des combos, des outils qui progressent et des Ombres qui craignent la lumière.</div>
+    </div>
+  </div>
+
+  <div id="loading" class="screen hidden">
+    <div class="menu-box">
+      <div class="logo small">CRAFT<span>MINE</span></div>
+      <div id="load-text">Génération du monde…</div>
+      <div class="bar"><div id="load-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="start" class="screen hidden">
+    <div class="menu-box">
+      <div class="logo small">CRAFT<span>MINE</span></div>
+      <button id="btn-start" class="big">Cliquer pour jouer</button>
+      <div class="keys">
+        <div><b>ZQSD / WASD</b> se déplacer</div>
+        <div><b>Espace</b> sauter · <b>Maj</b> courir</div>
+        <div><b>F</b> ruée · <b>E</b> inventaire &amp; fabrication</div>
+        <div><b>Clic gauche</b> miner / frapper</div>
+        <div><b>Clic droit</b> poser / utiliser / grappin</div>
+        <div><b>1-9 / molette</b> barre rapide · <b>Échap</b> pause</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <div class="menu-box">
+      <h1>Pause</h1>
+      <div class="menu-col">
+        <button id="btn-resume" class="big">Reprendre</button>
+        <button id="btn-options2">Options</button>
+        <button id="btn-save">Sauvegarder</button>
+        <button id="btn-quit">Sauvegarder et quitter</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="options" class="screen hidden">
+    <div class="menu-box">
+      <h1>Options</h1>
+      <div class="opt"><label>Distance d'affichage <span id="o-rd-v"></span></label><input id="o-rd" type="range" min="3" max="10" step="1" /></div>
+      <div class="opt"><label>Sensibilité de la souris <span id="o-sens-v"></span></label><input id="o-sens" type="range" min="0.2" max="3" step="0.1" /></div>
+      <div class="opt"><label>Champ de vision <span id="o-fov-v"></span></label><input id="o-fov" type="range" min="50" max="110" step="1" /></div>
+      <div class="opt"><label>Volume <span id="o-vol-v"></span></label><input id="o-vol" type="range" min="0" max="100" step="1" /></div>
+      <div class="opt check"><label><input id="o-inv" type="checkbox" /> Inverser l'axe vertical</label></div>
+      <button id="btn-opt-back" class="big">Retour</button>
+    </div>
+  </div>
+
+  <div id="death" class="screen red hidden">
+    <div class="menu-box">
+      <h1>Vous êtes mort</h1>
+      <div id="death-cause"></div>
+      <div class="small-note">Vos objets sont tombés sur place. Allez vite les récupérer !</div>
+      <button id="btn-respawn" class="big">Réapparaître</button>
+    </div>
+  </div>
+
+  <div id="victory" class="screen gold hidden">
+    <div class="menu-box">
+      <h1>L'aube se lève !</h1>
+      <div id="victory-text"></div>
+      <button id="btn-victory" class="big">Continuer à explorer</button>
+    </div>
+  </div>
+
+  <div id="error" class="screen hidden">
+    <div class="menu-box">
+      <h1>Oups…</h1>
+      <div id="error-text"></div>
+    </div>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/blocks.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/mesher.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
