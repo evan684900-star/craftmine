@@ -1,7 +1,7 @@
 'use strict';
 // Rendu WebGL2 : sections du monde, ciel, entités, main du joueur, contours.
 (function () {
-  const { W, D, H, SX, SY, SZ, SEA } = CM.WORLD;
+  const { SY } = CM.WORLD;
   const mat4 = CM.mat4;
 
   const LIGHT_FN = `
@@ -227,9 +227,13 @@
     constructor() {
       this.data = new Float32Array(10 * 4 * 2048);
       this.n = 0; // quads
+      this.ox = 0; this.oy = 0; this.oz = 0; // origine soustraite (position de la caméra)
     }
-    reset() {
+    reset(origin) {
       this.n = 0;
+      if (origin) {
+        this.ox = origin[0]; this.oy = origin[1]; this.oz = origin[2];
+      }
     }
     ensure() {
       if ((this.n + 1) * 40 > this.data.length) {
@@ -244,7 +248,7 @@
       const d = this.data;
       let o = this.n * 40;
       for (let k = 0; k < 4; k++) {
-        d[o++] = p[k][0]; d[o++] = p[k][1]; d[o++] = p[k][2];
+        d[o++] = p[k][0] - this.ox; d[o++] = p[k][1] - this.oy; d[o++] = p[k][2] - this.oz;
         d[o++] = uv[k][0]; d[o++] = uv[k][1]; d[o++] = layer;
         d[o++] = sky; d[o++] = blk; d[o++] = shade; d[o++] = flags;
       }
@@ -291,7 +295,7 @@
       this.invVP = mat4.create();
       this.tmp = mat4.create();
       this.planes = [];
-      this.sections = new Array(SX * SY * SZ).fill(null);
+      this.sections = new Map();
       this.renderDist = 6;
       this.fov = 75;
       this.batch = new Batch();
@@ -390,55 +394,61 @@
       this.gl.deleteVertexArray(m.vao);
       this.gl.deleteBuffer(m.vbo);
     }
-    freeSection(s) {
-      const sec = this.sections[s];
+    freeSection(k) {
+      const sec = this.sections.get(k);
       if (!sec) return;
       this.freeMesh(sec.opaque);
       this.freeMesh(sec.water);
-      this.sections[s] = null;
+      this.sections.delete(k);
     }
     freeAll() {
-      for (let s = 0; s < this.sections.length; s++) this.freeSection(s);
+      for (const k of [...this.sections.keys()]) this.freeSection(k);
     }
-    buildSection(world, s) {
-      const sx = s % SX, sz = Math.floor(s / SX) % SZ, sy = Math.floor(s / (SX * SZ));
-      const m = CM.Mesher.build(world, sx, sy, sz);
-      this.freeSection(s);
-      this.sections[s] = {
+    buildSection(world, cx, sy, cz, k) {
+      const m = CM.Mesher.build(world, cx, sy, cz);
+      this.freeSection(k);
+      this.sections.set(k, {
         opaque: m.opaque ? this.makeMesh(m.opaque) : null,
         water: m.water ? this.makeMesh(m.water) : null,
-        sx, sy, sz,
-      };
-      world.dirty[s] = 0;
+        cx, sy, cz,
+      });
+      world.dirty.delete(k);
     }
 
-    // Construit les sections manquantes/modifiées, les plus proches d'abord.
-    updateMeshes(world, cx, cz, budgetMs, force) {
+    // Construit les sections manquantes/modifiées autour du joueur, les plus proches d'abord.
+    // Renvoie le nombre de sections encore à construire.
+    updateMeshes(world, px, pz, budgetMs) {
       const t0 = performance.now();
       const rd = this.renderDist;
-      const pcx = Math.floor(cx / 16), pcz = Math.floor(cz / 16);
-      const cand = [];
-      for (let s = 0; s < this.sections.length; s++) {
-        const sx = s % SX, sz = Math.floor(s / SX) % SZ;
-        const dx = sx - pcx, dz = sz - pcz;
-        const d2 = dx * dx + dz * dz;
-        const inRange = d2 <= (rd + 0.5) * (rd + 0.5);
-        const sec = this.sections[s];
-        if (!inRange) {
-          if (sec && d2 > (rd + 2.5) * (rd + 2.5)) this.freeSection(s);
-          continue;
-        }
-        if (world.dirty[s] === 2) {
-          this.buildSection(world, s);
-          continue;
-        }
-        if (!sec || world.dirty[s]) cand.push([d2, s]);
+      const pcx = Math.floor(px / 16), pcz = Math.floor(pz / 16);
+      const keep2 = (rd + 2) * (rd + 2);
+      for (const [k, sec] of this.sections) {
+        const dx = sec.cx - pcx, dz = sec.cz - pcz;
+        if (dx * dx + dz * dz > keep2 || !world.chunks.has(CM.ckey(sec.cx, sec.cz))) this.freeSection(k);
       }
+      const cand = [];
+      const r2 = (rd + 0.5) * (rd + 0.5);
+      for (let dz = -rd; dz <= rd; dz++)
+        for (let dx = -rd; dx <= rd; dx++) {
+          const d2 = dx * dx + dz * dz;
+          if (d2 > r2) continue;
+          const cx = pcx + dx, cz = pcz + dz;
+          if (!world.meshable(cx, cz)) continue;
+          for (let sy = 0; sy < SY; sy++) {
+            const k = CM.skey(cx, sy, cz);
+            const lvl = world.dirty.get(k) || 0;
+            if (lvl === 2) {
+              this.buildSection(world, cx, sy, cz, k);
+              continue;
+            }
+            if (lvl || !this.sections.has(k)) cand.push([d2, cx, sy, cz, k]);
+          }
+        }
       cand.sort((a, b) => a[0] - b[0]);
       let built = 0;
-      for (const [, s] of cand) {
-        if (!force && performance.now() - t0 > budgetMs && built > 0) break;
-        this.buildSection(world, s);
+      for (const [, cx, sy, cz, k] of cand) {
+        if (built > 0 && performance.now() - t0 > budgetMs) break;
+        this.buildSection(world, cx, sy, cz, k);
         built++;
       }
       return cand.length - built;
@@ -492,13 +502,19 @@
 
     render(state) {
       const gl = this.gl;
-      const env = state.env;
+      // Rendu relatif à la caméra : les coordonnées envoyées au GPU restent petites
+      // même très loin de l'origine (pas de tremblement dû à la précision des flottants).
+      const cam = state.cam;
+      const env = Object.assign({}, state.env, {
+        cam: [0, 0, 0],
+        held: [state.env.held[0] - cam[0], state.env.held[1] - cam[1], state.env.held[2] - cam[2], state.env.held[3]],
+      });
       this.resize();
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       const aspect = this.canvas.width / this.canvas.height;
       const far = (this.renderDist + 1) * 16 + 40;
       mat4.perspective(this.proj, (state.fov * Math.PI) / 180, aspect, 0.05, Math.max(far, 300));
-      mat4.fps(this.view, state.cam[0], state.cam[1], state.cam[2], state.yaw, state.pitch);
+      mat4.fps(this.view, 0, 0, 0, state.yaw, state.pitch);
       mat4.multiply(this.viewProj, this.proj, this.view);
       CM.frustumPlanes(this.viewProj, this.planes);
 
@@ -522,7 +538,7 @@
       gl.uniform1f(su.uNight, env.night);
       gl.uniform1f(su.uSunset, env.sunset);
       gl.uniform1f(su.uTime, env.time);
-      gl.uniform3fv(su.uCamPos, state.cam);
+      gl.uniform3f(su.uCamPos, cam[0] % 14000, cam[1], cam[2] % 14000);
       gl.uniform1f(su.uUnderwater, env.underwater ? 1 : 0);
       gl.bindVertexArray(this.skyVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -542,14 +558,13 @@
       gl.uniform1f(cp.u.uWater, 0);
       let drawn = 0, quads = 0;
       const waterList = [];
-      for (let s = 0; s < this.sections.length; s++) {
-        const sec = this.sections[s];
-        if (!sec) continue;
-        const x0 = sec.sx * 16, y0 = sec.sy * 16, z0 = sec.sz * 16;
+      for (const sec of this.sections.values()) {
+        if (!sec.opaque && !sec.water) continue;
+        const x0 = sec.cx * 16 - cam[0], y0 = sec.sy * 16 - cam[1], z0 = sec.cz * 16 - cam[2];
         if (!CM.aabbInFrustum(this.planes, x0, y0, z0, x0 + 16, y0 + 16, z0 + 16)) continue;
         if (sec.water) {
-          const dx = x0 + 8 - state.cam[0], dy = y0 + 8 - state.cam[1], dz = z0 + 8 - state.cam[2];
-          waterList.push([dx * dx + dy * dy + dz * dz, sec]);
+          const dx = x0 + 8, dy = y0 + 8, dz = z0 + 8;
+          waterList.push([dx * dx + dy * dy + dz * dz, sec, x0, y0, z0]);
         }
         if (!sec.opaque) continue;
         gl.uniform3f(cp.u.uOffset, x0, y0, z0);
@@ -569,7 +584,7 @@
       // Contour du bloc visé + fissures
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      if (state.target) this.drawOutline(state.target);
+      if (state.target) this.drawOutline(state.target, cam);
       if (state.overlay.n) {
         gl.depthMask(false);
         gl.enable(gl.POLYGON_OFFSET_FILL);
@@ -584,14 +599,12 @@
       gl.depthMask(false);
       gl.useProgram(cp.p);
       gl.uniform1f(cp.u.uWater, 1);
-      for (const [, sec] of waterList) {
-        gl.uniform3f(cp.u.uOffset, sec.sx * 16, sec.sy * 16, sec.sz * 16);
+      for (const [, sec, x0, y0, z0] of waterList) {
+        gl.uniform3f(cp.u.uOffset, x0, y0, z0);
         gl.bindVertexArray(sec.water.vao);
         gl.drawElements(gl.TRIANGLES, sec.water.quads * 6, gl.UNSIGNED_INT, 0);
       }
       gl.bindVertexArray(null);
-      // Océan infini autour de l'île
-      this.drawOcean(env);
       if (state.translucent && state.translucent.n) this.drawBatch(state.translucent, this.viewProj, env, { alpha: 0.85 });
       gl.depthMask(true);
 
@@ -605,11 +618,11 @@
       gl.disable(gl.BLEND);
     }
 
-    drawOutline(t) {
+    drawOutline(t, cam) {
       const gl = this.gl;
       const e = 0.003;
-      const x0 = t.x - e, y0 = t.y - e, z0 = t.z - e;
-      const x1 = t.x + 1 + e, y1 = t.y + (t.h || 1) + e, z1 = t.z + 1 + e;
+      const x0 = t.x - cam[0] - e, y0 = t.y - cam[1] - e, z0 = t.z - cam[2] - e;
+      const x1 = x0 + 1 + 2 * e, y1 = y0 + (t.h || 1) + 2 * e, z1 = z0 + 1 + 2 * e;
       const v = [
         x0, y0, z0, x1, y0, z0, x1, y0, z0, x1, y0, z1, x1, y0, z1, x0, y0, z1, x0, y0, z1, x0, y0, z0,
         x0, y1, z0, x1, y1, z0, x1, y1, z0, x1, y1, z1, x1, y1, z1, x0, y1, z1, x0, y1, z1, x0, y1, z0,
@@ -623,31 +636,6 @@
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STREAM_DRAW);
       gl.drawArrays(gl.LINES, 0, 24);
       gl.bindVertexArray(null);
-    }
-
-    drawOcean(env) {
-      if (!this.oceanBatch) {
-        const b = new Batch();
-        const y = SEA + 14 / 16 - 0.05;
-        const E = 1600;
-        const layer = CM.Textures.layer.water;
-        const rects = [
-          [-E, -E, W + E, 0],
-          [-E, D, W + E, D + E],
-          [-E, 0, 0, D],
-          [W, 0, W + E, D],
-        ];
-        for (const [x0, z0, x1, z1] of rects) {
-          b.quad(
-            [[x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0]],
-            [[x0, z1], [x1, z1], [x1, z0], [x0, z0]],
-            layer, 1, 0, 1, 0,
-          );
-        }
-        this.oceanBatch = b;
-      }
-      const t = env.time;
-      this.drawBatch(this.oceanBatch, this.viewProj, env, { scroll: [t * 0.015, t * 0.03], alpha: 0.95 });
     }
   }
 

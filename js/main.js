@@ -2,7 +2,7 @@
 // Boucle de jeu, cycle jour/nuit, sauvegarde, entrées et menus.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const SAVE_KEY = 'craftmine_save_v1';
+  const SAVE_KEY = 'craftmine_save_v2';
   const OPT_KEY = 'craftmine_options_v1';
   const DAY_LEN = 600; // secondes pour un cycle complet
   const B = CM.B;
@@ -27,7 +27,7 @@
   class Game {
     constructor() {
       this.canvas = $('game');
-      this.options = Object.assign({ renderDist: 6, sens: 1, fov: 75, volume: 50, invertY: false, showQuests: true }, JSON.parse(storageGet(OPT_KEY) || '{}'));
+      this.options = Object.assign({ renderDist: 8, sens: 1, fov: 75, volume: 50, invertY: false, showQuests: true }, JSON.parse(storageGet(OPT_KEY) || '{}'));
       CM.Textures.buildIcons();
       CM.Mesher.init();
       this.renderer = new CM.Renderer(this.canvas);
@@ -81,19 +81,7 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      this.world = new CM.World(seed);
-      const gen = this.world.generate(save ? save.edits : null);
-      for (;;) {
-        const t0 = performance.now();
-        let res;
-        do res = gen.next();
-        while (!res.done && performance.now() - t0 < 40);
-        if (res.done) break;
-        $('load-text').textContent = res.value[0] + '…';
-        $('load-fill').style.width = Math.round(res.value[1] * 100) + '%';
-        await new Promise((r) => setTimeout(r, 0));
-      }
-      this.world.dirty.fill(0);
+      this.world = new CM.World(seed, save ? save.edits : null);
       this.entities = new CM.Entities(this);
       this.stats = this.freshStats();
       this.time = 0.03;
@@ -101,11 +89,24 @@
       this.dawnHearts = [];
       this.victory = false;
       this.chests = new Map();
-      this.saplings = new Set();
-      this.growTimer = 1;
-      for (const [i, id] of this.world.edits) if (id === B.SAPLING) this.saplings.add(i);
       this.inventory.slots = new Array(36).fill(null);
       this.inventory.selected = 0;
+      const sp = save && save.player && isFinite(save.player.x) ? save.player : this.world.spawn;
+      // génération des tronçons autour du point de départ
+      const radius = this.renderer.renderDist + 1;
+      let total = 0;
+      for (;;) {
+        const left = this.world.stream(sp.x, sp.z, radius, 40);
+        if (!total) total = left + 1;
+        $('load-text').textContent = 'Génération du monde…';
+        $('load-fill').style.width = Math.round((1 - left / total) * 70) + '%';
+        if (left <= 0) break;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      this.world.fixSpawn();
+      this.world.dirty.clear();
+      this.saplings = new Set(this.world.editedPositions(B.SAPLING).map((p) => p.join(',')));
+      this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
         const p = save.player || {};
@@ -120,17 +121,18 @@
         this.stats = Object.assign(this.freshStats(), save.stats || {});
         this.dawnHearts = save.dawnHearts || [];
         this.victory = !!save.victory;
+        if (save.spawn) this.world.spawn = save.spawn;
         for (const k in save.chests || {}) this.chests.set(k, save.chests[k].map((s) => (s && CM.itemInfo(s.id) ? s : null)));
       }
       this.inventory.changed();
       this.spawnInitialMobs();
       // pré-construction des maillages autour du joueur
       $('load-text').textContent = 'Construction du paysage…';
-      let total = 0;
+      total = 0;
       for (;;) {
-        const left = this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 40, false);
+        const left = this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 40);
         if (!total) total = left + 1;
-        $('load-fill').style.width = Math.round(85 + (1 - left / total) * 15) + '%';
+        $('load-fill').style.width = Math.round(70 + (1 - left / total) * 30) + '%';
         if (left <= 0) break;
         await new Promise((r) => setTimeout(r, 0));
       }
@@ -147,11 +149,11 @@
     }
 
     spawnInitialMobs() {
-      const w = this.world, sp = w.spawn, r = CM.rng(w.seed + 5);
+      const w = this.world, sp = this.player, r = CM.rng(w.seed + 5);
       let n = 0;
       for (let k = 0; k < 400 && n < 14; k++) {
         const x = Math.floor(sp.x + (r() - 0.5) * 140), z = Math.floor(sp.z + (r() - 0.5) * 140);
-        if (!w.inside(x, 1, z)) continue;
+        if (!w.loaded(x, z)) continue;
         const y = w.groundBelow(x, CM.WORLD.H - 1, z);
         if (y > 0 && w.get(x, y, z) === B.GRASS && Math.hypot(x - sp.x, z - sp.z) > 8) {
           this.entities.addMob('mouflon', x + 0.5, y + 1, z + 0.5);
@@ -165,9 +167,10 @@
       if (!this.world || this.state !== 'playing') return;
       const p = this.player;
       const data = {
-        v: 1,
+        v: 2,
         seed: this.world.seed,
-        edits: this.world.editsArray(),
+        spawn: this.world.spawn,
+        edits: this.world.editsObject(),
         player: { x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z, yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, stamina: p.stamina },
         inv: this.inventory.serialize(),
         time: this.time,
@@ -183,7 +186,7 @@
     loadSave() {
       try {
         const s = JSON.parse(storageGet(SAVE_KEY));
-        return s && s.v === 1 ? s : null;
+        return s && s.v === 2 ? s : null;
       } catch (e) {
         return null;
       }
@@ -353,7 +356,7 @@
         el.addEventListener('input', upd);
         $(id + '-v').textContent = fmt(this.options[key]);
       };
-      bind('o-rd', 'renderDist', (v) => v + ' tronçons', true);
+      bind('o-rd', 'renderDist', (v) => v + ' tronçons (' + v * 16 + ' blocs)', true);
       bind('o-sens', 'sens', (v) => (+v).toFixed(1), true);
       bind('o-fov', 'fov', (v) => v + '°', true);
       bind('o-vol', 'volume', (v) => v + ' %', true);
@@ -434,17 +437,18 @@
       this.chests.delete(k);
     }
     growSaplings() {
-      const w = this.world, { W, D } = CM.WORLD;
-      for (const i of [...this.saplings]) {
-        if (w.blocks[i] !== B.SAPLING) {
-          this.saplings.delete(i);
+      const w = this.world;
+      for (const key of [...this.saplings]) {
+        const [x, y, z] = key.split(',').map(Number);
+        if (!w.loaded(x, z)) continue;
+        if (w.get(x, y, z) !== B.SAPLING) {
+          this.saplings.delete(key);
           continue;
         }
         if (Math.random() > 1 / 50) continue;
-        const y = Math.floor(i / (W * D)), rem = i - y * W * D, z = Math.floor(rem / W), x = rem - z * W;
         if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
         if (w.growTree(x, y, z, Math.random)) {
-          this.saplings.delete(i);
+          this.saplings.delete(key);
           this.entities.burst(CM.Textures.layer.leaves, x + 0.5, y + 1, z + 0.5, 12, { speed: 2, size: 0.07 });
         }
       }
@@ -553,6 +557,7 @@
       this.daylight = CM.smoothstep(-0.18, 0.22, Math.sin(this.time * Math.PI * 2));
       if (prevDay >= 0.35 && this.daylight < 0.35) this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
       const active = (this.locked || this.forceInput) && !this.ui.invOpen;
+      this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5);
       this.player.update(dt, active ? this.input : this.noInput);
       this.entities.update(dt);
       this.growTimer -= dt;
@@ -576,10 +581,10 @@
       const right = [cy, 0, -sy];
       const up = [sy * sp, cp, cy * sp];
       const fwd = [-sy * cp, sp, -cy * cp];
-      this.batch.reset();
-      this.overlay.reset();
+      this.batch.reset(cam);
+      this.overlay.reset(cam);
       this.hand.reset();
-      this.translucent.reset();
+      this.translucent.reset(cam);
       this.entities.render(this.batch, { right, up }, this.clock);
       // corde du grappin
       if (p.hook) {

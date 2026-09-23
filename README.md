@@ -52,7 +52,8 @@ Pour jouer sans ce guide, décoche *Afficher les objectifs à l'écran* dans les
 
 ## Contenu
 
-- Monde procédural de 256 × 256 × 96 blocs (graine au choix) : plaines, forêts, déserts, montagnes enneigées, océan, grottes, cavernes, minerais (charbon, fer, cristal) et 8 îles célestes.
+- **Monde infini** (graine au choix, 96 blocs de haut) : plaines, forêts, déserts, montagnes enneigées, lacs et océans, grottes, cavernes, minerais (charbon, fer, cristal) et îles célestes un peu partout.
+- Le monde est découpé en tronçons de 16 × 16 blocs, générés à la volée autour du joueur (distance d'affichage réglable jusqu'à 16 tronçons, soit 256 blocs). Les tronçons trop lointains sont retirés de la mémoire, mais **rien n'est perdu** : chaque modification (bloc posé ou cassé, coffre, torche…) est enregistrée et réappliquée quand on revient, comme dans Minecraft.
 - Éclairage par propagation (ciel + blocs), occlusion ambiante, cycle jour/nuit avec soleil, lune, étoiles et nuages cubiques, eau animée et translucide.
 - 32 blocs, 30 objets (dont 16 outils en 4 matériaux), 36 recettes.
 - Créatures : *Mouflons* (passifs : viande, laine) et *Ombres* (hostiles : essence d'ombre).
@@ -67,7 +68,7 @@ style.css         styles de l'interface
 js/util.js        maths, bruit simplex, matrices
 js/blocks.js      blocs, objets, outils, recettes
 js/textures.js    textures pixel-art générées + icônes
-js/world.js       génération du monde, lumière, lancer de rayon
+js/world.js       monde infini par tronçons : génération, lumière, lancer de rayon
 js/mesher.js      maillage des sections 16×16×16 (AO, lumière douce)
 js/renderer.js    rendu WebGL2 (monde, ciel, entités, eau)
 js/entities.js    physique, créatures, objets au sol, particules

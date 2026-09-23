@@ -227,7 +227,7 @@
         'FPS ' + g.fps.toFixed(0) + '\n' +
         'XYZ ' + p.x.toFixed(1) + ' / ' + p.y.toFixed(1) + ' / ' + p.z.toFixed(1) + '\n' +
         'Lumière ciel ' + w.skyAt(fx, fy + 1, fz) + ' · bloc ' + w.blockLightAt(fx, fy + 1, fz) + '\n' +
-        'Sections ' + g.renderer.stats.drawn + ' · faces ' + g.renderer.stats.quads + '\n' +
+        'Tronçons ' + w.chunks.size + ' · sections ' + g.renderer.stats.drawn + ' · faces ' + g.renderer.stats.quads + '\n' +
         'Créatures ' + g.entities.mobs.length + ' · objets ' + g.entities.drops.length + ' · particules ' + g.entities.particles.length + '\n' +
         'Visée ' + (t ? CM.blocks[t.id].name + ' (' + t.x + ',' + t.y + ',' + t.z + ')' : '—') + '\n' +
         'Heure ' + g.time.toFixed(3) + ' · lumière du jour ' + g.daylight.toFixed(2);

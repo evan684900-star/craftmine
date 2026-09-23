@@ -621,7 +621,7 @@
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
       }
       w.setBlock(px, py, pz, stack.id);
-      if (stack.id === B.SAPLING) g.saplings.add(w.idx(px, py, pz));
+      if (stack.id === B.SAPLING) g.saplings.add(px + ',' + py + ',' + pz);
       g.stats.placed[stack.id] = (g.stats.placed[stack.id] || 0) + 1;
       CM.Audio.play('place', { mat: b.sound });
       this.swing = 1;
@@ -667,7 +667,10 @@
     }
 
     respawn() {
-      this.reset(this.game.world.spawn);
+      const w = this.game.world;
+      w.stream(w.spawn.x, w.spawn.z, 2, 0);
+      w.fixSpawn();
+      this.reset(w.spawn);
       this.game.ui.hideDeath();
     }
 

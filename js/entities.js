@@ -200,6 +200,10 @@
 
     updateMob(m, dt) {
       const g = this.game, w = g.world, p = g.player, r = this.rand;
+      if (!w.loaded(m.x, m.z)) {
+        m.dead = true;
+        return;
+      }
       m.age += dt;
       m.hurt = Math.max(0, m.hurt - dt);
       m.knock = Math.max(0, m.knock - dt);
@@ -359,9 +363,10 @@
 
     updateDrop(d, dt) {
       const g = this.game, w = g.world, p = g.player;
+      if (!w.loaded(d.x, d.z)) return; // figé tant que son tronçon n'est pas chargé
       d.age += dt;
       d.pickDelay -= dt;
-      if (d.age > 300) d.dead = true;
+      if (d.age > 600) d.dead = true;
       const inWater = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z)) === B.WATER;
       if (inWater) {
         d.vy += (2 - d.vy) * Math.min(1, dt * 3);
@@ -395,7 +400,7 @@
     // ------------------------------------------------------ apparitions --
     spawnTick() {
       const g = this.game, p = g.player, w = g.world, r = this.rand;
-      const { W, D, H } = CM.WORLD;
+      const { H } = CM.WORLD;
       let nMouf = 0, nOmbre = 0;
       for (const m of this.mobs) {
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
@@ -411,7 +416,7 @@
         for (let t = 0; t < 4; t++) {
           const a = r() * Math.PI * 2, dd = 24 + r() * 30;
           const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
-          if (x < 2 || z < 2 || x >= W - 2 || z >= D - 2) continue;
+          if (!w.loaded(x, z)) continue;
           const y = w.groundBelow(x, H - 1, z);
           if (y > 0 && w.get(x, y, z) === B.GRASS && w.skyAt(x, y + 1, z) >= 14) {
             this.addMob('mouflon', x + 0.5, y + 1, z + 0.5);
@@ -424,7 +429,7 @@
         for (let t = 0; t < 6; t++) {
           const a = r() * Math.PI * 2, dd = 14 + r() * 22;
           const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
-          if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) continue;
+          if (!w.loaded(x, z)) continue;
           if (g.nearDawnHeart(x, z, 48)) continue;
           const yTop = Math.min(H - 3, Math.floor(p.y) + 10);
           for (let y = yTop; y > Math.max(2, Math.floor(p.y) - 16); y--) {
@@ -498,6 +503,7 @@
         }
       }
       for (const d of this.drops) {
+        if (!this.game.world.loaded(d.x, d.z)) continue;
         const l = this.lightAt(d.x, d.y + 0.2, d.z);
         const bob = Math.sin(d.age * 3 + d.spin) * 0.06 + 0.1;
         mat4.compose(this.M, d.x, d.y + bob, d.z, d.age * 1.6 + d.spin, 0, 0, 1);

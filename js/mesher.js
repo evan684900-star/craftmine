@@ -1,7 +1,7 @@
 'use strict';
 // Construction des maillages des sections 16x16x16 (occlusion ambiante + lumière douce).
 (function () {
-  const { W, D, H } = CM.WORLD;
+  const { H } = CM.WORLD;
   const P = 18; // taille de la copie locale avec bordure
   const PP = P * P;
   const BORDER = 255;
@@ -110,33 +110,47 @@
   const sky4 = [0, 0, 0, 0], blk4 = [0, 0, 0, 0], sh4 = [0, 0, 0, 0], ao4 = [0, 0, 0, 0];
   const vtmp = [null, null, null, null];
 
-  function fillPad(world, sx, sy, sz) {
-    const blocks = world.blocks, light = world.light;
-    const ox = sx * 16 - 1, oy = sy * 16 - 1, oz = sz * 16 - 1;
+  // Tables : pour chaque position de la copie locale, tronçon voisin (0..2) et coordonnée locale.
+  const PADC = new Int8Array(P), PADL = new Int8Array(P);
+  for (let p = 0; p < P; p++) {
+    const l = p - 1;
+    PADC[p] = l < 0 ? 0 : l > 15 ? 2 : 1;
+    PADL[p] = l & 15;
+  }
+  const near = new Array(9);
+
+  // Copie la section (cx, sy, cz) et une bordure d'un bloc lue dans les 8 tronçons voisins.
+  function fillPad(world, cx, sy, cz) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) near[(dz + 1) * 3 + dx + 1] = world.chunks.get(CM.ckey(cx + dx, cz + dz)) || null;
+    const oy = sy * 16 - 1;
     let solidCount = 0;
     let p = 0;
     for (let py = 0; py < P; py++) {
       const y = oy + py;
       for (let pz = 0; pz < P; pz++) {
-        const z = oz + pz;
+        const cz3 = PADC[pz] * 3, lz = PADL[pz];
         for (let px = 0; px < P; px++, p++) {
-          const x = ox + px;
           if (y < 0) {
             padId[p] = BORDER;
             padL[p] = 0;
-          } else if (y >= H) {
+            continue;
+          }
+          if (y >= H) {
             padId[p] = 0;
             padL[p] = 0xf0;
-          } else if (x < 0 || x >= W || z < 0 || z >= D) {
+            continue;
+          }
+          const c = near[cz3 + PADC[px]];
+          if (!c) {
             padId[p] = BORDER;
             padL[p] = 0xf0;
-          } else {
-            const i = (y * D + z) * W + x;
-            const id = blocks[i];
-            padId[p] = id;
-            padL[p] = light[i];
-            if (id && px > 0 && px < 17 && py > 0 && py < 17 && pz > 0 && pz < 17) solidCount++;
+            continue;
           }
+          const i = (y << 8) | (lz << 4) | PADL[px];
+          const id = c.blocks[i];
+          padId[p] = id;
+          padL[p] = c.light[i];
+          if (id && px > 0 && px < 17 && py > 0 && py < 17 && pz > 0 && pz < 17) solidCount++;
         }
       }
     }
@@ -160,10 +174,10 @@
     }
   }
 
-  function build(world, sx, sy, sz) {
+  function build(world, cx, sy, cz) {
     opaqueBuf.reset();
     waterBuf.reset();
-    const count = fillPad(world, sx, sy, sz);
+    const count = fillPad(world, cx, sy, cz);
     if (count === 0) return { opaque: null, water: null };
     const defs = CM.blocks;
     const WATER = CM.B.WATER;
