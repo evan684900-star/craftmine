@@ -48,6 +48,7 @@ Il faut un clavier et une souris (le jeu utilise le verrouillage du pointeur). L
 
 Un **journal de quêtes** (en haut à gauche et dans l'onglet *Journal*) guide la progression :
 bois → établi → pioche → pierre → torches → forge → fer → grappin → cristal (sous la couche 20) → essence d'ombre → îles célestes → Cœur d'aube.
+Pour jouer sans ce guide, décoche *Afficher les objectifs à l'écran* dans les Options : le panneau et les notifications d'objectif disparaissent (le journal reste consultable dans l'inventaire).
 
 ## Contenu
 

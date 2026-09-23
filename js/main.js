@@ -27,7 +27,7 @@
   class Game {
     constructor() {
       this.canvas = $('game');
-      this.options = Object.assign({ renderDist: 6, sens: 1, fov: 75, volume: 50, invertY: false }, JSON.parse(storageGet(OPT_KEY) || '{}'));
+      this.options = Object.assign({ renderDist: 6, sens: 1, fov: 75, volume: 50, invertY: false, showQuests: true }, JSON.parse(storageGet(OPT_KEY) || '{}'));
       CM.Textures.buildIcons();
       CM.Mesher.init();
       this.renderer = new CM.Renderer(this.canvas);
@@ -70,6 +70,7 @@
       const o = this.options;
       this.renderer.renderDist = o.renderDist;
       CM.Audio.setVolume(o.volume / 100);
+      $('objective').classList.toggle('hidden', !o.showQuests);
       storageSet(OPT_KEY, JSON.stringify(o));
     }
 
@@ -359,6 +360,11 @@
       $('o-inv').checked = this.options.invertY;
       $('o-inv').addEventListener('change', (e) => {
         this.options.invertY = e.target.checked;
+        this.applyOptions();
+      });
+      $('o-quests').checked = this.options.showQuests;
+      $('o-quests').addEventListener('change', (e) => {
+        this.options.showQuests = e.target.checked;
         this.applyOptions();
       });
     }

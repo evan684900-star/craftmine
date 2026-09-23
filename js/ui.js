@@ -196,7 +196,7 @@
       const done = idx < 0 ? OBJECTIVES.length : idx;
       if (this.lastObj !== undefined && done > this.lastObj) {
         const o = OBJECTIVES[this.lastObj];
-        if (o && o.done(g)) {
+        if (o && o.done(g) && g.options.showQuests) {
           this.toast('Objectif accompli : ' + o.t, 'good');
           CM.Audio.play('objective');
           $('objective').classList.remove('flash');
