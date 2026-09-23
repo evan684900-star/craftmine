@@ -91,6 +91,12 @@
           <button id="btn-help">Comment jouer</button>
           <button id="btn-options">Options</button>
         </div>
+        <div class="row2">
+          <button id="btn-export" title="Télécharge un fichier .zip contenant ta partie">Exporter la sauvegarde</button>
+          <button id="btn-import" title="Ouvre un fichier .zip exporté depuis un autre appareil">Importer une sauvegarde</button>
+        </div>
+        <input id="import-file" type="file" accept=".zip,.json,application/zip,application/json" hidden />
+        <div id="menu-msg" class="menu-msg hidden"></div>
       </div>
       <div id="help" class="help hidden"></div>
       <div class="foot">Minage, fabrication et survie — avec un grappin, des combos, des outils qui progressent et des Ombres qui craignent la lumière.</div>
@@ -127,6 +133,7 @@
         <button id="btn-resume" class="big">Reprendre</button>
         <button id="btn-options2">Options</button>
         <button id="btn-save">Sauvegarder</button>
+        <button id="btn-export2">Exporter la sauvegarde (.zip)</button>
         <button id="btn-quit">Sauvegarder et quitter</button>
       </div>
     </div>
@@ -170,6 +177,7 @@
   </div>
 
   <script src="js/util.js"></script>
+  <script src="js/zip.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
   <script src="js/world.js"></script>

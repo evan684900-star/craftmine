@@ -153,6 +153,10 @@ button:active { transform: translateY(2px); box-shadow: 0 1px 0 #141827; }
 button.big { font-size: 18px; padding: 13px; background: linear-gradient(180deg, #e9a13b, #c4721f); color: #1b1004; box-shadow: 0 3px 0 #6e3a0c; border-color: rgba(255, 220, 150, 0.5); }
 button.big:hover { background: linear-gradient(180deg, #f6b24e, #d17f28); }
 .seed-row { display: flex; align-items: center; gap: 8px; }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.menu-msg { padding: 9px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); }
+.menu-msg.good { border-color: var(--green); color: #d6ffcc; background: rgba(127, 220, 106, 0.1); }
+.menu-msg.warn { border-color: var(--red); color: #ffc0c0; background: rgba(255, 90, 90, 0.1); }
 .seed-row label { color: var(--muted); font-size: 14px; }
 input[type='text'], #seed {
   flex: 1; font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.4); color: var(--text);

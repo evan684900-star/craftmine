@@ -163,10 +163,10 @@
     }
 
     // ----------------------------------------------------- sauvegarde ----
-    save(silent) {
-      if (!this.world || this.state !== 'playing') return;
+    // État complet de la partie en cours (ce qui est sauvegardé / exporté).
+    saveData() {
       const p = this.player;
-      const data = {
+      return {
         v: 2,
         seed: this.world.seed,
         spawn: this.world.spawn,
@@ -179,10 +179,95 @@
         dawnHearts: this.dawnHearts,
         victory: this.victory,
         chests: Object.fromEntries(this.chests),
+        savedAt: new Date().toISOString(),
       };
-      const ok = storageSet(SAVE_KEY, JSON.stringify(data));
+    }
+    save(silent) {
+      if (!this.world || this.state !== 'playing') return;
+      const ok = storageSet(SAVE_KEY, JSON.stringify(this.saveData()));
       if (!silent) this.ui.toast(ok ? 'Partie sauvegardée' : 'Sauvegarde impossible (stockage plein ou bloqué)', ok ? 'good' : 'warn');
     }
+    // ------------------------------------------- export / import (.zip) ---
+    async exportSave(data) {
+      if (!data) {
+        this.menuMsg("Aucune sauvegarde à exporter : lance d'abord une partie.", 'warn');
+        return;
+      }
+      const day = (data.dayCount || 0) + 1;
+      const stamp = new Date().toISOString().slice(0, 10);
+      const readme =
+        'Sauvegarde CraftMine — L\'Aube des Éclats\r\n' +
+        '=========================================\r\n\r\n' +
+        'Graine du monde : ' + data.seed + '\r\n' +
+        'Jour : ' + day + '\r\n' +
+        'Exportée le : ' + new Date().toLocaleString('fr-FR') + '\r\n\r\n' +
+        'Pour retrouver cette partie sur un autre appareil :\r\n' +
+        '1. Ouvre CraftMine (index.html) dans le navigateur.\r\n' +
+        '2. Dans le menu principal, clique sur « Importer une sauvegarde ».\r\n' +
+        '3. Choisis ce fichier .zip, puis clique sur « Continuer ».\r\n';
+      try {
+        const blob = await CM.Zip.create([
+          { name: 'craftmine-sauvegarde.json', data: JSON.stringify(data) },
+          { name: 'LISEZMOI.txt', data: readme },
+        ]);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'craftmine-sauvegarde-jour' + day + '-' + stamp + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        const msg = 'Sauvegarde exportée : ' + a.download;
+        if (this.state === 'playing') this.ui.toast(msg, 'good');
+        else this.menuMsg(msg, 'good');
+      } catch (err) {
+        console.error(err);
+        this.menuMsg("L'export a échoué : " + err.message, 'warn');
+      }
+    }
+
+    async importSave(file) {
+      try {
+        const buf = await file.arrayBuffer();
+        const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+        let text;
+        if (head[0] === 0x50 && head[1] === 0x4b) {
+          const entries = await CM.Zip.read(buf);
+          const e = entries.find((x) => /craftmine-sauvegarde\.json$/i.test(x.name)) || entries.find((x) => /\.json$/i.test(x.name));
+          if (!e) throw new Error('aucune sauvegarde CraftMine dans ce fichier');
+          text = new TextDecoder().decode(e.data);
+        } else text = new TextDecoder().decode(buf);
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          throw new Error("le fichier n'est pas une sauvegarde CraftMine");
+        }
+        if (data && data.v === 1) throw new Error("cette sauvegarde vient d'une ancienne version du jeu (monde limité) et ne peut plus être chargée");
+        if (!data || data.v !== 2 || !Number.isFinite(data.seed) || typeof data.edits !== 'object' || !data.player) {
+          throw new Error("le fichier n'est pas une sauvegarde CraftMine valide");
+        }
+        const existing = this.loadSave();
+        if (existing && !confirm('Remplacer la partie actuelle de cet appareil (jour ' + ((existing.dayCount || 0) + 1) + ') par la sauvegarde importée ?')) return;
+        if (!storageSet(SAVE_KEY, JSON.stringify(data))) {
+          // stockage indisponible : on lance directement la partie importée
+          this.startWorld(data.seed, data);
+          return;
+        }
+        this.refreshMenu();
+        this.menuMsg('Sauvegarde importée (jour ' + ((data.dayCount || 0) + 1) + ', graine ' + data.seed + '). Clique sur « Continuer » pour jouer !', 'good');
+      } catch (err) {
+        console.error(err);
+        this.menuMsg("Import impossible : " + err.message + '.', 'warn');
+      }
+    }
+
+    menuMsg(text, type) {
+      const el = $('menu-msg');
+      el.textContent = text;
+      el.className = 'menu-msg ' + (type || '');
+    }
+
     loadSave() {
       try {
         const s = JSON.parse(storageGet(SAVE_KEY));
@@ -315,6 +400,17 @@
         this.startWorld(seed, null);
       });
       on('btn-help', () => $('help').classList.toggle('hidden'));
+      on('btn-export', () => this.exportSave(this.loadSave()));
+      on('btn-export2', () => {
+        this.save(true);
+        this.exportSave(this.saveData());
+      });
+      on('btn-import', () => $('import-file').click());
+      $('import-file').addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (f) this.importSave(f);
+      });
       on('btn-options', () => this.openOptions('menu'));
       on('btn-options2', () => this.openOptions('pause'));
       on('btn-opt-back', () => {
@@ -374,6 +470,7 @@
 
     refreshMenu() {
       const s = this.loadSave();
+      $('btn-export').disabled = !s;
       $('btn-continue').classList.toggle('hidden', !s);
       if (s) $('btn-continue').textContent = 'Continuer (jour ' + ((s.dayCount || 0) + 1) + ')';
     }

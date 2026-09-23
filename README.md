@@ -16,6 +16,16 @@ Aucune dépendance, aucune image ni aucun son externe : le moteur WebGL2, les te
 
 Il faut un clavier et une souris (le jeu utilise le verrouillage du pointeur). La partie est sauvegardée automatiquement dans le navigateur (localStorage).
 
+### Changer d'appareil
+
+La partie est enregistrée dans le navigateur. Pour la transférer :
+
+1. **Exporter la sauvegarde** (menu principal ou menu pause) télécharge un fichier `.zip` (par exemple `craftmine-sauvegarde-jour5-2026-09-23.zip`).
+2. Copie ce fichier sur l'autre appareil (clé USB, e-mail, cloud…).
+3. Sur l'autre appareil, ouvre le jeu et clique sur **Importer une sauvegarde** dans le menu principal, choisis le `.zip`, puis **Continuer**.
+
+Le zip contient la sauvegarde (`craftmine-sauvegarde.json`) et un petit `LISEZMOI.txt`. Il reste lisible même s'il a été décompressé puis recompressé avec un autre logiciel.
+
 ## Commandes
 
 | Touche | Action |
@@ -66,6 +76,7 @@ Pour jouer sans ce guide, décoche *Afficher les objectifs à l'écran* dans les
 index.html        page, interface (HUD, inventaire, menus)
 style.css         styles de l'interface
 js/util.js        maths, bruit simplex, matrices
+js/zip.js         lecture/écriture de fichiers .zip (export/import des sauvegardes)
 js/blocks.js      blocs, objets, outils, recettes
 js/textures.js    textures pixel-art générées + icônes
 js/world.js       monde infini par tronçons : génération, lumière, lancer de rayon
