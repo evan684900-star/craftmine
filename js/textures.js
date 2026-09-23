@@ -490,6 +490,29 @@
   });
   make('skin', (d, r) => fill(d, r, [214, 168, 128], 5));
   make('sleeve', (d, r) => fill(d, r, [58, 110, 168], 6));
+  // autres joueurs (multijoueur) : visage, cheveux, pantalon
+  const HAIR = [92, 60, 34];
+  make('player_face', (d, r) => {
+    fill(d, r, [214, 168, 128], 5);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(HAIR, r, 8));
+    for (const x of [0, 1, 14, 15]) put(d, x, 4, vary(HAIR, r, 8));
+    for (const ex of [3, 10]) {
+      put(d, ex, 8, [255, 255, 255]); put(d, ex + 1, 8, [255, 255, 255]);
+      put(d, ex + (ex < 8 ? 1 : 0), 8, [52, 72, 150]);
+      put(d, ex, 9, [230, 230, 236]); put(d, ex + 1, 9, [230, 230, 236]);
+    }
+    put(d, 7, 10, [190, 140, 104]); put(d, 8, 10, [190, 140, 104]);
+    for (let x = 5; x < 11; x++) put(d, x, 12, [150, 86, 70]);
+  });
+  make('player_head', (d, r) => {
+    fill(d, r, [214, 168, 128], 5);
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 16; x++) if (y < 4 || r() < 0.5) put(d, x, y, vary(HAIR, r, 8));
+  });
+  make('player_hair', (d, r) => fill(d, r, HAIR, 9));
+  make('player_pants', (d, r) => {
+    fill(d, r, [44, 62, 118], 7);
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) if (r() < 0.3) put(d, x, y, [60, 82, 146]);
+  });
   make('white', (d, r) => fill(d, r, [255, 255, 255], 0));
   make('ropeline', (d, r) => {
     for (let y = 0; y < 16; y++)

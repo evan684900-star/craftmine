@@ -38,6 +38,10 @@
       <div id="obj-desc"></div>
     </div>
     <div id="clock"></div>
+    <div id="netinfo" class="hidden"></div>
+    <div id="tags"></div>
+    <div id="chat"></div>
+    <input id="chat-input" type="text" class="hidden" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Message aux autres joueurs (Entrée pour envoyer, Échap pour fermer)" />
     <div id="toasts"></div>
     <div id="pickups"></div>
     <div id="debug" class="hidden"></div>
@@ -67,6 +71,7 @@
     <div class="t-top">
       <button id="t-inv" title="Inventaire">🎒</button>
       <button id="t-drop" title="Jeter l'objet">🗑</button>
+      <button id="t-chat" class="net-only" title="Tchat">💬</button>
       <button id="t-pause" title="Pause">⏸</button>
     </div>
     <div class="t-right">
@@ -159,6 +164,7 @@
       <div id="menu-main" class="menu-col">
         <button id="btn-continue" class="big hidden">Continuer</button>
         <button id="btn-new" class="big">Nouveau monde</button>
+        <button id="btn-multi" class="big">Multijoueur</button>
         <div class="row2">
           <button id="btn-help">Comment jouer</button>
           <button id="btn-options">Options</button>
@@ -219,6 +225,56 @@
     </div>
   </div>
 
+  <div id="multi" class="screen hidden">
+    <div class="menu-box">
+      <h1>Multijoueur</h1>
+      <div class="nw-grid">
+        <label for="mp-name">Ton pseudo</label>
+        <input id="mp-name" type="text" maxlength="16" autocomplete="off" placeholder="ex. Évan" />
+        <label for="mp-code">Code de la partie</label>
+        <input id="mp-code" type="text" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ex. K7F2Q" class="code-input" />
+      </div>
+      <div id="mp-status" class="menu-msg hidden"></div>
+      <div class="row2 mp-row">
+        <button id="btn-mp-back">Retour</button>
+        <button id="btn-mp-join" class="big">Rejoindre</button>
+      </div>
+      <div class="small-note left">
+        <b>Pour héberger une partie</b> : lance ton monde (Nouveau monde ou Continuer), ouvre le menu <b>Pause</b> et clique sur <b>« Ouvrir aux amis »</b>. Le jeu te donne un code à partager.<br>
+        Gratuit et sans compte : les appareils se connectent directement entre eux. L’hôte doit garder le jeu ouvert pendant la partie.
+      </div>
+    </div>
+  </div>
+
+  <div id="hostdlg" class="screen hidden">
+    <div class="menu-box">
+      <h1>Ouvrir aux amis</h1>
+      <div id="host-setup">
+        <div class="nw-grid">
+          <label for="host-name">Ton pseudo</label>
+          <input id="host-name" type="text" maxlength="16" autocomplete="off" />
+          <label for="host-pvp">Combats entre joueurs</label>
+          <input id="host-pvp" type="checkbox" />
+        </div>
+        <div class="small-note left">Tes amis rejoindront ce monde avec le même mode de jeu et la même difficulté. Leur progression (inventaire, position) est gardée dans ta sauvegarde.</div>
+        <div class="row2">
+          <button id="btn-host-cancel">Retour</button>
+          <button id="btn-host-open" class="big">Ouvrir la partie</button>
+        </div>
+      </div>
+      <div id="host-ready" class="hidden">
+        <div class="small-note">Code de la partie</div>
+        <div id="host-code" class="code"></div>
+        <div class="small-note left">Tes amis ouvrent CraftMine, cliquent sur <b>Multijoueur</b> et tapent ce code (ou ouvrent le lien d’invitation). Garde le jeu ouvert et au premier plan : la partie s’arrête quand tu quittes.</div>
+        <div class="row2">
+          <button id="btn-host-copy">Partager le lien</button>
+          <button id="btn-host-done" class="big">Retour au jeu</button>
+        </div>
+      </div>
+      <div id="host-status" class="menu-msg hidden"></div>
+    </div>
+  </div>
+
   <div id="loading" class="screen hidden">
     <div class="menu-box">
       <div class="logo small">CRAFT<span>MINE</span></div>
@@ -240,6 +296,7 @@
       <h1>Pause</h1>
       <div class="menu-col">
         <button id="btn-resume" class="big">Reprendre</button>
+        <button id="btn-lan">Ouvrir aux amis (multijoueur)</button>
         <button id="btn-options2">Options</button>
         <button id="btn-save">Sauvegarder</button>
         <button id="btn-export2">Exporter la sauvegarde (.zip)</button>
@@ -297,6 +354,7 @@
   <script src="js/entities.js"></script>
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>
+  <script src="js/net.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>

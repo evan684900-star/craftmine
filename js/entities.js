@@ -113,9 +113,12 @@
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
   };
 
+  let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
+
   class Mob {
     constructor(type, x, y, z) {
       const def = MOBS[type];
+      this.uid = NEXT_UID++;
       this.type = type;
       this.x = x; this.y = y; this.z = z;
       this.vx = 0; this.vy = 0; this.vz = 0;
@@ -141,6 +144,8 @@
       this.spawnTimer = 0;
       this.tnts = [];
       this.nightfall = false;
+      this.remote = false; // invité : l'hôte simule, on ne fait qu'afficher
+      this.plist = [];
       this.rand = Math.random;
       this.M = mat4.create();
       this.P = mat4.create();
@@ -154,18 +159,26 @@
     }
     // TNT allumée : tombe, clignote puis explose.
     addTnt(x, y, z, fuse) {
-      this.tnts.push({ x, y, z, vx: 0, vy: 3, vz: 0, hw: 0.49, h: 0.98, fuse, onGround: false });
+      if (this.remote) {
+        this.game.net.requestTnt(x, y, z, fuse);
+        return;
+      }
+      this.tnts.push({ uid: NEXT_UID++, x, y, z, vx: 0, vy: 3, vz: 0, hw: 0.49, h: 0.98, fuse, onGround: false });
     }
 
     addMob(type, x, y, z) {
       const m = new Mob(type, x, y, z);
-      this.mobs.push(m);
+      if (!this.remote) this.mobs.push(m);
       return m;
     }
     addDrop(id, count, x, y, z, extra, vel) {
+      if (this.remote) {
+        this.game.net.requestDrop(id, count, x, y, z, extra, vel);
+        return;
+      }
       const r = this.rand;
       this.drops.push({
-        id, count, extra: extra || null,
+        uid: NEXT_UID++, id, count, extra: extra || null,
         x, y, z, hw: 0.125, h: 0.25,
         vx: vel ? vel[0] : (r() - 0.5) * 3,
         vy: vel ? vel[1] : 3 + r() * 2,
@@ -209,11 +222,33 @@
     }
 
     // ------------------------------------------------------ mise à jour --
+    // Joueurs simulés (l'hôte voit aussi ses invités).
+    players() {
+      const g = this.game;
+      return g.net && g.net.isHost ? g.net.simPlayers() : [g.player];
+    }
+    nearestPlayer(x, y, z) {
+      let best = null, bd = Infinity;
+      for (const p of this.plist) {
+        const d = Math.hypot(p.x - x, (p.y - y) * 0.5, p.z - z) + (p.alive ? 0 : 1e6);
+        if (d < bd) {
+          bd = d;
+          best = p;
+        }
+      }
+      return best || this.game.player;
+    }
+
     update(dt) {
       const g = this.game;
-      for (const m of this.mobs) this.updateMob(m, dt);
-      for (const d of this.drops) this.updateDrop(d, dt);
       const w = g.world;
+      if (this.remote) this.updateRemote(dt);
+      else {
+        this.plist = this.players();
+        for (const m of this.mobs) this.updateMob(m, dt);
+        for (const d of this.drops) this.updateDrop(d, dt);
+        this.updateTnts(dt);
+      }
       for (const p of this.particles) {
         p.life -= dt;
         p.vy -= p.grav * dt;
@@ -228,6 +263,21 @@
           p.z = nz;
         }
       }
+      this.tnts = this.tnts.filter((t) => !t.dead);
+      this.mobs = this.mobs.filter((m) => !m.dead);
+      this.drops = this.drops.filter((d) => !d.dead);
+      this.particles = this.particles.filter((p) => p.life > 0);
+      if (this.particles.length > 1500) this.particles.splice(0, this.particles.length - 1500);
+      if (this.remote) return;
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) {
+        this.spawnTimer = 1;
+        this.spawnTick();
+      }
+    }
+
+    updateTnts(dt) {
+      const g = this.game, w = g.world;
       for (const t of this.tnts) {
         t.fuse -= dt;
         t.vy = Math.max(t.vy - 28 * dt, -40);
@@ -238,20 +288,104 @@
           g.explode(t.x, t.y + 0.5, t.z, 3.3);
         } else if (this.rand() < dt * 20) this.burst(CM.Textures.layer.smoke, t.x, t.y + 1.1, t.z, 1, { speed: 0.5, grav: -2, life: 0.6, size: 0.12 });
       }
-      this.tnts = this.tnts.filter((t) => !t.dead);
-      this.mobs = this.mobs.filter((m) => !m.dead);
-      this.drops = this.drops.filter((d) => !d.dead);
-      this.particles = this.particles.filter((p) => p.life > 0);
-      if (this.particles.length > 1500) this.particles.splice(0, this.particles.length - 1500);
-      this.spawnTimer -= dt;
-      if (this.spawnTimer <= 0) {
-        this.spawnTimer = 1;
-        this.spawnTick();
+    }
+
+    // ------------------------------------------ invité (multijoueur) --
+    // Instantané envoyé par l'hôte : { m: créatures, d: objets au sol, tn: TNT }.
+    applySnapshot(s) {
+      const oldM = new Map(this.mobs.map((m) => [m.uid, m]));
+      this.mobs = [];
+      for (const a of s.m || []) {
+        const [uid, type, x, y, z, yaw, fl] = a;
+        if (!MOBS[type]) continue;
+        let m = oldM.get(uid);
+        if (!m || m.type !== type) {
+          m = new Mob(type, x, y, z);
+          m.uid = uid;
+          m.yaw = yaw;
+        }
+        m.tx = x; m.ty = y; m.tz = z; m.tyaw = yaw;
+        if (fl & 1 && !m.hflag) {
+          m.hurt = Math.max(m.hurt, 0.35);
+          // coup donné par quelqu'un d'autre : on l'entend aussi
+          const p = this.game.player;
+          if (!(this.game.clock - (m.localHit || -9) < 0.6) && Math.hypot(p.x - x, p.z - z) < 20) CM.Audio.play(type === 'ombre' ? 'shadow_hurt' : 'hit');
+        }
+        m.hflag = fl & 1;
+        m.ai.chasing = !!(fl & 2);
+        this.mobs.push(m);
+      }
+      const oldD = new Map(this.drops.map((d) => [d.uid, d]));
+      this.drops = [];
+      for (const [uid, id, count, x, y, z] of s.d || []) {
+        if (!CM.itemInfo(id)) continue;
+        let d = oldD.get(uid);
+        if (!d) d = { uid, id, x, y, z, age: 0, spin: this.rand() * 6, hw: 0.125, h: 0.25 };
+        d.id = id;
+        d.count = count;
+        d.tx = x; d.ty = y; d.tz = z;
+        this.drops.push(d);
+      }
+      const oldT = new Map(this.tnts.map((t) => [t.uid, t]));
+      this.tnts = [];
+      for (const [uid, x, y, z, fuse] of s.tn || []) {
+        let t = oldT.get(uid);
+        if (!t) t = { uid, x, y, z };
+        t.tx = x; t.ty = y; t.tz = z;
+        t.fuse = fuse;
+        this.tnts.push(t);
+      }
+    }
+
+    // Invité : déplacements lissés vers les positions reçues + ambiance (sons, étincelles).
+    updateRemote(dt) {
+      const g = this.game, p = g.player, r = this.rand;
+      const k = Math.min(1, dt * 12);
+      const lerp = (o) => {
+        if (Math.hypot(o.tx - o.x, o.ty - o.y, o.tz - o.z) > 8) {
+          o.x = o.tx; o.y = o.ty; o.z = o.tz;
+        } else {
+          o.x += (o.tx - o.x) * k;
+          o.y += (o.ty - o.y) * k;
+          o.z += (o.tz - o.z) * k;
+        }
+      };
+      for (const m of this.mobs) {
+        const ox = m.x, oz = m.z;
+        lerp(m);
+        let d = m.tyaw - m.yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        m.yaw += d * k;
+        const sp = Math.hypot(m.x - ox, m.z - oz) / Math.max(dt, 1e-3);
+        m.walk += Math.min(sp, 8) * dt * 3.2;
+        m.moving = sp > 0.3;
+        m.age += dt;
+        m.hurt = Math.max(0, m.hurt - dt);
+        const dist = Math.hypot(p.x - m.x, p.z - m.z);
+        if (MOBS[m.type].passive) {
+          if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
+        } else {
+          if (dist < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
+          if (g.daylight < 0.4 && dist < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
+        }
+      }
+      for (const d of this.drops) {
+        lerp(d);
+        d.age += dt;
+      }
+      for (const t of this.tnts) {
+        lerp(t);
+        t.fuse = Math.max(0, t.fuse - dt);
+        if (r() < dt * 20) this.burst(CM.Textures.layer.smoke, t.x, t.y + 1.1, t.z, 1, { speed: 0.5, grav: -2, life: 0.6, size: 0.12 });
       }
     }
 
     updateMob(m, dt) {
-      const g = this.game, w = g.world, p = g.player, r = this.rand;
+      const g = this.game, w = g.world, r = this.rand;
+      const p = this.nearestPlayer(m.x, m.y, m.z);
+      const lp = g.player;
+      const distL = Math.hypot(lp.x - m.x, lp.z - m.z); // distance au joueur de cet écran (sons, effets)
       if (!w.loaded(m.x, m.z)) {
         m.dead = true;
         return;
@@ -303,7 +437,7 @@
             tvz = dz * speed;
           }
         }
-        if (distP < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
+        if (distL < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
       } else if (m.type === 'ombre') {
         const bl = w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
         const sky = w.skyAt(fx, Math.floor(m.y + 1.5), fz);
@@ -311,7 +445,7 @@
         if (g.daylight > 0.45 && sky >= 12) {
           this.hurtMob(m, 4 * dt, null, true);
           if (r() < dt * 12) this.burst(CM.Textures.layer.smoke, m.x, m.y + 1.2, m.z, 1, { speed: 0.6, grav: -2, life: 1, size: 0.25 });
-          if (r() < dt * 2) CM.Audio.play('burn');
+          if (distL < 24 && r() < dt * 2) CM.Audio.play('burn');
         }
         // craint la lumière des torches
         if (bl >= 9) {
@@ -357,9 +491,9 @@
           m.ai.attackCd = 1.1;
           p.damage(3, m.x, m.z, 'Une Ombre');
         }
-        if (distP < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
+        if (distL < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
         // la nuit, de petites étincelles violettes trahissent leur présence
-        if (g.daylight < 0.4 && distP < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
+        if (g.daylight < 0.4 && distL < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
       }
 
       if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz)) jump = true;
@@ -392,7 +526,19 @@
       if (m.y < -20) m.dead = true;
     }
 
-    hurtMob(m, dmg, src, silent) {
+    // by : joueur à l'origine du coup (autre joueur en multijoueur).
+    hurtMob(m, dmg, src, silent, by) {
+      const g = this.game;
+      if (this.remote) {
+        // invité : l'hôte applique le coup, on montre seulement l'impact tout de suite
+        if (!silent) {
+          m.hurt = 0.35;
+          m.localHit = g.clock;
+          CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
+        }
+        g.net.hitMob(m, dmg);
+        return;
+      }
       m.hp -= dmg;
       if (!silent) {
         m.hurt = 0.35;
@@ -404,39 +550,48 @@
           m.vy = 5;
           m.knock = 0.3;
         }
-        CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
+        if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
         if (m.type === 'boar') m.ai.angry = 12;
         else if (MOBS[m.type].passive) m.ai.flee = 5;
       }
-      if (m.hp <= 0 && !m.dead) this.killMob(m);
+      if (m.hp <= 0 && !m.dead) this.killMob(m, by);
     }
 
-    killMob(m) {
+    killMob(m, by) {
       m.dead = true;
       const r = this.rand;
       const g = this.game;
-      g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
+      if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type });
+      else g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
       if (m.type === 'mouflon') {
         this.addDrop(I.RAW_MEAT, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
         if (r() < 0.7) this.addDrop(B.WOOL, 1, m.x, m.y + 0.5, m.z);
         if (r() < 0.35) this.addDrop(I.LEATHER, 1, m.x, m.y + 0.5, m.z);
-        this.burst(CM.Textures.layer.mouflon_wool, m.x, m.y + 0.6, m.z, 16, { speed: 3 });
       } else if (m.type === 'boar') {
         this.addDrop(I.RAW_MEAT, 1 + Math.floor(r() * 3), m.x, m.y + 0.5, m.z);
         if (r() < 0.7) this.addDrop(I.LEATHER, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.5, m.z);
-        this.burst(CM.Textures.layer.boar_hide, m.x, m.y + 0.5, m.z, 14, { speed: 3 });
       } else if (m.type === 'penguin') {
         this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
-        this.burst(CM.Textures.layer.white, m.x, m.y + 0.5, m.z, 14, { speed: 3, size: 0.06 });
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.8, m.z);
-        this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
-        this.burst(CM.Textures.layer.ombre_face, m.x, m.y + 1, m.z, 10, { speed: 4, emissive: true });
+      }
+      this.killFx(m.type, m.x, m.y, m.z);
+      if (g.net) g.net.fx({ k: 'kill', ty: m.type, x: m.x, y: m.y, z: m.z });
+    }
+    // Nuage de particules à la mort d'une créature.
+    killFx(type, x, y, z) {
+      const L = CM.Textures.layer;
+      if (type === 'mouflon') this.burst(L.mouflon_wool, x, y + 0.6, z, 16, { speed: 3 });
+      else if (type === 'boar') this.burst(L.boar_hide, x, y + 0.5, z, 14, { speed: 3 });
+      else if (type === 'penguin') this.burst(L.white, x, y + 0.5, z, 14, { speed: 3, size: 0.06 });
+      else {
+        this.burst(L.smoke, x, y + 1, z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
+        this.burst(L.ombre_face, x, y + 1, z, 10, { speed: 4, emissive: true });
       }
     }
 
     updateDrop(d, dt) {
-      const g = this.game, w = g.world, p = g.player;
+      const g = this.game, w = g.world;
       if (!w.loaded(d.x, d.z)) return; // figé tant que son tronçon n'est pas chargé
       d.age += dt;
       d.pickDelay -= dt;
@@ -445,13 +600,25 @@
       if (inWater) {
         d.vy += (2 - d.vy) * Math.min(1, dt * 3);
       } else d.vy -= 18 * dt;
-      const dx = p.x - d.x, dy = p.y + 0.8 - d.y, dz = p.z - d.z;
-      const dist = Math.hypot(dx, dy, dz);
-      if (p.alive && d.pickDelay <= 0 && dist < 3) {
+      // le joueur le plus proche l'attire (un invité seulement s'il a de la place)
+      let p = null, dist = 3;
+      for (const q of this.plist) {
+        if (!q.alive || (q !== g.player && !q.canTake(d.id))) continue;
+        const dd = Math.hypot(q.x - d.x, q.y + 0.8 - d.y, q.z - d.z);
+        if (dd < dist) {
+          dist = dd;
+          p = q;
+        }
+      }
+      if (p && d.pickDelay <= 0) {
+        const dx = p.x - d.x, dy = p.y + 0.8 - d.y, dz = p.z - d.z;
         d.vx += (dx / dist) * 30 * dt;
         d.vy += (dy / dist) * 30 * dt + 18 * dt;
         d.vz += (dz / dist) * 30 * dt;
-        if (dist < 1.0) {
+        if (dist < 1.0 && p !== g.player) {
+          g.net.give(p, d);
+          d.dead = true;
+        } else if (dist < 1.0) {
           const left = g.inventory.add(d.id, d.count, d.extra);
           if (left < d.count) {
             CM.Audio.play('pop');
@@ -473,18 +640,31 @@
 
     // ------------------------------------------------------ apparitions --
     spawnTick() {
-      const g = this.game, p = g.player, w = g.world, r = this.rand;
+      const g = this.game, w = g.world, r = this.rand;
+      const pls = this.plist;
+      // disparition : trop loin de tous les joueurs
+      for (const m of this.mobs) {
+        let dist = Infinity;
+        for (const q of pls) dist = Math.min(dist, Math.hypot(m.x - q.x, m.z - q.z));
+        if (dist > (MOBS[m.type].passive ? 110 : 70)) m.dead = true;
+      }
+      const nightfall = this.nightfall;
+      this.nightfall = false;
+      const alive = pls.filter((q) => q.alive);
+      for (const p of alive.length ? alive : [g.player]) this.spawnAround(p, w, r, nightfall);
+    }
+
+    // Apparitions autour d'un joueur (chaque joueur a son propre voisinage).
+    spawnAround(p, w, r, nightfall) {
+      const g = this.game;
       const { H } = CM.WORLD;
       let nMouf = 0, nOmbre = 0;
       for (const m of this.mobs) {
+        if (m.dead) continue;
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
         if (MOBS[m.type].passive) {
-          if (dist > 110) m.dead = true;
-          else nMouf++;
-        } else {
-          if (dist > 70) m.dead = true;
-          else nOmbre++;
-        }
+          if (dist <= 110) nMouf++;
+        } else if (dist <= 70) nOmbre++;
       }
       if (nMouf < 9 && r() < 0.3) {
         for (let t = 0; t < 4; t++) {
@@ -506,10 +686,7 @@
       const maxO = Math.round(Math.min(16, (night ? 6 : 3) + g.dayCount * 0.7) * dif);
       // tombée de la nuit : une première vague apparaît d'un coup
       let tries = nOmbre < maxO && p.alive && r() < 0.8 ? 1 : 0;
-      if (this.nightfall) {
-        this.nightfall = false;
-        tries = Math.max(0, Math.min(maxO - nOmbre, 3 + Math.round(dif)));
-      }
+      if (nightfall) tries = Math.max(0, Math.min(maxO - nOmbre, 3 + Math.round(dif)));
       for (let n = 0; n < tries; n++) this.spawnOmbre(p, w, r);
     }
 

@@ -145,7 +145,7 @@
       e.preventDefault();
       CM.Audio.init();
       const g = this.game;
-      if (g.state !== 'playing' || g.paused || g.ui.invOpen) return;
+      if (g.state !== 'playing' || g.paused || g.ui.invOpen || g.net.chatOpen) return;
       try {
         e.target.setPointerCapture(e.pointerId);
       } catch (err) {
@@ -233,7 +233,7 @@
     frame() {
       if (!this.enabled) return;
       const g = this.game, inp = g.input, K = g.binds;
-      const active = g.state === 'playing' && !g.paused && !g.ui.invOpen;
+      const active = g.state === 'playing' && !g.paused && !g.ui.invOpen && !g.net.chatOpen;
       inp.analog = active && (this.analog.x || this.analog.y) ? this.analog : null;
       // boutons à bascule (on ne touche pas au clavier s'ils sont éteints)
       if (this.sneak || this.sneakSet) inp.keys[K.sneak] = active && this.sneak;

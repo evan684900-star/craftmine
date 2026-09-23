@@ -1249,19 +1249,28 @@
 
     // Génère les tronçons manquants autour d'un point (les plus proches d'abord)
     // et décharge les tronçons trop lointains. Renvoie le nombre restant à générer.
-    stream(px, pz, radius, budgetMs) {
+    // others : autres centres à garder chargés ([x, z, rayon], joueurs en multijoueur).
+    stream(px, pz, radius, budgetMs, others) {
       const t0 = performance.now();
-      const pcx = Math.floor(px / 16), pcz = Math.floor(pz / 16);
+      const centers = [[Math.floor(px / 16), Math.floor(pz / 16), radius]];
+      if (others) for (const [x, z, r] of others) centers.push([Math.floor(x / 16), Math.floor(z / 16), r]);
       const cand = [];
-      const r2 = (radius + 0.5) * (radius + 0.5);
-      for (let dz = -radius; dz <= radius; dz++)
-        for (let dx = -radius; dx <= radius; dx++) {
-          const d2 = dx * dx + dz * dz;
-          if (d2 > r2) continue;
-          const cx = pcx + dx, cz = pcz + dz;
-          if (Math.abs(cx) > LIMIT || Math.abs(cz) > LIMIT) continue;
-          if (!this.chunks.has(ckey(cx, cz))) cand.push([d2, cx, cz]);
-        }
+      const seen = new Set();
+      for (const [pcx, pcz, rad] of centers) {
+        const r2 = (rad + 0.5) * (rad + 0.5);
+        for (let dz = -rad; dz <= rad; dz++)
+          for (let dx = -rad; dx <= rad; dx++) {
+            const d2 = dx * dx + dz * dz;
+            if (d2 > r2) continue;
+            const cx = pcx + dx, cz = pcz + dz;
+            if (Math.abs(cx) > LIMIT || Math.abs(cz) > LIMIT) continue;
+            const k = ckey(cx, cz);
+            if (!this.chunks.has(k) && !seen.has(k)) {
+              seen.add(k);
+              cand.push([d2, cx, cz]);
+            }
+          }
+      }
       cand.sort((a, b) => a[0] - b[0]);
       let n = 0;
       for (const [d2, cx, cz] of cand) {
@@ -1269,10 +1278,16 @@
         this.addChunk(this.generateChunk(cx, cz));
         n++;
       }
-      const u2 = (radius + 2.5) * (radius + 2.5);
       for (const c of this.chunks.values()) {
-        const dx = c.cx - pcx, dz = c.cz - pcz;
-        if (dx * dx + dz * dz > u2) this.removeChunk(c);
+        let keep = false;
+        for (const [pcx, pcz, rad] of centers) {
+          const dx = c.cx - pcx, dz = c.cz - pcz;
+          if (dx * dx + dz * dz <= (rad + 2.5) * (rad + 2.5)) {
+            keep = true;
+            break;
+          }
+        }
+        if (!keep) this.removeChunk(c);
       }
       return cand.length - n;
     }
@@ -1447,6 +1462,20 @@
       }
       this.propagate(BLK);
       this.trackDirty = false;
+      if (this.onSet) this.onSet(x, y, z, id);
+      return true;
+    }
+
+    // Modification venue du réseau : appliquée tout de suite si le tronçon est chargé,
+    // sinon simplement notée (elle sera appliquée à la génération du tronçon).
+    applyRemote(x, y, z, id) {
+      if (y < 0 || y >= H || !CM.blocks[id]) return false;
+      const c = this.chunkAt(x, z);
+      if (c) return this.setBlock(x, y, z, id);
+      const k = ckey(x >> 4, z >> 4);
+      let e = this.edits.get(k);
+      if (!e) this.edits.set(k, (e = new Map()));
+      e.set(lidx(x & 15, y, z & 15), id);
       return true;
     }
 

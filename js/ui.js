@@ -600,6 +600,11 @@
         '<li>Glisse ailleurs pour regarder. <b>Touche</b> l’écran pour poser un bloc, utiliser ou frapper ; <b>garde le doigt appuyé</b> pour miner.</li>' +
         '<li>Boutons : ⤒ saut (deux fois pour voler en créatif), ⤓ s’accroupir, » courir, ⚡ ruée, ⛏ miner, ✋ poser, 🎒 inventaire, ⏸ pause, 🗑 jeter.</li>' +
         '<li>Dans l’inventaire, « Rapide » remplace Maj+clic et « Moitié » remplace le clic droit.</li></ul>' +
+        '<h3>Multijoueur (gratuit)</h3><ul>' +
+        '<li><b>Héberger</b> : lance ton monde, puis <b>Pause › Ouvrir aux amis</b>. Tu obtiens un code de 5 caractères (et un lien à partager).</li>' +
+        '<li><b>Rejoindre</b> : menu principal › <b>Multijoueur</b>, choisis un pseudo et tape le code.</li>' +
+        '<li><b>T</b> ou <b>Entrée</b> (💬 sur téléphone) : tchat. Coffres partagés, créatures communes, combats entre joueurs si l’hôte les autorise.</li>' +
+        '<li>L’hôte garde le monde et la progression de ses invités : il doit laisser le jeu ouvert. Jusqu’à 8 joueurs.</li></ul>' +
         '<h3>Le concept</h3><p>Comme dans Minecraft : un monde en cubes à miner, des ressources à récolter, des outils à fabriquer, la faim à gérer et des nuits dangereuses. Mais certaines règles changent :</p>' +
         html;
     }
@@ -632,6 +637,7 @@
         if (left > 0 && this.game.mode !== 'creative') this.game.dropNearPlayer(this.cursor.id, left, this.cursor);
         this.cursor = null;
       }
+      this.game.net.chestClosed();
       this.chest = null;
       $('cursor-stack').classList.add('hidden');
       this.hideTip();
@@ -934,9 +940,17 @@
     refreshPause() {
       const g = this.game;
       if (!g.world) return;
+      const net = g.net;
       $('pause-info').innerHTML =
         'Graine : <b>' + g.world.seed + '</b> · ' + MODE_NAMES[g.mode] + ' · ' + DIFF_NAMES[g.difficulty] + ' · monde ' + TYPE_NAMES[g.settings.type || 'normal'] +
-        '<br>Jour ' + (g.dayCount + 1) + ' · ' + g.world.editCount() + ' blocs modifiés';
+        '<br>Jour ' + (g.dayCount + 1) + ' · ' + g.world.editCount() + ' blocs modifiés' +
+        (net.active ? '<br><br>' + net.playersHTML() : '');
+      // multijoueur : l'invité ne gère pas la sauvegarde du monde
+      $('btn-lan').textContent = net.isHost ? 'Inviter des amis (code ' + net.code + ')' : 'Ouvrir aux amis (multijoueur)';
+      $('btn-lan').classList.toggle('hidden', net.isClient);
+      $('btn-export2').classList.toggle('hidden', net.isClient);
+      $('btn-save').classList.toggle('hidden', net.isClient);
+      $('btn-quit').textContent = net.isClient ? 'Quitter la partie' : net.isHost ? 'Sauvegarder et fermer la partie' : 'Sauvegarder et quitter';
     }
 
     // ------------------------------------------------------- options -----
@@ -989,6 +1003,13 @@
             d.querySelector('select').addEventListener('change', (e) => fn(e.target.value));
             body.appendChild(d);
           };
+          if (g.net.isClient) {
+            const n = document.createElement('div');
+            n.className = 'small-note';
+            n.textContent = 'Partie de ' + g.net.hostName + ' : ' + MODE_NAMES[g.mode] + ', ' + DIFF_NAMES[g.difficulty] + '. Le mode de jeu, la difficulté, la durée des journées et « garder l’inventaire » sont réglés par l’hôte.';
+            body.appendChild(n);
+            continue;
+          }
           mkSel('Mode de jeu (ce monde)', g.mode, Object.entries(MODE_NAMES), (v) => {
             g.setMode(v);
             this.worldStarted();
@@ -1054,7 +1075,7 @@
     showDeath(cause) {
       this.closeInventory();
       $('death-cause').textContent = (cause || 'Quelque chose') + ' a eu raison de vous.';
-      $('death-note').textContent = this.game.options.keepInventory ? 'Tu gardes ton inventaire (option activée).' : 'Vos objets sont tombés sur place. Allez vite les récupérer !';
+      $('death-note').textContent = this.game.keepInventory() ? 'Tu gardes ton inventaire (option activée).' : 'Vos objets sont tombés sur place. Allez vite les récupérer !';
       this.game.releaseMouse();
       this.show('death');
     }

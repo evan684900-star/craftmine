@@ -26,6 +26,8 @@
     guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
     // écran tactile
     touchControls: 'auto', touchSens: 1, touchSize: 100,
+    // multijoueur
+    netName: '',
   };
   // Réglages plus légers pour les téléphones et tablettes.
   CM.applyMobileDefaults = function (o) {
@@ -92,10 +94,14 @@
       this.stats = this.freshStats();
       this.inventory = new CM.Inventory();
       this.inventory.onChange = () => {
-        if (this.ui) this.ui.dirtyInv = true;
+        this.inventory.netDirty = true;
+        if (!this.ui) return;
+        this.ui.dirtyInv = true;
+        if (this.ui.chest) this.net.chestChanged();
       };
       this.ui = new CM.UI(this);
       this.touch = new CM.Touch(this);
+      this.net = new CM.Net(this);
       this.applyOptions();
       this.batch = new CM.Batch();
       this.overlay = new CM.Batch();
@@ -151,19 +157,26 @@
       o.binds = Object.assign({}, this.binds);
       storageSet(OPT_KEY, JSON.stringify(o));
       if (this.ui) this.ui.optionsChanged();
+      if (this.net && this.net.isHost) this.net.sendCfg();
     }
     remeshAll() {
       if (!this.world) return;
       for (const k of this.renderer.sections.keys()) this.world.dirty.set(k, 1);
     }
     get dayLen() {
+      if (this.net && this.net.isClient && this.net.dayLen) return this.net.dayLen;
       return Math.max(1, this.options.dayLength) * 60;
+    }
+    // Garder l'inventaire à la mort : option du joueur, ou de l'hôte en multijoueur.
+    keepInventory() {
+      return this.net.isClient ? this.net.rules.keep : !!this.options.keepInventory;
     }
 
     // ------------------------------------------------ démarrage monde -----
     async startWorld(seed, save, settings) {
       this.ui.hide('menu');
       this.ui.hide('newworld');
+      this.ui.hide('multi');
       this.ui.show('loading');
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
@@ -176,6 +189,8 @@
       this.difficulty = ws.difficulty;
       this.world = new CM.World(seed, save ? save.edits : null, ws);
       this.entities = new CM.Entities(this);
+      this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
+      if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
       this.stats = this.freshStats();
       this.time = 0.03;
       this.dayCount = 0;
@@ -234,7 +249,7 @@
       } else if (ws.bonusChest) this.placeBonusChest();
       if (!save && ws.mode === 'creative') this.player.flying = false;
       this.inventory.changed();
-      this.spawnInitialMobs();
+      if (!this.net.isClient) this.spawnInitialMobs();
       // pré-construction des maillages autour du joueur
       $('load-text').textContent = 'Construction du paysage…';
       total = 0;
@@ -259,6 +274,7 @@
         this.forceInput = true;
         this.ui.showTouchHint();
       } else this.ui.show('start');
+      this.net.worldReady();
       if (save && save.v < 4) setTimeout(() => this.ui.toast('Nouvelle version : plus de 500 blocs, la faim remplace l’endurance, mode créatif…', 'gold'), 800);
     }
 
@@ -317,11 +333,18 @@
         victory: this.victory,
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
+        guests: this.net.guests,
         savedAt: new Date().toISOString(),
       };
     }
     save(silent) {
       if (!this.world || this.state !== 'playing') return;
+      // invité : sa progression est gardée par l'hôte (sa propre partie solo reste intacte)
+      if (this.net.isClient) {
+        this.net.sendGuestSave();
+        if (!silent) this.ui.toast('Progression envoyée à l’hôte', 'good');
+        return;
+      }
       const ok = storageSet(SAVE_KEY, JSON.stringify(this.saveData()));
       if (!silent) this.ui.toast(ok ? 'Partie sauvegardée' : 'Sauvegarde impossible (stockage plein ou bloqué)', ok ? 'good' : 'warn');
     }
@@ -438,7 +461,7 @@
           return;
         }
         this.clearInput();
-        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && $('victory').classList.contains('hidden')) this.pause();
+        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && !this.net.chatOpen && $('victory').classList.contains('hidden')) this.pause();
       });
       document.addEventListener('pointerlockerror', () => {
         if (this.state === 'playing' && !this.paused && !this.ui.invOpen) this.ui.show('start');
@@ -492,6 +515,12 @@
           this.ui.toggleHud();
           return;
         }
+        // tchat (multijoueur)
+        if ((c === 'KeyT' || c === 'Enter') && this.net.active && !this.ui.invOpen && !this.paused) {
+          e.preventDefault();
+          this.net.openChat();
+          return;
+        }
         if (c === K.inventory && !this.paused && this.player.alive) {
           if (this.ui.invOpen) this.ui.closeInventory();
           else this.ui.openInventory();
@@ -528,6 +557,7 @@
       });
       window.addEventListener('beforeunload', () => {
         if (this.state === 'playing') this.save(true);
+        this.net.leave();
       });
     }
 
@@ -592,17 +622,28 @@
       });
       on('btn-resume', () => this.resume());
       on('btn-save', () => this.save(false));
-      on('btn-quit', () => {
-        this.save(true);
-        this.state = 'menu';
-        this.paused = false;
-        document.body.classList.remove('ingame');
-        this.touch.reset();
-        this.ui.hide('pause');
-        this.ui.hide('hud');
-        this.renderer.freeAll();
-        this.refreshMenu();
+      on('btn-quit', () => this.exitToMenu());
+      // multijoueur
+      on('btn-multi', () => this.openMulti());
+      on('btn-mp-back', () => {
+        this.ui.hide('multi');
         this.ui.show('menu');
+      });
+      on('btn-mp-join', () => this.joinGame());
+      $('mp-code').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.joinGame();
+      });
+      on('btn-lan', () => this.openHostDialog());
+      on('btn-host-cancel', () => {
+        this.ui.hide('hostdlg');
+        this.ui.refreshPause();
+        this.ui.show('pause');
+      });
+      on('btn-host-open', () => this.hostGame());
+      on('btn-host-copy', () => this.shareInvite());
+      on('btn-host-done', () => {
+        this.ui.hide('hostdlg');
+        this.resume();
       });
       on('btn-respawn', () => {
         this.player.respawn();
@@ -612,6 +653,120 @@
         this.ui.hide('victory');
         this.captureMouse();
       });
+    }
+
+    // Retour au menu principal (bouton Quitter, ou partie multijoueur interrompue).
+    exitToMenu(msg) {
+      if (this.state === 'playing') {
+        if (this.ui.invOpen) this.ui.closeInventory();
+        this.save(true);
+      }
+      this.net.leave();
+      this.state = 'menu';
+      this.paused = false;
+      this.releaseMouse();
+      document.body.classList.remove('ingame');
+      this.touch.reset();
+      for (const id of ['pause', 'hud', 'death', 'victory', 'start', 'hostdlg', 'options', 'loading']) this.ui.hide(id);
+      this.renderer.freeAll();
+      this.refreshMenu();
+      this.ui.show('menu');
+      if (msg) this.menuMsg(msg, 'warn');
+    }
+
+    // ------------------------------------------------ multijoueur ------
+    rememberName(name) {
+      if (this.options.netName === name) return;
+      this.options.netName = name;
+      storageSet(OPT_KEY, JSON.stringify(this.options));
+    }
+    openMulti(code) {
+      this.ui.hide('menu');
+      $('mp-name').value = this.options.netName || '';
+      if (code) $('mp-code').value = String(code).toUpperCase().slice(0, 5);
+      this.mpStatus('');
+      this.ui.show('multi');
+      if (!$('mp-name').value) $('mp-name').focus();
+    }
+    mpStatus(text, type) {
+      const el = $('mp-status');
+      el.textContent = text;
+      el.className = 'menu-msg ' + (type || '') + (text ? '' : ' hidden');
+    }
+    async joinGame() {
+      if (this.joining) return;
+      const name = CM.cleanName($('mp-name').value);
+      if (!name) {
+        this.mpStatus('Choisis un pseudo (celui que verront les autres joueurs).', 'warn');
+        return;
+      }
+      this.rememberName(name);
+      this.maybeFullscreen();
+      this.joining = true;
+      $('btn-mp-join').disabled = true;
+      let joined = false;
+      try {
+        const w = await this.net.join($('mp-code').value, name, (t) => this.mpStatus(t));
+        joined = true;
+        await this.startWorld(w.seed, this.net.guestSave(w));
+      } catch (e) {
+        console.warn(e);
+        if (joined) this.exitToMenu('La partie n’a pas pu démarrer : ' + (e.message || e));
+        else this.mpStatus(CM.netErrorText(e), 'warn');
+      }
+      this.joining = false;
+      $('btn-mp-join').disabled = false;
+    }
+    openHostDialog() {
+      this.ui.hide('pause');
+      $('host-name').value = this.options.netName || CM.randomPlayerName();
+      const ready = this.net.isHost;
+      $('host-setup').classList.toggle('hidden', ready);
+      $('host-ready').classList.toggle('hidden', !ready);
+      if (ready) $('host-code').textContent = this.net.code;
+      this.hostStatus('');
+      this.ui.show('hostdlg');
+    }
+    hostStatus(text, type) {
+      const el = $('host-status');
+      el.textContent = text;
+      el.className = 'menu-msg ' + (type || '') + (text ? '' : ' hidden');
+    }
+    async hostGame() {
+      const name = CM.cleanName($('host-name').value);
+      if (!name) {
+        this.hostStatus('Choisis un pseudo.', 'warn');
+        return;
+      }
+      this.rememberName(name);
+      $('btn-host-open').disabled = true;
+      this.hostStatus('Ouverture de la partie…');
+      try {
+        const code = await this.net.host(name, $('host-pvp').checked);
+        $('host-code').textContent = code;
+        $('host-setup').classList.add('hidden');
+        $('host-ready').classList.remove('hidden');
+        this.hostStatus('');
+        this.save(true);
+      } catch (e) {
+        console.warn(e);
+        this.hostStatus(CM.netErrorText(e), 'warn');
+      }
+      $('btn-host-open').disabled = false;
+    }
+    async shareInvite() {
+      const url = location.origin + location.pathname + '?join=' + this.net.code;
+      const text = 'Rejoins ma partie CraftMine ! Code : ' + this.net.code;
+      try {
+        if (navigator.share && this.touch.enabled) {
+          await navigator.share({ title: 'CraftMine', text, url });
+          return;
+        }
+        await navigator.clipboard.writeText(url);
+        this.hostStatus('Lien copié : ' + url, 'good');
+      } catch (e) {
+        this.hostStatus('Lien d’invitation : ' + url, 'good');
+      }
     }
 
     // Plein écran automatique sur téléphone (là où le navigateur le permet).
@@ -659,10 +814,12 @@
       if (mode !== 'creative') this.player.flying = false;
       this.ui.dirtyInv = true;
       this.ui.toast(mode === 'creative' ? 'Mode créatif : blocs infinis, vol (double saut), pas de dégâts' : 'Mode survie', 'gold');
+      this.net.sendCfg();
     }
     setDifficulty(d) {
       this.difficulty = d;
       if (d === 'peaceful') for (const m of this.entities.mobs) if (m.type === 'ombre') m.dead = true;
+      this.net.sendCfg();
     }
 
     // ------------------------------------------------ utilitaires jeu ----
@@ -695,7 +852,13 @@
     onPickup(id, n) {
       this.ui.pickup(id, n);
     }
+    // Ouvre un coffre (partagé en multijoueur : un seul joueur à la fois).
+    openChestAt(x, y, z, title) {
+      if (this.net.active) this.net.openChest(x, y, z, title);
+      else this.ui.openChest(this.chestAt(x, y, z), title);
+    }
     chestAt(x, y, z) {
+      if (this.net.isClient) return new Array(27).fill(null); // les coffres sont chez l'hôte
       const k = x + ',' + y + ',' + z;
       if (!this.chests.has(k)) {
         const slots = new Array(27).fill(null);
@@ -725,9 +888,11 @@
       for (const it of items.slice(0, 27)) slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
     }
     spillChest(x, y, z) {
+      if (this.net.isClient) return; // l'hôte fait tomber le contenu
       const k = x + ',' + y + ',' + z;
       const c = this.chests.get(k);
       if (!c) return;
+      this.net.chestGone(k);
       for (const s of c) if (s) this.entities.addDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.xp !== undefined ? { xp: s.xp } : null);
       this.chests.delete(k);
     }
@@ -797,18 +962,53 @@
       }
       return false;
     }
+    // Hôte : bloc modifié par un invité (effets secondaires comme en solo).
+    onRemoteBlock(x, y, z, old, id, fx, sound) {
+      const k = x + ',' + y + ',' + z;
+      if (old && CM.blocks[old].container && !CM.blocks[id].container) {
+        this.chestAt(x, y, z);
+        this.spillChest(x, y, z);
+      }
+      if (CM.TAGS.saplings.includes(id)) this.saplings.add(k);
+      const b = CM.blocks[id];
+      if (b.crop !== undefined && b.crop < 3) this.crops.add(k);
+      if (id === B.DAWN_HEART) this.onDawnHeart(x, y, z, true);
+      if (fx) this.netBlockFx(x, y, z, old, id, sound);
+    }
+    // Son et particules d'un bloc modifié par un autre joueur, s'il est proche.
+    netBlockFx(x, y, z, old, id, sound) {
+      const p = this.player;
+      if (!p || Math.hypot(p.x - x - 0.5, p.y - y, p.z - z - 0.5) > 24) return;
+      if (old && !id) {
+        this.entities.blockParticles(old, x, y, z, 10);
+        if (sound) CM.Audio.play('break', { mat: CM.blocks[old].sound });
+      } else if (id && sound) CM.Audio.play('place', { mat: CM.blocks[id].sound });
+    }
+    noteFx(x, y, z, n) {
+      const p = this.player;
+      if (p && Math.hypot(p.x - x, p.y - y, p.z - z) > 24) return;
+      CM.Audio.play('note', { note: n });
+      this.entities.burst(CM.Textures.layer.white, x + 0.5, y + 1.2, z + 0.5, 3, { speed: 1, grav: -2, life: 0.6, size: 0.08, emissive: true });
+    }
+
     // ---------------------------------------------------------- TNT -----
     primeTnt(x, y, z) {
       this.world.setBlock(x, y, z, 0);
       this.entities.addTnt(x + 0.5, y, z + 0.5, 3.2);
       CM.Audio.play('fuse');
     }
-    explode(x, y, z, power) {
-      const w = this.world;
-      const R = Math.ceil(power);
+    explodeFx(x, y, z) {
+      const p = this.player;
+      if (p && Math.hypot(p.x - x, p.y - y, p.z - z) > 64) return;
       CM.Audio.play('explode');
       this.entities.burst(CM.Textures.layer.smoke, x, y, z, 40, { speed: 9, grav: -1, life: 1.4, size: 0.5, spread: 2 });
       this.entities.burst(CM.Textures.layer.white, x, y, z, 30, { speed: 12, grav: 4, life: 0.5, size: 0.12, emissive: true });
+    }
+    explode(x, y, z, power) {
+      const w = this.world;
+      const R = Math.ceil(power);
+      this.explodeFx(x, y, z);
+      this.net.fx({ k: 'boom', x, y, z });
       const chain = [];
       for (let dy = -R; dy <= R; dy++)
         for (let dz = -R; dz <= R; dz++)
@@ -849,13 +1049,20 @@
         const k = hurt(m.x, m.y + 0.5, m.z);
         if (k > 0) this.entities.hurtMob(m, k * 30, [x, z]);
       }
+      // invités pris dans l'explosion
+      for (const rp of this.net.remotes.values()) {
+        if (!rp.seen || !rp.alive) continue;
+        const k = hurt(rp.x, rp.y + 0.9, rp.z);
+        if (k > 0) rp.damage(Math.round(k * 22), x, z, 'Une explosion', true, k * 10);
+      }
     }
 
     nearDawnHeart(x, z, r) {
       for (const [hx, , hz] of this.dawnHearts) if (Math.hypot(hx - x, hz - z) < r) return true;
       return false;
     }
-    onDawnHeart(x, y, z) {
+    // remote : Cœur posé par un autre joueur (pas d'écran de victoire ici).
+    onDawnHeart(x, y, z, remote) {
       this.dawnHearts.push([x, y, z]);
       for (const m of this.entities.mobs) {
         if (m.type === 'ombre' && Math.hypot(m.x - x, m.z - z) < 48) {
@@ -864,9 +1071,9 @@
         }
       }
       this.entities.burst(CM.Textures.layer.dawn_heart, x + 0.5, y + 0.5, z + 0.5, 60, { speed: 9, grav: 2, life: 1.6, size: 0.12, emissive: true });
-      if (!this.victory) {
+      if (!this.victory && !remote) {
         this.victory = true;
-        this.time = 0.0;
+        if (!this.net.isClient) this.time = 0.0;
         CM.Audio.play('victory');
         const s = this.stats;
         const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
@@ -933,7 +1140,8 @@
       if (this.state !== 'playing') return;
       try {
         this.touch.frame();
-        if (!this.paused) this.update(dt);
+        // en multijoueur, la pause ne fige pas le monde (les autres continuent de jouer)
+        if (!this.paused || this.net.active) this.update(dt);
         this.render();
         this.ui.update(dt);
       } catch (err) {
@@ -947,10 +1155,13 @@
     }
 
     update(dt) {
+      const net = this.net;
       this.clock += dt;
       this.stats.playTime += dt;
       if (this.settings.dayCycle !== false) this.time += (dt / this.dayLen) * (this.daylight < 0.35 ? 1.5 : 1);
-      if (this.time >= 1) {
+      // invité : l'hôte annonce le changement de jour
+      if (net.isClient) this.time = Math.min(this.time, 0.99999);
+      else if (this.time >= 1) {
         this.time -= 1;
         this.dayCount++;
         this.ui.toast('Jour ' + (this.dayCount + 1) + ' — tu as survécu à la nuit !', 'good');
@@ -961,21 +1172,25 @@
         this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
         this.entities.nightfall = true;
       }
-      const active = (this.locked || this.forceInput) && !this.ui.invOpen;
-      this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5);
+      const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen;
+      // l'hôte garde aussi chargés les alentours de ses invités (créatures, objets)
+      this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5, net.isHost ? net.simCenters() : null);
       this.player.update(dt, active ? this.input : this.noInput);
       this.entities.update(dt);
-      this.growTimer -= dt;
-      if (this.growTimer <= 0) {
-        this.growTimer = 1;
-        this.growPlants();
+      if (!net.isClient) {
+        this.growTimer -= dt;
+        if (this.growTimer <= 0) {
+          this.growTimer = 1;
+          this.growPlants();
+        }
+        this.saveTimer -= dt;
+        if (this.saveTimer <= 0) {
+          this.saveTimer = this.options.autosave;
+          this.save(true);
+        }
       }
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
-      this.saveTimer -= dt;
-      if (this.saveTimer <= 0) {
-        this.saveTimer = this.options.autosave;
-        this.save(true);
-      }
+      net.update(dt);
     }
 
     render() {
@@ -992,6 +1207,7 @@
       this.hand.reset();
       this.translucent.reset(cam);
       this.entities.render(this.batch, { right, up }, this.clock);
+      this.net.renderPlayers(this.batch);
       // corde du grappin
       if (p.hook) {
         const a = [cam[0] + right[0] * 0.3 - up[0] * 0.25 + fwd[0] * 0.5, cam[1] + right[1] * 0.3 - up[1] * 0.25 + fwd[1] * 0.5, cam[2] + right[2] * 0.3 - up[2] * 0.25 + fwd[2] * 0.5];
@@ -1035,6 +1251,7 @@
         translucent: this.translucent,
         target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height } : null,
       });
+      this.net.updateTags(cam);
     }
   }
 
@@ -1055,6 +1272,8 @@
       const game = new Game();
       CM.game = game;
       const params = new URLSearchParams(location.search);
+      // lien d'invitation : ?join=CODE
+      if (params.has('join')) game.openMulti(params.get('join'));
       if (params.has('autostart')) {
         game.autostart = true;
         const v = params.get('autostart');

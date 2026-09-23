@@ -2,7 +2,7 @@
 
 Un jeu de type **Minecraft en 3D** qui tourne directement dans le navigateur. Le principe reste le même : un monde en cubes à miner, des ressources à récolter, des outils à fabriquer, la faim à gérer et des nuits dangereuses. Certaines mécaniques changent : grappin, ruée, combos de minage, outils qui progressent, Ombres qui craignent la lumière, îles célestes…
 
-Aucune dépendance, aucune image ni aucun son externe : le moteur WebGL2, les textures pixel-art (plus de 600) et les effets sonores sont générés par le code.
+Aucune image ni aucun son externe : le moteur WebGL2, les textures pixel-art (plus de 600) et les effets sonores sont générés par le code. Seul le multijoueur utilise une bibliothèque, PeerJS (fournie dans `js/vendor/`, chargée seulement quand on joue à plusieurs).
 
 ## Lancer le jeu
 
@@ -78,6 +78,23 @@ Tiens l'appareil en **mode paysage** (un message le rappelle en mode portrait).
 
 Dans l'inventaire, les boutons **Rapide** (comme Maj+clic) et **Moitié** (comme le clic droit) remplacent les raccourcis de la souris. Au premier lancement sur téléphone, le jeu choisit des réglages plus légers (distance d'affichage 5, résolution 75 %) et active le saut automatique. **Options > Contrôles** permet de forcer ou désactiver les contrôles tactiles et de régler leur sensibilité et la taille des boutons. Sur iPhone, *Partager > Sur l'écran d'accueil* ouvre le jeu en plein écran.
 
+### Multijoueur (gratuit, sans serveur)
+
+Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
+
+1. **L'hôte** lance son monde (Nouveau monde ou Continuer), ouvre le menu **Pause** et clique sur **« Ouvrir aux amis »**. Il choisit un pseudo, autorise ou non les combats entre joueurs, et reçoit un **code de 5 caractères** (bouton pour partager le lien d'invitation `…/?join=CODE`).
+2. **Les invités** cliquent sur **Multijoueur** dans le menu principal, choisissent un pseudo et tapent le code.
+
+| Touche | Action |
+| --- | --- |
+| **T** ou **Entrée** (💬 sur téléphone) | Tchat |
+
+- Les navigateurs se connectent **directement entre eux** (WebRTC). Le serveur public et gratuit de [PeerJS](https://peerjs.com) sert seulement à les mettre en relation ; aucun compte, aucun serveur à payer.
+- **L'hôte fait autorité** : il garde le monde, les créatures, les objets au sol, les coffres, l'heure et les réglages (mode de jeu, difficulté, durée des journées, « garder l'inventaire »). Chaque invité gère ses déplacements, son inventaire, sa faim et sa santé.
+- Les autres joueurs sont visibles avec leur pseudo au-dessus de la tête et **l'objet qu'ils tiennent en main**. Les coffres sont partagés (un seul joueur à la fois), les blocs posés et cassés, les explosions et les créatures sont vus par tous.
+- **Sauvegarde** : la progression de chaque invité (position, inventaire, statistiques) est rangée dans la sauvegarde de l'hôte, sous son pseudo, et retrouvée quand il revient. La partie solo de l'invité sur son propre appareil n'est pas touchée.
+- **Limites** : la partie n'existe que tant que l'hôte a le jeu ouvert et au premier plan (sur téléphone, verrouiller l'écran met la partie en pause pour tout le monde). Certains réseaux très fermés (Wi-Fi d'école ou d'entreprise) peuvent bloquer la connexion directe ; PeerJS fournit un relais de secours, sinon essaie un autre réseau (la 4G par exemple).
+
 ## Mécaniques
 
 | Mécanique | Dans CraftMine |
@@ -140,6 +157,8 @@ js/renderer.js    rendu WebGL2 (monde, ciel, entités, eau)
 js/entities.js    physique, créatures, TNT, objets au sol, particules
 js/player.js      joueur : déplacements, faim, minage, combat, grappin, mode créatif…
 js/touch.js       contrôles tactiles : joystick, caméra au doigt, boutons
+js/net.js         multijoueur pair à pair : hôte, invités, synchronisation, tchat
+js/vendor/        PeerJS 1.5.5 (licence MIT), chargé seulement en multijoueur
 js/inventory.js   inventaire et fabrication
 js/ui.js          interface, inventaire créatif, options, journal, aide
 js/audio.js       effets sonores WebAudio

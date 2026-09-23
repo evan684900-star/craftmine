@@ -489,6 +489,13 @@
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
+        // autre joueur (combats entre joueurs autorisés par l'hôte)
+        const ph = g.net.active ? g.net.raycastPlayer(e, d, 3.6) : null;
+        if (ph && (!mh || ph.t < mh.t) && (!this.target || ph.t < this.target.t)) {
+          this.attackPlayer(ph.rp);
+          this.mining = null;
+          return;
+        }
         if (mh && (!this.target || mh.t < this.target.t)) {
           this.attack(mh.mob);
           this.mining = null;
@@ -553,6 +560,26 @@
       inv.slots[slot] = { id, count: 64 };
       inv.selected = slot;
       inv.changed();
+    }
+
+    // Dégâts du coup porté avec l'objet en main.
+    hitDamage() {
+      const stack = this.game.inventory.held();
+      const info = stack ? CM.itemInfo(stack.id) : null;
+      let dmg = 1;
+      if (info && info.type === 'tool') {
+        dmg = info.damage;
+        if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
+      }
+      if (!this.onGround && this.vy < -1) dmg *= 1.5;
+      if (this.dashTime > 0) dmg += 2;
+      return dmg;
+    }
+    attackPlayer(rp) {
+      this.attackCd = 0.38;
+      this.swing = 1;
+      this.exhaust(EXH.attack);
+      this.game.net.pvpHit(rp, this.hitDamage());
     }
 
     attack(mob) {
@@ -735,7 +762,7 @@
           return;
         }
         if (tb.container) {
-          g.ui.openChest(g.chestAt(t.x, t.y, t.z), tb.name);
+          g.openChestAt(t.x, t.y, t.z, tb.name);
           return;
         }
         if (tb.note) {
@@ -743,8 +770,8 @@
           g.noteBlocks = g.noteBlocks || {};
           const k = t.x + ',' + t.y + ',' + t.z;
           g.noteBlocks[k] = ((g.noteBlocks[k] === undefined ? n : g.noteBlocks[k]) + 1) % 25;
-          CM.Audio.play('note', { note: g.noteBlocks[k] });
-          g.entities.burst(CM.Textures.layer.white, t.x + 0.5, t.y + 1.2, t.z + 0.5, 3, { speed: 1, grav: -2, life: 0.6, size: 0.08, emissive: true });
+          g.noteFx(t.x, t.y, t.z, g.noteBlocks[k]);
+          g.net.noteChanged(t.x, t.y, t.z, g.noteBlocks[k]);
           this.swing = 1;
           return;
         }
@@ -874,6 +901,7 @@
           else return;
         }
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
+        for (const rp of g.net.remotes.values()) if (rp.seen && rp.alive && hit(rp.x, rp.y, rp.z, rp.hw, rp.h)) return;
       }
       let place = stack.id;
       // poudre de béton au contact de l'eau : béton
@@ -927,7 +955,7 @@
       this.hook = null;
       this.flying = false;
       const inv = g.inventory;
-      if (!g.options.keepInventory) {
+      if (!g.keepInventory()) {
         for (let i = 0; i < 36; i++) {
           const s = inv.slots[i];
           if (!s) continue;
@@ -938,6 +966,7 @@
         inv.changed();
       }
       g.stats.deaths = (g.stats.deaths || 0) + 1;
+      g.net.died(cause);
       g.ui.showDeath(cause);
     }
 
