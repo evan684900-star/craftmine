@@ -2,7 +2,12 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CraftMine" />
+  <meta name="theme-color" content="#0e1530" />
   <title>CraftMine — L'Aube des Éclats</title>
   <link rel="stylesheet" href="style.css" />
   <!-- Vercel Web Analytics : chargé seulement quand le jeu est en ligne (pas en local). -->
@@ -18,6 +23,8 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <!-- zone tactile (sous le HUD) : joystick et caméra -->
+  <div id="touch-layer"></div>
 
   <!-- ============================== HUD ============================== -->
   <div id="hud" class="hidden">
@@ -54,11 +61,38 @@
     </div>
   </div>
 
+  <!-- ======================== Boutons tactiles ======================== -->
+  <div id="touch">
+    <div id="t-stick" class="hidden"><div id="t-knob"></div></div>
+    <div class="t-top">
+      <button id="t-inv" title="Inventaire">🎒</button>
+      <button id="t-drop" title="Jeter l'objet">🗑</button>
+      <button id="t-pause" title="Pause">⏸</button>
+    </div>
+    <div class="t-right">
+      <button id="t-use" class="t-btn" title="Poser / utiliser">✋</button>
+      <button id="t-mine" class="t-btn" title="Miner / frapper (maintenir)">⛏</button>
+      <button id="t-dash" class="t-btn small" title="Ruée">⚡</button>
+      <button id="t-sprint" class="t-btn small" title="Courir">»</button>
+      <button id="t-sneak" class="t-btn" title="S'accroupir / descendre">⤓</button>
+      <button id="t-jump" class="t-btn big" title="Sauter / monter">⤒</button>
+    </div>
+    <div id="t-hint" class="hidden">Glisse à gauche pour marcher, à droite pour regarder.<br>Touche l'écran pour poser, garde le doigt appuyé pour miner.</div>
+  </div>
+  <div id="rotate" class="hidden"><div>📱↻<br>Tourne ton téléphone en mode paysage pour jouer.</div></div>
+
   <!-- =========================== Inventaire =========================== -->
   <div id="inventory" class="screen hidden">
     <div class="inv-wrap">
       <div class="panel inv-panel">
-        <h2>Inventaire</h2>
+        <div class="inv-head">
+          <h2>Inventaire</h2>
+          <div class="inv-tools">
+            <button id="inv-quick" class="touch-only" title="Déplacer rapidement (comme Maj+clic)">⇄ Rapide</button>
+            <button id="inv-half" class="touch-only" title="Prendre la moitié / poser un seul objet (comme clic droit)">½ Moitié</button>
+            <button id="inv-close" title="Fermer">✕</button>
+          </div>
+        </div>
         <div id="inv-main" class="grid"></div>
         <div class="sep"></div>
         <div id="inv-hot" class="grid"></div>
@@ -262,6 +296,7 @@
   <script src="js/inventory.js"></script>
   <script src="js/entities.js"></script>
   <script src="js/player.js"></script>
+  <script src="js/touch.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>

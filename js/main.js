@@ -24,6 +24,12 @@
     volume: 50, sfxVolume: 100, mobVolume: 100, uiVolume: 100,
     // interface
     guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
+    // écran tactile
+    touchControls: 'auto', touchSens: 1, touchSize: 100,
+  };
+  // Réglages plus légers pour les téléphones et tablettes.
+  CM.applyMobileDefaults = function (o) {
+    Object.assign(o, { renderDist: 5, resolution: 75, particles: 1, guiScale: 85, autoJump: true });
   };
 
   function storageGet(k) {
@@ -62,8 +68,11 @@
   class Game {
     constructor() {
       this.canvas = $('game');
-      const saved = JSON.parse(storageGet(OPT_KEY) || '{}');
+      const savedTxt = storageGet(OPT_KEY);
+      const saved = JSON.parse(savedTxt || '{}');
       this.options = Object.assign({}, CM.DEFAULT_OPTIONS, saved);
+      // premier lancement sur téléphone : réglages allégés
+      if (!savedTxt && CM.isTouchDevice()) CM.applyMobileDefaults(this.options);
       this.binds = Object.assign({}, CM.DEFAULT_BINDS, this.options.binds || {});
       this.mode = 'survival';
       this.difficulty = 'normal';
@@ -86,6 +95,7 @@
         if (this.ui) this.ui.dirtyInv = true;
       };
       this.ui = new CM.UI(this);
+      this.touch = new CM.Touch(this);
       this.applyOptions();
       this.batch = new CM.Batch();
       this.overlay = new CM.Batch();
@@ -131,6 +141,13 @@
       $('objective').classList.toggle('hidden', !o.showQuests);
       document.documentElement.style.setProperty('--gui', String(o.guiScale / 100));
       $('crosshair').className = 'ch-' + o.crosshair;
+      document.documentElement.style.setProperty('--tsize', String(o.touchSize / 100));
+      const touchOn = o.touchControls === 'on' || (o.touchControls === 'auto' && CM.isTouchDevice());
+      if (this.touch && touchOn !== this.touch.enabled) {
+        this.touch.setEnabled(touchOn);
+        if (touchOn && this.state === 'playing') this.forceInput = true;
+        if (!touchOn && !this.autostart) this.forceInput = false;
+      }
       o.binds = Object.assign({}, this.binds);
       storageSet(OPT_KEY, JSON.stringify(o));
       if (this.ui) this.ui.optionsChanged();
@@ -234,8 +251,13 @@
       this.saveTimer = this.options.autosave;
       this.ui.show('hud');
       this.ui.worldStarted();
+      document.body.classList.add('ingame');
       if (this.autostart) {
         this.forceInput = true;
+      } else if (this.touch.enabled) {
+        // écran tactile : pas de verrouillage du pointeur, on joue directement
+        this.forceInput = true;
+        this.ui.showTouchHint();
       } else this.ui.show('start');
       if (save && save.v < 4) setTimeout(() => this.ui.toast('Nouvelle version : plus de 500 blocs, la faim remplace l’endurance, mode créatif…', 'gold'), 800);
     }
@@ -395,6 +417,10 @@
 
     // --------------------------------------------------------- entrées ---
     captureMouse() {
+      if (this.touch && this.touch.enabled) {
+        if (this.state === 'playing') this.forceInput = true;
+        return;
+      }
       if (this.state !== 'playing' || this.paused || this.ui.invOpen || !this.player.alive || this.forceInput) return;
       const p = this.canvas.requestPointerLock && this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => this.ui.show('start'));
@@ -430,7 +456,7 @@
           inp.mouse[e.button] = true;
           inp.pressed['mouse' + e.button] = true;
           e.preventDefault();
-        } else if (e.target === this.canvas && this.state === 'playing' && !this.paused && !this.ui.invOpen && this.player.alive) {
+        } else if (e.target === this.canvas && !this.touch.enabled && this.state === 'playing' && !this.paused && !this.ui.invOpen && this.player.alive) {
           this.captureMouse();
         }
       });
@@ -492,6 +518,14 @@
         inp.keys[e.code] = false;
       });
       window.addEventListener('blur', () => this.clearInput());
+      // application mise en arrière-plan (téléphone) : pause et sauvegarde
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && this.state === 'playing' && !this.paused && !this.autostart) {
+          this.clearInput();
+          if (this.touch.enabled) this.touch.reset();
+          this.pause();
+        }
+      });
       window.addEventListener('beforeunload', () => {
         if (this.state === 'playing') this.save(true);
       });
@@ -510,6 +544,7 @@
         fn(e);
       });
       on('btn-continue', () => {
+        this.maybeFullscreen();
         const s = this.loadSave();
         if (s) this.startWorld(s.seed, s);
       });
@@ -522,6 +557,7 @@
         this.ui.show('menu');
       });
       on('btn-nw-create', () => {
+        this.maybeFullscreen();
         if (this.loadSave() && !confirm('Une partie existe déjà. La remplacer par un nouveau monde ?')) return;
         const txt = $('seed').value.trim();
         let seed;
@@ -560,6 +596,8 @@
         this.save(true);
         this.state = 'menu';
         this.paused = false;
+        document.body.classList.remove('ingame');
+        this.touch.reset();
         this.ui.hide('pause');
         this.ui.hide('hud');
         this.renderer.freeAll();
@@ -574,6 +612,20 @@
         this.ui.hide('victory');
         this.captureMouse();
       });
+    }
+
+    // Plein écran automatique sur téléphone (là où le navigateur le permet).
+    maybeFullscreen() {
+      if (!this.touch.enabled || document.fullscreenElement) return;
+      const el = document.documentElement;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!fn) return;
+      try {
+        const p = fn.call(el, { navigationUI: 'hide' });
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     refreshMenu() {
@@ -880,6 +932,7 @@
       dt = Math.min(dt, 0.05);
       if (this.state !== 'playing') return;
       try {
+        this.touch.frame();
         if (!this.paused) this.update(dt);
         this.render();
         this.ui.update(dt);

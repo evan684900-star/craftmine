@@ -18,6 +18,9 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   background: #0b0d14;
   color: var(--text);
   font-family: var(--font);
@@ -291,3 +294,69 @@ input[type='text'], #seed {
 #creative-search { flex: 1; min-width: 110px; font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--text); }
 #pause-info { margin-top: 14px; line-height: 1.5; }
 #pause-info b { color: var(--text); }
+
+/* ------------------------------------------------- contrôles tactiles */
+#touch-layer, #touch { display: none; }
+body.touch #touch-layer { display: block; position: fixed; inset: 0; touch-action: none; }
+body.touch #touch { display: block; position: fixed; inset: 0; pointer-events: none; touch-action: none; --t: var(--tsize, 1); }
+body.touch #touch button { pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+body.touch #hud #hotbar { pointer-events: auto; touch-action: none; }
+body.touch #abilities { display: none; }
+body.touch #debug { bottom: auto; top: 110px; }
+.t-top { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.t-top button { width: calc(46px * var(--t)); height: calc(40px * var(--t)); padding: 0; font-size: calc(20px * var(--t)); border-radius: 10px; background: rgba(10, 12, 20, 0.55); box-shadow: none; }
+.t-right { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(120px * var(--gui, 1)); width: calc(210px * var(--t)); height: calc(230px * var(--t)); }
+.t-btn {
+  position: absolute; width: calc(62px * var(--t)); height: calc(62px * var(--t)); border-radius: 50%; padding: 0; font-size: calc(26px * var(--t));
+  background: rgba(20, 24, 40, 0.5); border: 2px solid rgba(255, 255, 255, 0.35); box-shadow: none; color: #fff;
+}
+.t-btn.down, .t-top button.down { background: rgba(255, 200, 90, 0.55); transform: scale(0.94); }
+.t-btn.on { border-color: var(--gold); color: var(--gold); background: rgba(255, 200, 90, 0.2); }
+.t-btn.cool { opacity: 0.35; }
+.t-btn.small { width: calc(48px * var(--t)); height: calc(48px * var(--t)); font-size: calc(20px * var(--t)); }
+.t-btn.big { width: calc(78px * var(--t)); height: calc(78px * var(--t)); font-size: calc(32px * var(--t)); }
+#t-jump { right: 0; bottom: 0; }
+#t-sneak { right: calc(92px * var(--t)); bottom: 0; }
+#t-sprint { right: calc(160px * var(--t)); bottom: calc(8px * var(--t)); }
+#t-mine { right: calc(8px * var(--t)); bottom: calc(92px * var(--t)); }
+#t-use { right: calc(84px * var(--t)); bottom: calc(76px * var(--t)); }
+#t-dash { right: calc(150px * var(--t)); bottom: calc(68px * var(--t)); }
+#t-stick { position: absolute; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(10, 12, 20, 0.3); }
+#t-knob { position: absolute; left: 37px; top: 37px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
+#t-hint {
+  position: absolute; left: 50%; top: 38%; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px; background: rgba(10, 12, 20, 0.75);
+  text-align: center; font-size: 14px; line-height: 1.5; max-width: 80vw;
+}
+#rotate { position: fixed; inset: 0; z-index: 50; background: #0b0d14; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 20px; padding: 24px; }
+#rotate div { max-width: 320px; line-height: 1.6; }
+@media (orientation: portrait) { body.touch.ingame #rotate { display: flex !important; } }
+.inv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.inv-head h2 { margin: 0; }
+.inv-tools { display: flex; gap: 6px; }
+.inv-tools button { padding: 5px 10px; font-size: 13px; box-shadow: none; }
+.inv-tools button.on { border-color: var(--gold); color: var(--gold); }
+.touch-only { display: none; }
+body.touch .touch-only { display: inline-block; }
+@media (max-height: 520px) {
+  .grid { grid-template-columns: repeat(9, 40px); gap: 3px; }
+  .grid .slot { width: 40px; height: 40px; }
+  .panel { padding: 10px; }
+  .menu-box { padding: 16px; }
+  .logo { font-size: 40px; }
+  .subtitle { margin: 4px 0 12px; }
+  h1 { margin-bottom: 10px; font-size: 26px; }
+  .tab, #recipes, .cgrid { max-height: calc(100vh - 150px); }
+}
+body.touch #objective { max-width: 250px; padding: 6px 9px; }
+body.touch #obj-desc { font-size: 11px; }
+body.touch .inv-panel > .hint, body.touch #chest-panel .hint, body.touch #tab-creative > .hint:last-child { display: none; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .inv-wrap { flex-direction: row; overflow: hidden; max-height: calc(100vh - 12px); width: calc(100vw - 12px); gap: 8px; }
+  .inv-panel { overflow-y: auto; flex: none; }
+  .side-panel { width: auto; flex: 1; min-width: 0; }
+  .side-panel .tabs button { padding: 6px 4px; font-size: 12px; }
+  .filters button { padding: 3px 7px; }
+  .recipe .slot { width: 38px; height: 38px; }
+  .inv-head h2 { font-size: 16px; }
+  .inv-tools button { padding: 4px 7px; font-size: 12px; }
+}

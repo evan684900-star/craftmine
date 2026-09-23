@@ -118,8 +118,15 @@
       this.wasInWater = this.inWater;
 
       // ----- direction souhaitée
-      const f = (k[K.forward] ? 1 : 0) - (k[K.back] ? 1 : 0);
-      const s = (k[K.right] ? 1 : 0) - (k[K.left] ? 1 : 0);
+      let f = (k[K.forward] ? 1 : 0) - (k[K.back] ? 1 : 0);
+      let s = (k[K.right] ? 1 : 0) - (k[K.left] ? 1 : 0);
+      // joystick tactile : direction et intensité analogiques
+      let mag = 1;
+      if (input.analog) {
+        f = input.analog.y;
+        s = input.analog.x;
+        mag = Math.min(1, Math.hypot(f, s));
+      }
       let wx = -Math.sin(this.yaw) * f + Math.cos(this.yaw) * s;
       let wz = -Math.cos(this.yaw) * f - Math.sin(this.yaw) * s;
       const wl = Math.hypot(wx, wz);
@@ -158,6 +165,7 @@
       if (this.onGround && under.slow) speed *= under.slow;
       if (this.onGround && under.slip) speed *= 1.15;
       if (this.flying) speed = this.sprinting ? 21 : 11;
+      if (mag < 1) speed *= Math.max(0.3, mag);
 
       // ----- ruée
       if (input.pressed[K.dash] && this.dashCd <= 0 && !this.flying) {

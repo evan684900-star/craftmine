@@ -94,6 +94,9 @@
       { k: 'invertY', t: 'check', label: "Inverser l'axe vertical" },
       { k: 'toggleSprint', t: 'check', label: 'Course : un appui suffit (au lieu de maintenir la touche)' },
       { k: 'autoJump', t: 'check', label: 'Saut automatique devant une marche' },
+      { k: 'touchControls', t: 'select', label: 'Contrôles tactiles (téléphone, tablette)', opts: [['auto', 'Automatiques (écran tactile détecté)'], ['on', 'Toujours activés'], ['off', 'Désactivés']] },
+      { k: 'touchSens', t: 'range', label: 'Sensibilité tactile (caméra)', min: 0.3, max: 3, step: 0.1, fmt: (v) => (+v).toFixed(1) },
+      { k: 'touchSize', t: 'range', label: 'Taille des boutons tactiles', min: 70, max: 150, step: 5, fmt: pct },
       { t: 'binds' },
     ]],
     ['game', 'Jeu', [
@@ -166,9 +169,17 @@
       this.buildInventory();
       this.buildGuide();
       this.buildNewWorld();
+      $('inv-close').addEventListener('click', () => this.closeInventory());
+      const toggle = (id, key) => $(id).addEventListener('click', () => {
+        this[key] = !this[key];
+        $(id).classList.toggle('on', this[key]);
+      });
+      toggle('inv-quick', 'quickMode');
+      toggle('inv-half', 'halfMode');
       $('btn-opt-reset').addEventListener('click', () => {
         if (!confirm('Remettre toutes les options (et les touches) par défaut ?')) return;
         Object.assign(this.game.options, CM.DEFAULT_OPTIONS, { binds: null });
+        if (CM.isTouchDevice()) CM.applyMobileDefaults(this.game.options);
         this.game.binds = Object.assign({}, CM.DEFAULT_BINDS);
         this.game.applyOptions();
         this.renderOptions();
@@ -220,6 +231,13 @@
         this.hotSlots[i].innerHTML = this.slotHTML(inv.slots[i]);
         this.hotSlots[i].classList.toggle('sel', i === inv.selected);
       }
+    }
+
+    showTouchHint() {
+      const h = $('t-hint');
+      h.classList.remove('hidden');
+      clearTimeout(this.hintT);
+      this.hintT = setTimeout(() => h.classList.add('hidden'), 7000);
     }
 
     // Appelé au lancement d'une partie.
@@ -448,7 +466,7 @@
         const s = document.createElement('div');
         s.className = 'slot';
         s.dataset.i = i;
-        s.addEventListener('mousedown', (e) => this.slotClick(this.game.inventory.slots, i, e, 'inv'));
+        s.addEventListener('pointerdown', (e) => this.slotClick(this.game.inventory.slots, i, e, 'inv'));
         s.addEventListener('mouseenter', (e) => this.showTip(this.game.inventory.slots[i], e));
         s.addEventListener('mouseleave', () => this.hideTip());
         parent.appendChild(s);
@@ -461,22 +479,25 @@
       for (let i = 0; i < 27; i++) {
         const s = document.createElement('div');
         s.className = 'slot';
-        s.addEventListener('mousedown', (e) => this.chest && this.slotClick(this.chest, i, e, 'chest'));
+        s.addEventListener('pointerdown', (e) => this.chest && this.slotClick(this.chest, i, e, 'chest'));
         s.addEventListener('mouseenter', (e) => this.chest && this.showTip(this.chest[i], e));
         s.addEventListener('mouseleave', () => this.hideTip());
         cg.appendChild(s);
         this.chestSlots.push(s);
       }
       const inv = $('inventory');
+      document.addEventListener('pointerdown', (e) => (this.lastTouch = e.pointerType === 'touch'), true);
       inv.addEventListener('contextmenu', (e) => e.preventDefault());
-      inv.addEventListener('mousemove', (e) => {
+      const follow = (e) => {
         const c = $('cursor-stack');
         c.style.left = e.clientX + 'px';
         c.style.top = e.clientY + 'px';
         const tt = $('tooltip');
         tt.style.left = Math.min(e.clientX + 16, window.innerWidth - 300) + 'px';
         tt.style.top = e.clientY + 12 + 'px';
-      });
+      };
+      inv.addEventListener('pointermove', follow);
+      inv.addEventListener('pointerdown', follow, true);
       document.querySelectorAll('.side-panel .tabs button').forEach((b) => b.addEventListener('click', () => this.setTab(b.dataset.tab)));
       document.querySelectorAll('#tab-craft .filters button').forEach((b) =>
         b.addEventListener('click', () => {
@@ -514,12 +535,23 @@
         const el = document.createElement('div');
         el.className = 'slot';
         el.innerHTML = '<div class="icon" style="background-image:url(' + CM.Textures.icons[id] + ')"></div>';
-        el.addEventListener('mousedown', (e) => this.creativeClick(id, e));
+        this.tapOrPress(el, (e) => this.creativeClick(id, e));
         el.addEventListener('mouseenter', (e) => this.showTip({ id, count: 1, xp: CM.itemInfo(id).type === 'tool' ? 0 : undefined }, e));
         el.addEventListener('mouseleave', () => this.hideTip());
         grid.appendChild(el);
         this.creativeEls.set(id, { el, cat: creativeCat(id), name: norm(CM.itemName(id)) });
       }
+    }
+
+    // Souris : réagit dès l'appui. Doigt : au « clic » seulement, pour pouvoir faire
+    // défiler les listes sans fabriquer ou prendre d'objet par erreur.
+    tapOrPress(el, fn) {
+      el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') fn(e);
+      });
+      el.addEventListener('click', (e) => {
+        if (this.lastTouch) fn(e);
+      });
     }
 
     setTab(tab) {
@@ -542,10 +574,10 @@
     creativeClick(id, e) {
       e.preventDefault();
       const info = CM.itemInfo(id);
-      const stack = { id, count: e.button === 2 ? 1 : info.stack };
+      const stack = { id, count: e.button === 2 || this.halfMode ? 1 : info.stack };
       if (info.type === 'tool') stack.xp = 0;
       CM.Audio.play('click');
-      if (e.shiftKey) {
+      if (e.shiftKey || this.quickMode) {
         this.game.inventory.add(id, stack.count, info.type === 'tool' ? { xp: 0 } : null);
         return;
       }
@@ -563,6 +595,11 @@
         '<li><b>F</b> : ruée · <b>E</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>F1</b> : masquer l’interface · <b>F3</b> : infos</li>' +
         '<li><b>Clic gauche</b> (maintenu) : miner / frapper · <b>Clic droit</b> : poser, manger, utiliser · <b>Clic molette</b> : choisir le bloc visé</li>' +
         '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>Q</b> : jeter</li></ul>' +
+        '<h3>Sur téléphone ou tablette</h3><ul>' +
+        '<li>Tiens le téléphone en mode paysage. Pouce gauche : le joystick apparaît là où tu poses le doigt.</li>' +
+        '<li>Glisse ailleurs pour regarder. <b>Touche</b> l’écran pour poser un bloc, utiliser ou frapper ; <b>garde le doigt appuyé</b> pour miner.</li>' +
+        '<li>Boutons : ⤒ saut (deux fois pour voler en créatif), ⤓ s’accroupir, » courir, ⚡ ruée, ⛏ miner, ✋ poser, 🎒 inventaire, ⏸ pause, 🗑 jeter.</li>' +
+        '<li>Dans l’inventaire, « Rapide » remplace Maj+clic et « Moitié » remplace le clic droit.</li></ul>' +
         '<h3>Le concept</h3><p>Comme dans Minecraft : un monde en cubes à miner, des ressources à récolter, des outils à fabriquer, la faim à gérer et des nuits dangereuses. Mais certaines règles changent :</p>' +
         html;
     }
@@ -661,7 +698,10 @@
       const s = slots[i];
       const max = (id) => CM.itemInfo(id).stack;
       CM.Audio.play('click');
-      if (e.shiftKey && s && !this.cursor) {
+      // sur écran tactile, les boutons « Rapide » et « Moitié » remplacent Maj et le clic droit
+      const shift = e.shiftKey || this.quickMode;
+      const button = this.halfMode && e.button === 0 ? 2 : e.button;
+      if (shift && s && !this.cursor) {
         if (kind === 'chest') this.stowInto(s, inv.slots, 0, 36);
         else if (this.chest) this.stowInto(s, this.chest, 0, 27);
         else if (i >= 9) this.stowInto(s, inv.slots, 0, 9);
@@ -670,7 +710,7 @@
         inv.changed();
         return;
       }
-      if (e.button === 0) {
+      if (button === 0) {
         if (!this.cursor) {
           if (s) {
             this.cursor = s;
@@ -688,7 +728,7 @@
           slots[i] = this.cursor;
           this.cursor = s;
         }
-      } else if (e.button === 2) {
+      } else if (button === 2) {
         if (!this.cursor) {
           if (s) {
             const half = Math.ceil(s.count / 2);
@@ -710,7 +750,7 @@
 
     showTip(s, e) {
       const tt = $('tooltip');
-      if (!s || this.cursor) {
+      if (!s || this.cursor || (e && e.pointerType === 'touch') || (this.game.touch && this.game.touch.enabled && !(e && e.pointerType === 'mouse'))) {
         tt.classList.add('hidden');
         return;
       }
@@ -803,9 +843,9 @@
       box.scrollTop = scroll;
       box.querySelectorAll('.recipe').forEach((el) => {
         const r = CM.recipes[+el.dataset.r];
-        el.addEventListener('mousedown', (e) => {
+        this.tapOrPress(el, (e) => {
           e.preventDefault();
-          this.craft(r, e.shiftKey);
+          this.craft(r, e.shiftKey || this.quickMode);
         });
         el.addEventListener('mouseenter', (e) => this.showTip({ id: r.out, count: r.n, xp: CM.itemInfo(r.out).type === 'tool' ? 0 : undefined }, e));
         el.addEventListener('mouseleave', () => this.hideTip());
