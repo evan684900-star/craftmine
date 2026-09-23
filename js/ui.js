@@ -98,6 +98,17 @@
       { k: 'touchSens', t: 'range', label: 'Sensibilité tactile (caméra)', min: 0.3, max: 3, step: 0.1, fmt: (v) => (+v).toFixed(1) },
       { k: 'touchSize', t: 'range', label: 'Taille des boutons tactiles', min: 70, max: 150, step: 5, fmt: pct },
       { k: 'touchAim', t: 'select', label: 'Visée tactile (toucher et appui long)', opts: [['finger', 'Au doigt : sur le bloc touché'], ['center', 'Au centre de l’écran (réticule)']] },
+      { k: 'touchOpacity', t: 'range', label: 'Opacité des boutons tactiles', min: 20, max: 100, step: 5, fmt: pct },
+      {
+        t: 'button', label: 'Disposer les boutons tactiles…', note: 'Place chaque bouton où tu veux, change sa taille et son opacité, ou masque-le.',
+        run: (g, ui) => {
+          ui.hide('options');
+          g.touch.openEditor(() => {
+            ui.show('options');
+            ui.renderOptions();
+          });
+        },
+      },
       { t: 'binds' },
     ]],
     ['game', 'Jeu', [
@@ -599,6 +610,7 @@
         '<h3>Sur téléphone ou tablette</h3><ul>' +
         '<li>Tiens le téléphone en mode paysage. Pouce gauche : le joystick apparaît là où tu poses le doigt.</li>' +
         '<li>Glisse ailleurs pour regarder. <b>Touche un bloc</b> pour poser à côté, utiliser ou frapper ; <b>garde le doigt appuyé dessus</b> pour le casser (visée au doigt, modifiable dans Options › Contrôles).</li>' +
+        '<li>Options › Contrôles › <b>Disposer les boutons tactiles</b> : place chaque bouton où tu veux, change sa taille et son opacité, ou masque-le.</li>' +
         '<li>Boutons : ⤒ saut (deux fois pour voler en créatif), ⤓ s’accroupir, » courir, ⚡ ruée, ✋ poser au centre de l’écran, 🎒 inventaire, ⏸ pause, 🗑 jeter.</li>' +
         '<li>Dans l’inventaire, « Rapide » remplace Maj+clic et « Moitié » remplace le clic droit.</li></ul>' +
         '<h3>Multijoueur (gratuit)</h3><ul>' +
@@ -987,6 +999,22 @@
             }),
           );
           body.appendChild(h);
+          continue;
+        }
+        if (it.t === 'button') {
+          const d = document.createElement('div');
+          d.className = 'opt';
+          const b = document.createElement('button');
+          b.textContent = it.label;
+          b.addEventListener('click', () => it.run(g, this));
+          d.appendChild(b);
+          if (it.note) {
+            const n = document.createElement('div');
+            n.className = 'small-note';
+            n.textContent = it.note;
+            d.appendChild(n);
+          }
+          body.appendChild(d);
           continue;
         }
         if (it.t === 'world') {

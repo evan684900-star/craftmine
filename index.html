@@ -83,6 +83,27 @@
     </div>
     <div id="t-hint" class="hidden">Glisse en bas à gauche pour marcher, ailleurs pour regarder.<br>Touche un bloc pour poser à côté, garde le doigt appuyé dessus pour le casser.</div>
   </div>
+  <div id="touch-editor" class="hidden">
+    <div class="te-bg"></div>
+    <div class="te-panel">
+      <div class="te-title" title="Fais glisser pour déplacer ce panneau">⠿ Boutons tactiles</div>
+      <div class="te-help">Fais glisser les boutons où tu veux. Touche un bouton pour régler sa taille et son opacité, ou le masquer.</div>
+      <div id="te-one">
+        <div id="te-name"></div>
+        <label>Taille <span id="te-size-v"></span></label>
+        <input id="te-size" type="range" min="50" max="200" step="5" />
+        <label>Opacité <span id="te-opa-v"></span></label>
+        <input id="te-opa" type="range" min="10" max="100" step="5" />
+        <label class="te-check"><input id="te-hide" type="checkbox" /> Masquer ce bouton</label>
+      </div>
+      <label>Opacité de tous les boutons <span id="te-all-v"></span></label>
+      <input id="te-all" type="range" min="20" max="100" step="5" />
+      <div class="row2">
+        <button id="te-reset">Réinitialiser</button>
+        <button id="te-done" class="big">Terminé</button>
+      </div>
+    </div>
+  </div>
   <div id="rotate" class="hidden"><div>📱↻<br>Tourne ton téléphone en mode paysage pour jouer.</div></div>
 
   <!-- =========================== Inventaire =========================== -->

@@ -17,6 +17,13 @@
     return 'ontouchstart' in window && navigator.maxTouchPoints > 0 && !(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
   };
 
+  // Boutons que l'on peut déplacer, agrandir, rendre transparents ou masquer (Options).
+  const LAYOUT = {
+    't-jump': 'Sauter', 't-sneak': 'S’accroupir', 't-sprint': 'Courir', 't-dash': 'Ruée', 't-use': 'Poser au centre',
+    't-inv': 'Inventaire', 't-drop': 'Jeter', 't-chat': 'Tchat', 't-pause': 'Pause',
+  };
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
   const TAP_MS = 280; // un toucher plus court = « toucher »
   const HOLD_MS = 330; // maintenu plus longtemps sans bouger = miner
   const MOVE_TOL = 14; // pixels de tolérance avant de considérer que le doigt glisse
@@ -49,6 +56,7 @@
       const hold = (id, onDown, onUp) => {
         const el = $(id);
         el.addEventListener('pointerdown', (e) => {
+          if (this.editing) return;
           e.preventDefault();
           e.stopPropagation();
           CM.Audio.init();
@@ -63,7 +71,7 @@
         const end = (e) => {
           e.preventDefault();
           el.classList.remove('down');
-          if (onUp) onUp();
+          if (onUp && !this.editing) onUp();
         };
         el.addEventListener('pointerup', end);
         el.addEventListener('pointercancel', end);
@@ -94,6 +102,7 @@
         if (g.state === 'playing' && !g.paused) g.pause();
       });
       hold('t-drop', () => g.dropHeld(false));
+      this.buildEditor();
       // barre rapide : toucher une case la sélectionne
       $('hotbar').addEventListener('pointerdown', (e) => {
         if (!this.enabled) return;
@@ -103,6 +112,162 @@
         const i = [...$('hotbar').children].indexOf(slot);
         if (i >= 0) g.inventory.selected = i;
       });
+    }
+
+    // ------------------------------------------ disposition des boutons --
+    // Positions enregistrées en fraction de l'écran (s'adaptent à toutes les tailles).
+    applyLayout() {
+      const o = this.game.options, lay = o.touchLayout || {};
+      const all = (o.touchOpacity === undefined ? 100 : o.touchOpacity) / 100;
+      for (const id in LAYOUT) {
+        const el = $(id), L = lay[id] || {};
+        const custom = L.x !== undefined;
+        el.classList.toggle('t-custom', custom);
+        el.style.left = custom ? L.x * 100 + '%' : '';
+        el.style.top = custom ? L.y * 100 + '%' : '';
+        if (L.s && L.s !== 1) el.style.setProperty('--t', 'calc(var(--tsize, 1) * ' + L.s + ')');
+        else el.style.removeProperty('--t');
+        const op = all * (L.o === undefined ? 1 : L.o);
+        el.style.opacity = op < 1 ? String(op) : '';
+        el.classList.toggle('t-hidden', !!L.hide);
+      }
+      $('t-stick').style.opacity = all < 1 ? String(all) : '';
+    }
+    entry(id) {
+      const o = this.game.options;
+      if (!o.touchLayout) o.touchLayout = {};
+      return o.touchLayout[id] || (o.touchLayout[id] = {});
+    }
+    buildEditor() {
+      for (const id in LAYOUT) {
+        const el = $(id);
+        el.addEventListener('pointerdown', (e) => {
+          if (!this.editing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            el.setPointerCapture(e.pointerId);
+          } catch (err) {
+            /* ignore */
+          }
+          const r = el.getBoundingClientRect();
+          this.drag = { id, dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2), x0: e.clientX, y0: e.clientY, moved: false };
+          this.selectEdit(id);
+        });
+        el.addEventListener('pointermove', (e) => {
+          const d = this.drag;
+          if (!this.editing || !d || d.id !== id) return;
+          if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
+          d.moved = true;
+          const L = this.entry(id);
+          L.x = clamp((e.clientX - d.dx) / window.innerWidth, 0.02, 0.98);
+          L.y = clamp((e.clientY - d.dy) / window.innerHeight, 0.02, 0.98);
+          this.applyLayout();
+        });
+        const end = () => {
+          if (this.drag && this.drag.id === id) this.drag = null;
+        };
+        el.addEventListener('pointerup', end);
+        el.addEventListener('pointercancel', end);
+      }
+      const o = () => this.game.options;
+      const range = (id, fn) => $(id).addEventListener('input', (e) => fn(+e.target.value));
+      range('te-size', (v) => {
+        if (!this.sel) return;
+        this.entry(this.sel).s = v / 100;
+        this.applyLayout();
+        this.refreshEdit();
+      });
+      range('te-opa', (v) => {
+        if (!this.sel) return;
+        this.entry(this.sel).o = v / 100;
+        this.applyLayout();
+        this.refreshEdit();
+      });
+      range('te-all', (v) => {
+        o().touchOpacity = v;
+        this.applyLayout();
+        this.refreshEdit();
+      });
+      $('te-hide').addEventListener('change', (e) => {
+        if (!this.sel) return;
+        this.entry(this.sel).hide = e.target.checked;
+        this.applyLayout();
+      });
+      $('te-reset').addEventListener('click', () => {
+        if (!confirm('Remettre tous les boutons tactiles à leur place d’origine ?')) return;
+        o().touchLayout = {};
+        o().touchOpacity = 100;
+        this.selectEdit(null);
+        this.applyLayout();
+        this.refreshEdit();
+      });
+      $('te-done').addEventListener('click', () => this.closeEditor());
+      // le panneau se déplace par son titre (pour atteindre les boutons qu'il cache)
+      const panel = document.querySelector('.te-panel'), title = document.querySelector('.te-title');
+      let pd = null;
+      title.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const r = panel.getBoundingClientRect();
+        pd = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+        try {
+          title.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* ignore */
+        }
+      });
+      title.addEventListener('pointermove', (e) => {
+        if (!pd) return;
+        const r = panel.getBoundingClientRect();
+        panel.style.translate = 'none';
+        panel.style.left = clamp(e.clientX - pd.dx, 0, window.innerWidth - r.width) + 'px';
+        panel.style.top = clamp(e.clientY - pd.dy, 0, window.innerHeight - 40) + 'px';
+      });
+      const stop = () => (pd = null);
+      title.addEventListener('pointerup', stop);
+      title.addEventListener('pointercancel', stop);
+    }
+    openEditor(onDone) {
+      const o = this.game.options;
+      o.touchLayout = JSON.parse(JSON.stringify(o.touchLayout || {}));
+      this.onEditDone = onDone;
+      this.editing = true;
+      this.reset();
+      document.body.classList.add('touch-edit');
+      $('touch-editor').classList.remove('hidden');
+      this.selectEdit(null);
+      this.applyLayout();
+      this.refreshEdit();
+    }
+    closeEditor() {
+      if (!this.editing) return;
+      this.editing = false;
+      this.drag = null;
+      this.selectEdit(null);
+      document.body.classList.remove('touch-edit');
+      $('touch-editor').classList.add('hidden');
+      this.game.applyOptions(); // enregistre
+      if (this.onEditDone) this.onEditDone();
+    }
+    selectEdit(id) {
+      if (this.sel) $(this.sel).classList.remove('te-sel');
+      this.sel = id;
+      if (id) $(id).classList.add('te-sel');
+      this.refreshEdit();
+    }
+    refreshEdit() {
+      const o = this.game.options, L = (this.sel && (o.touchLayout || {})[this.sel]) || {};
+      const all = o.touchOpacity === undefined ? 100 : o.touchOpacity;
+      $('te-all').value = all;
+      $('te-all-v').textContent = all + ' %';
+      $('te-one').classList.toggle('off', !this.sel);
+      $('te-name').textContent = this.sel ? 'Bouton : ' + LAYOUT[this.sel] + ' ' + $(this.sel).textContent : 'Touche un bouton pour le régler';
+      const s = Math.round((L.s || 1) * 100), op = Math.round((L.o === undefined ? 1 : L.o) * 100);
+      $('te-size').value = s;
+      $('te-size-v').textContent = s + ' %';
+      $('te-opa').value = op;
+      $('te-opa-v').textContent = op + ' %';
+      $('te-hide').checked = !!L.hide;
     }
 
     setEnabled(on) {

@@ -76,7 +76,7 @@ Tiens l'appareil en **mode paysage** (un message le rappelle en mode portrait).
 | 🎒 · 🗑 · ⏸ | Inventaire · jeter l'objet en main · pause |
 | Barre rapide | Toucher une case pour la choisir |
 
-Dans l'inventaire, les boutons **Rapide** (comme Maj+clic) et **Moitié** (comme le clic droit) remplacent les raccourcis de la souris. Au premier lancement sur téléphone, le jeu choisit des réglages plus légers (distance d'affichage 5, résolution 75 %) et active le saut automatique. **Options > Contrôles** permet de forcer ou désactiver les contrôles tactiles, de régler leur sensibilité et la taille des boutons, et de choisir la visée : *au doigt* (par défaut, on agit sur le bloc touché) ou *au centre de l'écran* (réticule). Sur iPhone, *Partager > Sur l'écran d'accueil* ouvre le jeu en plein écran.
+Dans l'inventaire, les boutons **Rapide** (comme Maj+clic) et **Moitié** (comme le clic droit) remplacent les raccourcis de la souris. Au premier lancement sur téléphone, le jeu choisit des réglages plus légers (distance d'affichage 5, résolution 75 %) et active le saut automatique. **Options > Contrôles** permet de forcer ou désactiver les contrôles tactiles, de régler leur sensibilité et la taille des boutons, et de choisir la visée : *au doigt* (par défaut, on agit sur le bloc touché) ou *au centre de l'écran* (réticule). **Disposer les boutons tactiles…** ouvre un éditeur : on fait glisser chaque bouton où on veut, on règle sa taille (50 à 200 %) et son opacité, on peut le masquer, et un curseur règle l'opacité de tous les boutons. La disposition est gardée dans le navigateur. Sur iPhone, *Partager > Sur l'écran d'accueil* ouvre le jeu en plein écran.
 
 ### Multijoueur (gratuit, sans serveur)
 
@@ -137,7 +137,7 @@ bois → établi → pioche → pierre → torches → forge → fer → grappin
 **Options** (menu principal ou pause) est organisé en onglets :
 
 - **Graphismes** : distance d'affichage (3 à 16 tronçons), champ de vision, luminosité, résolution de rendu, limite d'images par seconde, particules, éclairage doux, feuillage qui ondule, nuages, balancement de la vue, champ de vision dynamique, main visible.
-- **Contrôles** : sensibilité, axe inversé, course en un appui, saut automatique, contrôles tactiles (auto / activés / désactivés), sensibilité tactile, taille des boutons, **réaffectation de toutes les touches**.
+- **Contrôles** : sensibilité, axe inversé, course en un appui, saut automatique, contrôles tactiles (auto / activés / désactivés), sensibilité tactile, taille et opacité des boutons, visée au doigt ou au centre, **éditeur de disposition des boutons tactiles**, **réaffectation de toutes les touches**.
 - **Jeu** : mode de jeu et difficulté du monde en cours, durée d'une journée, garder l'inventaire à la mort, objectifs à l'écran, fréquence de sauvegarde automatique.
 - **Audio** : volume général, blocs et actions, créatures, interface.
 - **Interface** : taille de l'interface, réticule, notifications, coordonnées, images par seconde, nom du biome, nom de l'objet en main.

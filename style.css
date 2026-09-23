@@ -303,7 +303,7 @@ body.touch #touch button { pointer-events: auto; touch-action: none; user-select
 body.touch #hud #hotbar { pointer-events: auto; touch-action: none; }
 body.touch #abilities { display: none; }
 body.touch #debug { bottom: auto; top: 110px; }
-.t-top { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.t-top { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 0; right: 0; display: flex; justify-content: center; gap: 8px; pointer-events: none; }
 .t-top button { width: calc(46px * var(--t)); height: calc(40px * var(--t)); padding: 0; font-size: calc(20px * var(--t)); border-radius: 10px; background: rgba(10, 12, 20, 0.55); box-shadow: none; }
 .t-right { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(120px * var(--gui, 1)); width: calc(210px * var(--t)); height: calc(230px * var(--t)); }
 .t-btn {
@@ -312,7 +312,7 @@ body.touch #debug { bottom: auto; top: 110px; }
 }
 .t-btn.down, .t-top button.down { background: rgba(255, 200, 90, 0.55); transform: scale(0.94); }
 .t-btn.on { border-color: var(--gold); color: var(--gold); background: rgba(255, 200, 90, 0.2); }
-.t-btn.cool { opacity: 0.35; }
+.t-btn.cool { filter: grayscale(1) brightness(0.55); }
 .t-btn.small { width: calc(48px * var(--t)); height: calc(48px * var(--t)); font-size: calc(20px * var(--t)); }
 .t-btn.big { width: calc(78px * var(--t)); height: calc(78px * var(--t)); font-size: calc(32px * var(--t)); }
 #t-jump { right: 0; bottom: 0; }
@@ -320,6 +320,31 @@ body.touch #debug { bottom: auto; top: 110px; }
 #t-sprint { right: calc(160px * var(--t)); bottom: calc(8px * var(--t)); }
 #t-use { right: calc(8px * var(--t)); bottom: calc(92px * var(--t)); }
 #t-dash { right: calc(100px * var(--t)); bottom: calc(84px * var(--t)); }
+/* disposition personnalisée (Options > Contrôles > Disposer les boutons) */
+#touch .t-custom { position: fixed !important; right: auto !important; bottom: auto !important; translate: -50% -50%; margin: 0; }
+#touch .t-hidden { display: none !important; }
+body.touch-edit #touch { display: block; position: fixed; inset: 0; z-index: 70; pointer-events: none; --t: var(--tsize, 1); }
+body.touch-edit #touch button { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+body.touch-edit #touch .t-hidden { display: block !important; outline: 2px dashed rgba(255, 255, 255, 0.6); }
+body.touch-edit #touch .net-only { display: block; }
+body.touch-edit #touch .te-sel { outline: 3px solid var(--gold); outline-offset: 3px; }
+body.touch-edit #t-stick, body.touch-edit #t-hint { display: none !important; }
+#touch-editor .te-bg { position: fixed; inset: 0; z-index: 60; background: rgba(5, 6, 12, 0.6); }
+.te-panel {
+  position: fixed; z-index: 80; left: 50%; top: calc(58px * var(--tsize, 1)); translate: -50% 0; width: min(340px, 44vw); max-height: calc(100vh - 66px * var(--tsize, 1)); overflow-y: auto;
+  padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); font-size: 13px;
+}
+.te-panel label { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); }
+.te-panel label span { color: var(--gold); font-weight: 700; }
+.te-panel input[type='range'] { width: 100%; accent-color: var(--gold); }
+.te-panel .te-check { justify-content: flex-start; gap: 8px; color: var(--text); }
+.te-panel .row2 { margin-top: 10px; }
+.te-panel .row2 button { padding: 8px; font-size: 14px; }
+.te-title { font-weight: 800; font-size: 16px; color: var(--gold); cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
+.te-help { color: var(--muted); margin: 4px 0 6px; line-height: 1.35; }
+#te-one { padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); margin-bottom: 4px; }
+#te-one.off input, #te-one.off label:not(:first-child) { opacity: 0.35; pointer-events: none; }
+#te-name { font-weight: 700; }
 #t-stick { position: absolute; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(10, 12, 20, 0.3); }
 #t-knob { position: absolute; left: 37px; top: 37px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
 #t-hint {

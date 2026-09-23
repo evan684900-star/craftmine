@@ -25,7 +25,7 @@
     // interface
     guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
     // écran tactile
-    touchControls: 'auto', touchSens: 1, touchSize: 100, touchAim: 'finger',
+    touchControls: 'auto', touchSens: 1, touchSize: 100, touchAim: 'finger', touchOpacity: 100, touchLayout: null,
     // multijoueur
     netName: '',
   };
@@ -148,6 +148,7 @@
       document.documentElement.style.setProperty('--gui', String(o.guiScale / 100));
       $('crosshair').className = 'ch-' + o.crosshair;
       document.documentElement.style.setProperty('--tsize', String(o.touchSize / 100));
+      if (this.touch) this.touch.applyLayout();
       const touchOn = o.touchControls === 'on' || (o.touchControls === 'auto' && CM.isTouchDevice());
       if (this.touch && touchOn !== this.touch.enabled) {
         this.touch.setEnabled(touchOn);
