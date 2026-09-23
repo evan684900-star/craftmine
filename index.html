@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CraftMine — L'Aube des Éclats</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Vercel Web Analytics : chargé seulement quand le jeu est en ligne (pas en local). -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    if (/^https?:$/.test(location.protocol) && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) {
+      var va = document.createElement('script');
+      va.defer = true;
+      va.src = '/_vercel/insights/script.js';
+      document.head.appendChild(va);
+    }
+  </script>
 </head>
 <body>
   <canvas id="game"></canvas>
