@@ -62,6 +62,7 @@
       this.flying = false;
       this.lastJumpTap = -10;
       this.eyeOffset = 0;
+      this.aimDir = null; // écran tactile : direction du doigt (sinon, le centre de l'écran)
     }
 
     get creative() {
@@ -76,6 +77,10 @@
     look() {
       const cp = Math.cos(this.pitch);
       return [-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp];
+    }
+    // Direction dans laquelle on vise (le doigt sur écran tactile, sinon le regard).
+    aim() {
+      return this.aimDir || this.look();
     }
     // Ajoute de l'épuisement (fait baisser la saturation puis la faim).
     exhaust(n) {
@@ -424,7 +429,7 @@
     }
 
     updateTarget() {
-      const e = this.eye(), d = this.look();
+      const e = this.eye(), d = this.aim();
       this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => id !== B.WATER);
     }
 
@@ -435,7 +440,7 @@
         this.releaseHook(false);
         return;
       }
-      const e = this.eye(), d = this.look();
+      const e = this.eye(), d = this.aim();
       const hit = g.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], GRAPPLE_RANGE, (id) => CM.blocks[id].solid);
       if (!hit) {
         CM.Audio.play('click');
@@ -518,7 +523,7 @@
 
     updateActions(dt, input) {
       const g = this.game;
-      const e = this.eye(), d = this.look();
+      const e = this.eye(), d = this.aim();
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);

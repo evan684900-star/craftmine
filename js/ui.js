@@ -97,6 +97,7 @@
       { k: 'touchControls', t: 'select', label: 'Contrôles tactiles (téléphone, tablette)', opts: [['auto', 'Automatiques (écran tactile détecté)'], ['on', 'Toujours activés'], ['off', 'Désactivés']] },
       { k: 'touchSens', t: 'range', label: 'Sensibilité tactile (caméra)', min: 0.3, max: 3, step: 0.1, fmt: (v) => (+v).toFixed(1) },
       { k: 'touchSize', t: 'range', label: 'Taille des boutons tactiles', min: 70, max: 150, step: 5, fmt: pct },
+      { k: 'touchAim', t: 'select', label: 'Visée tactile (toucher et appui long)', opts: [['finger', 'Au doigt : sur le bloc touché'], ['center', 'Au centre de l’écran (réticule)']] },
       { t: 'binds' },
     ]],
     ['game', 'Jeu', [
@@ -597,8 +598,8 @@
         '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>Q</b> : jeter</li></ul>' +
         '<h3>Sur téléphone ou tablette</h3><ul>' +
         '<li>Tiens le téléphone en mode paysage. Pouce gauche : le joystick apparaît là où tu poses le doigt.</li>' +
-        '<li>Glisse ailleurs pour regarder. <b>Touche</b> l’écran pour poser un bloc, utiliser ou frapper ; <b>garde le doigt appuyé</b> pour miner.</li>' +
-        '<li>Boutons : ⤒ saut (deux fois pour voler en créatif), ⤓ s’accroupir, » courir, ⚡ ruée, ⛏ miner, ✋ poser, 🎒 inventaire, ⏸ pause, 🗑 jeter.</li>' +
+        '<li>Glisse ailleurs pour regarder. <b>Touche un bloc</b> pour poser à côté, utiliser ou frapper ; <b>garde le doigt appuyé dessus</b> pour le casser (visée au doigt, modifiable dans Options › Contrôles).</li>' +
+        '<li>Boutons : ⤒ saut (deux fois pour voler en créatif), ⤓ s’accroupir, » courir, ⚡ ruée, ✋ poser au centre de l’écran, 🎒 inventaire, ⏸ pause, 🗑 jeter.</li>' +
         '<li>Dans l’inventaire, « Rapide » remplace Maj+clic et « Moitié » remplace le clic droit.</li></ul>' +
         '<h3>Multijoueur (gratuit)</h3><ul>' +
         '<li><b>Héberger</b> : lance ton monde, puis <b>Pause › Ouvrir aux amis</b>. Tu obtiens un code de 5 caractères (et un lien à partager).</li>' +

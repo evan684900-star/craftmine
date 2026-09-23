@@ -66,17 +66,17 @@ Tiens l'appareil en **mode paysage** (un message le rappelle en mode portrait).
 
 | Geste / bouton | Action |
 | --- | --- |
-| Pouce sur la gauche de l'écran | Joystick : il apparaît sous le doigt, plus on pousse plus on va vite |
+| Pouce en bas à gauche de l'écran | Joystick : il apparaît sous le doigt, plus on pousse plus on va vite |
 | Glisser ailleurs | Regarder autour |
-| Toucher l'écran | Poser un bloc, utiliser, manger, ou frapper la créature visée |
-| Garder le doigt appuyé | Miner |
+| Toucher un bloc | Poser un bloc contre lui, l'utiliser (coffre, établi…), manger, ou frapper la créature touchée |
+| Garder le doigt appuyé sur un bloc | Le casser (on peut glisser pour tourner la caméra sans lâcher) |
 | ⤒ / ⤓ | Sauter (deux fois pour voler en créatif) / s'accroupir ou descendre en vol |
 | » / ⚡ | Courir (bascule) / ruée |
-| ⛏ / ✋ | Miner (maintenir) / poser ou utiliser |
+| ✋ | Poser ou utiliser au centre de l'écran |
 | 🎒 · 🗑 · ⏸ | Inventaire · jeter l'objet en main · pause |
 | Barre rapide | Toucher une case pour la choisir |
 
-Dans l'inventaire, les boutons **Rapide** (comme Maj+clic) et **Moitié** (comme le clic droit) remplacent les raccourcis de la souris. Au premier lancement sur téléphone, le jeu choisit des réglages plus légers (distance d'affichage 5, résolution 75 %) et active le saut automatique. **Options > Contrôles** permet de forcer ou désactiver les contrôles tactiles et de régler leur sensibilité et la taille des boutons. Sur iPhone, *Partager > Sur l'écran d'accueil* ouvre le jeu en plein écran.
+Dans l'inventaire, les boutons **Rapide** (comme Maj+clic) et **Moitié** (comme le clic droit) remplacent les raccourcis de la souris. Au premier lancement sur téléphone, le jeu choisit des réglages plus légers (distance d'affichage 5, résolution 75 %) et active le saut automatique. **Options > Contrôles** permet de forcer ou désactiver les contrôles tactiles, de régler leur sensibilité et la taille des boutons, et de choisir la visée : *au doigt* (par défaut, on agit sur le bloc touché) ou *au centre de l'écran* (réticule). Sur iPhone, *Partager > Sur l'écran d'accueil* ouvre le jeu en plein écran.
 
 ### Multijoueur (gratuit, sans serveur)
 

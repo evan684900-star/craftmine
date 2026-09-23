@@ -25,7 +25,7 @@
     // interface
     guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
     // écran tactile
-    touchControls: 'auto', touchSens: 1, touchSize: 100,
+    touchControls: 'auto', touchSens: 1, touchSize: 100, touchAim: 'finger',
     // multijoueur
     netName: '',
   };

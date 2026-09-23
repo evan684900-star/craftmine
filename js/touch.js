@@ -1,9 +1,9 @@
 'use strict';
 // Contrôles tactiles (téléphones et tablettes) : joystick, caméra au doigt, boutons.
-//  - moitié gauche de l'écran : joystick (il apparaît là où le pouce se pose) ;
-//  - reste de l'écran : glisser pour regarder, toucher = poser / utiliser / frapper,
-//    maintenir = miner ;
-//  - boutons : saut, accroupi, course, ruée, miner, utiliser, inventaire, pause, jeter.
+//  - bas gauche de l'écran : joystick (il apparaît là où le pouce se pose) ;
+//  - reste de l'écran : glisser pour regarder ; toucher = poser / utiliser / frapper et
+//    appui long = casser, sur le bloc (ou la créature) qui se trouve sous le doigt ;
+//  - boutons : saut, accroupi, course, ruée, utiliser, inventaire, pause, jeter.
 (function () {
   const $ = (id) => document.getElementById(id);
 
@@ -32,6 +32,7 @@
       this.releaseUse = 0;
       this.sneak = false;
       this.sprint = false;
+      this.tapAim = null; // visée d'un toucher bref (gardée quelques images)
       this.build();
     }
 
@@ -83,10 +84,6 @@
         $('t-sprint').classList.toggle('on', this.sprint);
       });
       hold('t-dash', () => (inp.pressed[K().dash] = true));
-      hold('t-mine', () => {
-        inp.mouse[0] = true;
-        inp.pressed.mouse0 = true;
-      }, () => (inp.mouse[0] = false));
       hold('t-use', () => this.tapUse());
       hold('t-inv', () => {
         if (!g.player || !g.player.alive || g.paused) return;
@@ -121,15 +118,39 @@
       inp.analog = null;
       inp.mouse[0] = false;
       inp.mouse[2] = false;
+      this.tapAim = null;
+      if (this.game.player) this.game.player.aimDir = null;
       $('t-stick').classList.add('hidden');
       document.querySelectorAll('#touch .down').forEach((b) => b.classList.remove('down'));
     }
 
+    // Visée au doigt : direction du rayon qui passe par le point (x, y) de l'écran.
+    aimAt(x, y) {
+      const g = this.game, p = g.player;
+      if (!p) return;
+      if (g.options.touchAim === 'center' || x === undefined) {
+        p.aimDir = null;
+        return;
+      }
+      const W = g.canvas.clientWidth || window.innerWidth, H = g.canvas.clientHeight || window.innerHeight;
+      const t = Math.tan(((g.fovCur || g.options.fov) * Math.PI) / 360);
+      const a = ((x / W) * 2 - 1) * t * (W / H), b = (1 - (y / H) * 2) * t;
+      const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+      // même repère que la caméra (droite, haut, avant)
+      const d = [-sy * cp + cy * a + sy * sp * b, sp + cp * b, -cy * cp - sy * a + cy * sp * b];
+      const l = Math.hypot(d[0], d[1], d[2]);
+      p.aimDir = [d[0] / l, d[1] / l, d[2] / l];
+    }
+
     // Toucher bref : frapper la créature visée, sinon poser / utiliser.
-    tapUse() {
+    // (x, y) : point touché (visée au doigt) ; sans coordonnées, le centre de l'écran.
+    tapUse(x, y) {
       const g = this.game, p = g.player, inp = g.input;
       if (!p || !p.alive) return;
-      const e = p.eye(), d = p.look();
+      this.aimAt(x, y);
+      this.tapAim = p.aimDir ? { x, y, n: 4 } : null;
+      p.updateTarget();
+      const e = p.eye(), d = p.aim();
       const mob = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
       if (mob && (!p.target || mob.t < p.target.t)) {
         inp.pressed.mouse0 = true;
@@ -151,9 +172,10 @@
       } catch (err) {
         /* ignore */
       }
-      const W = window.innerWidth;
-      // pouce gauche : joystick (apparaît sous le doigt)
-      if (e.clientX < W * 0.4 && !this.stick) {
+      const W = window.innerWidth, H = window.innerHeight;
+      // pouce gauche : joystick (apparaît sous le doigt) ; le haut de l'écran reste libre
+      // pour toucher les blocs qui s'y trouvent
+      if (e.clientX < W * 0.4 && e.clientY > H * 0.3 && !this.stick) {
         this.stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
         const st = $('t-stick');
         st.style.left = e.clientX + 'px';
@@ -204,7 +226,7 @@
         if (![...this.looks.values()].some((o) => o.mining)) this.game.input.mouse[0] = false;
         return;
       }
-      if (!cancel && !L.moved && performance.now() - L.t0 < TAP_MS) this.tapUse();
+      if (!cancel && !L.moved && performance.now() - L.t0 < TAP_MS) this.tapUse(L.x, L.y);
     }
 
     updateStick() {
@@ -240,15 +262,21 @@
       if (this.sprint || this.sprintSet) inp.keys[K.sprint] = active && this.sprint;
       this.sneakSet = this.sneak;
       this.sprintSet = this.sprint;
-      // doigt immobile maintenu : on mine (ou frappe) jusqu'au relâchement
+      // doigt immobile maintenu : on casse le bloc sous le doigt (ou on frappe) jusqu'au relâchement
       const now = performance.now();
+      let aim = null;
       for (const L of this.looks.values()) {
         if (!L.mining && !L.moved && now - L.t0 > HOLD_MS && active) {
           L.mining = true;
           inp.mouse[0] = true;
           inp.pressed.mouse0 = true;
         }
+        if (L.mining) aim = L;
       }
+      // la visée suit le doigt qui casse (même s'il glisse pour tourner la caméra)
+      if (aim) this.aimAt(aim.x, aim.y);
+      else if (this.tapAim && this.tapAim.n-- > 0) this.aimAt(this.tapAim.x, this.tapAim.y);
+      else if (g.player && g.player.aimDir) g.player.aimDir = null;
       if (this.releaseUse > 0 && --this.releaseUse === 0) inp.mouse[2] = false;
       const p = g.player;
       if (p) {

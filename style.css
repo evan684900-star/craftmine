@@ -318,9 +318,8 @@ body.touch #debug { bottom: auto; top: 110px; }
 #t-jump { right: 0; bottom: 0; }
 #t-sneak { right: calc(92px * var(--t)); bottom: 0; }
 #t-sprint { right: calc(160px * var(--t)); bottom: calc(8px * var(--t)); }
-#t-mine { right: calc(8px * var(--t)); bottom: calc(92px * var(--t)); }
-#t-use { right: calc(84px * var(--t)); bottom: calc(76px * var(--t)); }
-#t-dash { right: calc(150px * var(--t)); bottom: calc(68px * var(--t)); }
+#t-use { right: calc(8px * var(--t)); bottom: calc(92px * var(--t)); }
+#t-dash { right: calc(100px * var(--t)); bottom: calc(84px * var(--t)); }
 #t-stick { position: absolute; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(10, 12, 20, 0.3); }
 #t-knob { position: absolute; left: 37px; top: 37px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
 #t-hint {
