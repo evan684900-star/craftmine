@@ -183,6 +183,41 @@
   const DEEP_ORE = new Uint16Array(1024);
   const BANDS = [];
   const RUIN_REGION = 112;
+
+  // --------------------------------------------------------- villages ---
+  // Au plus un village par région de 256 blocs, dans les biomes assez plats.
+  const VILLAGE_REGION = 256;
+  const VILLAGE_BIOMES = new Set([BIO.PLAINS, BIO.FLOWERS, BIO.SAVANNA, BIO.DESERT, BIO.TAIGA, BIO.SNOWY_TAIGA, BIO.TUNDRA, BIO.CHERRY, BIO.BIRCH, BIO.FOREST]);
+  // Matériaux des maisons selon le biome.
+  function villageStyle(bi) {
+    const B = CM.B;
+    const wood = (planks, log, roof, extra) => Object.assign({
+      planks: B[planks], log: B[log], lower: B.COBBLE, floor: B[planks], roof: B[roof], roofSlab: B[roof + '_SLAB'],
+      path: [B.GRAVEL, B.COARSE_DIRT, B.GRAVEL], flat: false, snow: false,
+    }, extra || {});
+    switch (bi) {
+      case BIO.DESERT:
+        return {
+          planks: B.SANDSTONE, log: B.CUT_SANDSTONE, lower: B.SANDSTONE, floor: B.CUT_SANDSTONE, roof: B.SMOOTH_SANDSTONE,
+          roofSlab: B.SMOOTH_SANDSTONE_SLAB, path: [B.SMOOTH_SANDSTONE, B.SMOOTH_SANDSTONE, B.CUT_SANDSTONE], flat: true, snow: false,
+        };
+      case BIO.SAVANNA: return wood('ACACIA_PLANKS', 'ACACIA_LOG', 'ACACIA_PLANKS', { lower: B.TERRACOTTA, path: [B.COARSE_DIRT, B.COARSE_DIRT, B.GRAVEL] });
+      case BIO.TAIGA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS');
+      case BIO.SNOWY_TAIGA:
+      case BIO.TUNDRA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS', { snow: true });
+      case BIO.CHERRY: return wood('CHERRY_PLANKS', 'CHERRY_LOG', 'CHERRY_PLANKS');
+      case BIO.BIRCH: return wood('BIRCH_PLANKS', 'BIRCH_LOG', 'SPRUCE_PLANKS');
+      default: return wood('PLANKS', 'LOG', 'DARK_OAK_PLANKS');
+    }
+  }
+  // Dimensions des bâtiments (largeur le long de la route, profondeur, hauteur des murs).
+  const VILLAGE_KINDS = {
+    house: { w: 5, d: 5, h: 3 },
+    bighouse: { w: 7, d: 6, h: 4 },
+    farm: { w: 7, d: 9, h: 0 },
+    smith: { w: 7, d: 6, h: 4 },
+    library: { w: 7, d: 5, h: 4 },
+  };
   const GEODE_REGION = 80;
   CM.initWorldTables = function () {
     const Bk = CM.B;
@@ -221,6 +256,9 @@
       this.oz = Math.floor((r() - 0.5) * 200000);
       // Monde d'une ancienne version : on garde l'ancien générateur de relief.
       this.legacy = this.settings.gen === 1;
+      // villages : mondes créés depuis leur ajout (générateur 3), pour ne pas changer les anciens
+      this.hasVillages = !this.legacy && (this.settings.gen || 2) >= 3;
+      this.villageCache = new Map();
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
       this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
@@ -496,6 +534,7 @@
     // Type d'arbre d'une colonne (déterministe) : null ou { type, big, bees }.
     treeAt(x, z, info) {
       if (info.flat) return null;
+      if (this.hasVillages && this.villageNear(x, z, 6)) return null;
       const t = this.trees[info.bi];
       if (!t) return null;
       if (!t.any && !CM.blocks[info.topB].soil && info.topB !== CM.B.GRASS) return null;
@@ -886,8 +925,10 @@
           if (h <= SEA) continue;
           if (blocks[lidx(lx, h, lz)] !== info.topB || blocks[lidx(lx, h + 1, lz)] !== 0) continue;
           if (this.treeAt(x, z, info)) continue;
+          // dans un village : pas de cactus ni de grandes plantes au milieu des maisons
+          const inVil = this.hasVillages && !!this.villageNear(x, z, 3);
           // canne à sucre au bord de l'eau
-          if (!this.legacy && h <= SEA + 1 && (info.topB === Bk.SAND || CM.blocks[info.topB].soil) && lx > 0 && lx < 15 && lz > 0 && lz < 15) {
+          if (!this.legacy && !inVil && h <= SEA + 1 && (info.topB === Bk.SAND || CM.blocks[info.topB].soil) && lx > 0 && lx < 15 && lz > 0 && lz < 15) {
             const nearWater = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => blocks[lidx(lx + dx, SEA, lz + dz)] === Bk.WATER);
             if (nearWater && CM.hash3(x, 19, z, seed) < 0.12) {
               const hh = 1 + Math.floor(CM.hash3(x, 20, z, seed) * 3);
@@ -905,6 +946,7 @@
                 continue;
               }
               const id = Bk[name];
+              if (inVil && (id === Bk.CACTUS || n)) break;
               if (id === Bk.CACTUS) {
                 if (info.topB !== Bk.SAND && info.topB !== Bk.RED_SAND) break;
                 const hh = 1 + Math.floor(CM.hash3(x, 14, z, seed) * (n || 3));
@@ -962,6 +1004,7 @@
       this.geodesFor(c);
       this.islandsFor(c);
       this.ruinsFor(c);
+      this.villagesFor(c);
 
       // 8) modifications du joueur
       const e = this.edits.get(ckey(cx, cz));
@@ -1034,6 +1077,7 @@
       if (rand() > 0.45) return null;
       const x = rx * RUIN_REGION + 12 + Math.floor(rand() * (RUIN_REGION - 24));
       const z = rz * RUIN_REGION + 12 + Math.floor(rand() * (RUIN_REGION - 24));
+      if (this.hasVillages && this.villageNear(x, z, 10)) return null;
       const info = this.column(x, z);
       const ocean = (info.bi === BIO.OCEAN || info.bi === BIO.WARM_OCEAN) && info.h < SEA - 4;
       if (!ocean && (info.h <= SEA + 1 || info.bi === BIO.MOUNTAINS || info.bi === BIO.SWAMP || info.bi === BIO.MANGROVE || info.flat)) return null;
@@ -1093,6 +1137,284 @@
               if (dx === 0 && dz === 0) c.blocks[lidx(lx, y0 + 1, lz)] = Bk.CHEST;
             }
         }
+    }
+
+    // ------------------------------------------------------- villages --
+    villageAt(rx, rz) {
+      if (!this.hasVillages) return null;
+      const key = rx + ',' + rz;
+      let v = this.villageCache.get(key);
+      if (v === undefined) {
+        v = this.planVillage(rx, rz);
+        this.villageCache.set(key, v);
+      }
+      return v;
+    }
+    // Village dont la zone (agrandie de pad) contient (x, z).
+    villageNear(x, z, pad) {
+      if (!this.hasVillages) return null;
+      const v = this.villageAt(Math.floor(x / VILLAGE_REGION), Math.floor(z / VILLAGE_REGION));
+      return v && Math.abs(x - v.x) <= v.r + pad && Math.abs(z - v.z) <= v.r + pad ? v : null;
+    }
+    // Plan d'un village (puits, routes, bâtiments, lampadaires), déterministe pour la graine.
+    planVillage(rx, rz) {
+      const R = VILLAGE_REGION;
+      const rand = CM.rng((CM.hash3(rx, 977, rz, this.seed) * 4294967296) >>> 0);
+      if (rand() > 0.85) return null;
+      // plusieurs essais dans la région : biome adapté, terrain assez plat et sec
+      let cx = 0, cz = 0, info = null;
+      for (let t = 0; t < 5 && !info; t++) {
+        cx = rx * R + 60 + Math.floor(rand() * (R - 120));
+        cz = rz * R + 60 + Math.floor(rand() * (R - 120));
+        const ci = this.column(cx, cz);
+        if (!VILLAGE_BIOMES.has(ci.bi) || ci.h <= SEA + 1 || ci.h > H - 24) continue;
+        let lo = ci.h, hi = ci.h, wet = 0;
+        for (let k = 0; k < 16; k++) {
+          const a = (k / 16) * Math.PI * 2, d = k % 2 ? 14 : 28;
+          const h = this.column(cx + Math.round(Math.cos(a) * d), cz + Math.round(Math.sin(a) * d)).h;
+          lo = Math.min(lo, h);
+          hi = Math.max(hi, h);
+          if (h <= SEA) wet++;
+        }
+        if (hi - lo <= 12 && wet <= 4) info = ci;
+      }
+      if (!info) return null;
+      const v = { x: cx, z: cz, y: info.h, bi: info.bi, st: villageStyle(info.bi), seed: Math.floor(rand() * 1e9), roads: [], builds: [], lamps: [], spots: [], chests: [], r: 8, pop: 2 };
+      const taken = [];
+      const free = (x0, z0, x1, z1) => !taken.some((t) => x0 <= t[2] && x1 >= t[0] && z0 <= t[3] && z1 >= t[1]);
+      // place centrale et puits
+      v.roads.push({ x0: cx - 3, z0: cz - 3, x1: cx + 3, z1: cz + 3 });
+      v.builds.push({ type: 'well', x0: cx - 1, z0: cz - 1, x1: cx + 1, z1: cz + 1, y: info.h });
+      taken.push([cx - 3, cz - 3, cx + 3, cz + 3]);
+      for (const [px, pz] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) v.spots.push([cx + px, info.h + 1, cz + pz]);
+      const once = {};
+      const pickKind = () => {
+        const k = rand();
+        if (k < 0.1 && !once.smith) return (once.smith = 'smith');
+        if (k < 0.18 && !once.library) return (once.library = 'library');
+        if (k < 0.4) return 'farm';
+        if (k < 0.58) return 'bighouse';
+        return 'house';
+      };
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dz] of dirs) {
+        if (rand() < 0.12) continue;
+        const len = 16 + Math.floor(rand() * 18);
+        const ax = cx + dx * 4, az = cz + dz * 4, bx = cx + dx * len, bz = cz + dz * len;
+        const road = { x0: Math.min(ax, bx) - (dz ? 1 : 0), x1: Math.max(ax, bx) + (dz ? 1 : 0), z0: Math.min(az, bz) - (dx ? 1 : 0), z1: Math.max(az, bz) + (dx ? 1 : 0) };
+        v.roads.push(road);
+        taken.push([road.x0, road.z0, road.x1, road.z1]);
+        for (let t = 7; t + 2 <= len; t += 7 + Math.floor(rand() * 3)) {
+          for (const side of [-1, 1]) {
+            if (rand() < 0.25) continue;
+            const kind = pickKind();
+            const K = VILLAGE_KINDS[kind];
+            // repère local : u le long de la route, v en s'éloignant de la route (v = 0 : façade)
+            const b = { type: kind, w: K.w, d: K.d, hgt: K.h, door: Math.floor(K.w / 2) };
+            if (dx) {
+              b.ux = 1; b.uz = 0; b.vx = 0; b.vz = side;
+              b.ox = cx + dx * t - Math.floor(K.w / 2); b.oz = cz + side * 3;
+            } else {
+              b.ux = 0; b.uz = 1; b.vx = side; b.vz = 0;
+              b.ox = cx + side * 3; b.oz = cz + dz * t - Math.floor(K.w / 2);
+            }
+            const P = (u, w) => [b.ox + u * b.ux + w * b.vx, b.oz + u * b.uz + w * b.vz];
+            const c1 = P(-1, -1), c2 = P(K.w, K.d);
+            b.x0 = Math.min(c1[0], c2[0]); b.x1 = Math.max(c1[0], c2[0]);
+            b.z0 = Math.min(c1[1], c2[1]); b.z1 = Math.max(c1[1], c2[1]);
+            if (!free(b.x0, b.z0, b.x1, b.z1)) continue;
+            // sol : hauteur au centre ; trop pentu ou mouillé : pas de bâtiment
+            const mid = P(Math.floor(K.w / 2), Math.floor(K.d / 2));
+            const hs = [mid, P(0, 0), P(K.w - 1, 0), P(0, K.d - 1), P(K.w - 1, K.d - 1)].map(([x, z]) => this.column(x, z).h);
+            if (Math.max(...hs) - Math.min(...hs) > 5 || Math.min(...hs) <= SEA) continue;
+            b.y = hs[0];
+            taken.push([b.x0, b.z0, b.x1, b.z1]);
+            if (kind !== 'farm') {
+              const [sx, sz] = P(b.door, 1);
+              v.spots.push([sx, b.y + 1, sz]);
+              v.pop++;
+              // coffre (toujours chez le forgeron, parfois ailleurs)
+              if (kind === 'smith' || rand() < 0.45) {
+                const [kx, kz] = P(K.w - 2, K.d - 2);
+                b.chest = [kx, b.y + 1, kz];
+                v.chests.push({ x: kx, y: b.y + 1, z: kz, smith: kind === 'smith' });
+              }
+            }
+            v.builds.push(b);
+          }
+        }
+        // lampadaire au bout de la route
+        const lx = bx + (dz ? 2 : dx), lz = bz + (dx ? 2 : dz);
+        if (free(lx, lz, lx, lz)) v.lamps.push([lx, lz]);
+      }
+      // lampadaires aux coins de la place
+      for (const [px, pz] of [[4, 4], [-4, 4], [4, -4], [-4, -4]]) if (free(cx + px, cz + pz, cx + px, cz + pz)) v.lamps.push([cx + px, cz + pz]);
+      for (const b of [...v.roads, ...v.builds]) v.r = Math.max(v.r, Math.abs(b.x0 - cx), Math.abs(b.x1 - cx), Math.abs(b.z0 - cz), Math.abs(b.z1 - cz));
+      for (const [x, z] of v.lamps) v.r = Math.max(v.r, Math.abs(x - cx), Math.abs(z - cz));
+      v.r += 1;
+      v.pop = Math.min(8, v.pop);
+      return v;
+    }
+    villagesFor(c) {
+      if (!this.hasVillages) return;
+      const R = VILLAGE_REGION;
+      const r0x = Math.floor((c.x0 - 60) / R), r1x = Math.floor((c.x0 + 75) / R);
+      const r0z = Math.floor((c.z0 - 60) / R), r1z = Math.floor((c.z0 + 75) / R);
+      for (let rz = r0z; rz <= r1z; rz++)
+        for (let rx = r0x; rx <= r1x; rx++) {
+          const v = this.villageAt(rx, rz);
+          if (!v || v.x + v.r < c.x0 || v.x - v.r > c.x0 + 15 || v.z + v.r < c.z0 || v.z - v.r > c.z0 + 15) continue;
+          this.writeVillage(c, v);
+        }
+    }
+    // Écrit la partie du village qui tombe dans le tronçon c.
+    writeVillage(c, v) {
+      const Bk = CM.B, st = v.st, blocks = c.blocks, x0 = c.x0, z0 = c.z0;
+      const inC = (X, Z) => X >= x0 && X < x0 + 16 && Z >= z0 && Z < z0 + 16;
+      const set = (X, Y, Z, id) => {
+        if (Y > 0 && Y < H && inC(X, Z)) blocks[lidx(X - x0, Y, Z - z0)] = id;
+      };
+      const get = (X, Y, Z) => blocks[lidx(X - x0, Y, Z - z0)];
+      const soft = (id) => id === 0 || id === Bk.WATER || id === Bk.SNOW_LAYER || CM.blocks[id].replaceable || CM.blocks[id].render === 'cross';
+      const hsh = (X, Y, Z, k) => CM.hash3(X, Y + k * 97, Z, v.seed);
+      const found = (X, Y, Z, id) => {
+        for (let yy = Y; yy > Y - 12 && yy > 0; yy--) {
+          if (!soft(get(X, yy, Z))) break;
+          set(X, yy, Z, id);
+        }
+      };
+      const clear = (X, Y0, Y1, Z) => {
+        for (let yy = Y0; yy <= Y1 && yy < H; yy++) set(X, yy, Z, 0);
+      };
+      const hits = (b) => !(b.x1 < x0 || b.x0 > x0 + 15 || b.z1 < z0 || b.z0 > z0 + 15);
+      // routes et place (suivent le relief ; pont en planches au-dessus de l'eau)
+      for (const rd of v.roads) {
+        if (!hits(rd)) continue;
+        for (let Z = Math.max(rd.z0, z0); Z <= Math.min(rd.z1, z0 + 15); Z++)
+          for (let X = Math.max(rd.x0, x0); X <= Math.min(rd.x1, x0 + 15); X++) {
+            const h = this.column(X, Z).h;
+            if (h <= SEA) {
+              set(X, SEA, Z, st.planks);
+              clear(X, SEA + 1, SEA + 3, Z);
+              continue;
+            }
+            for (let yy = h + 1; yy <= h + 3; yy++) if (soft(get(X, yy, Z))) set(X, yy, Z, 0);
+            set(X, h, Z, st.path[Math.floor(hsh(X, 0, Z, 1) * st.path.length)]);
+          }
+      }
+      for (const b of v.builds) {
+        if (!hits(b)) continue;
+        if (b.type === 'well') {
+          const y = b.y;
+          for (let dz = -1; dz <= 1; dz++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const X = v.x + dx, Z = v.z + dz;
+              if (!inC(X, Z)) continue;
+              found(X, y - 1, Z, Bk.COBBLE);
+              clear(X, y + 1, y + 5, Z);
+              if (!dx && !dz) {
+                for (let yy = y - 3; yy <= y; yy++) set(X, yy, Z, Bk.WATER);
+                set(X, y + 3, Z, Bk.LANTERN);
+              } else {
+                set(X, y, Z, Bk.COBBLE);
+                set(X, y + 1, Z, Bk.COBBLE);
+              }
+              if (dx && dz) {
+                set(X, y + 2, Z, st.log);
+                set(X, y + 3, Z, st.log);
+              }
+              set(X, y + 4, Z, dx && dz ? st.roofSlab : st.roof);
+              if (st.snow) set(X, y + 5, Z, Bk.SNOW_LAYER);
+            }
+          continue;
+        }
+        const { w, d, y } = b;
+        const H0 = b.hgt;
+        const smith = b.type === 'smith';
+        const wallId = smith ? Bk.COBBLE : st.planks;
+        for (let vv = -1; vv <= d; vv++)
+          for (let u = -1; u <= w; u++) {
+            const X = b.ox + u * b.ux + vv * b.vx, Z = b.oz + u * b.uz + vv * b.vz;
+            if (!inC(X, Z)) continue;
+            const inside = u >= 0 && u < w && vv >= 0 && vv < d;
+            if (b.type === 'farm') {
+              if (!inside) continue;
+              found(X, y - 1, Z, Bk.DIRT);
+              clear(X, y + 1, y + 3, Z);
+              const edge = u === 0 || u === w - 1 || vv === 0 || vv === d - 1;
+              if (edge) set(X, y, Z, st.log);
+              else if (u === (w >> 1)) set(X, y, Z, Bk.WATER);
+              else {
+                set(X, y, Z, Bk.FARMLAND);
+                const g = hsh(X, y, Z, 2);
+                set(X, y + 1, Z, g < 0.45 ? Bk.WHEAT_3 : g < 0.7 ? Bk.WHEAT_2 : g < 0.9 ? Bk.WHEAT_1 : Bk.WHEAT_0);
+              }
+              continue;
+            }
+            // seuil de la porte, relié à la route
+            if (vv === -1 && u === b.door) {
+              found(X, y - 1, Z, st.lower);
+              set(X, y, Z, st.path[0]);
+              clear(X, y + 1, y + 3, Z);
+            }
+            if (inside) {
+              found(X, y - 1, Z, st.lower);
+              set(X, y, Z, smith ? Bk.STONEBRICK : st.floor);
+              clear(X, y + 1, y + H0 + 5, Z);
+              const wall = u === 0 || u === w - 1 || vv === 0 || vv === d - 1;
+              const corner = (u === 0 || u === w - 1) && (vv === 0 || vv === d - 1);
+              if (wall) {
+                for (let yy = y + 1; yy <= y + H0; yy++) {
+                  let id = corner ? st.log : yy === y + 1 ? st.lower : wallId;
+                  // fenêtres
+                  if (!corner && yy === y + 2 && (vv === 0 ? Math.abs(u - b.door) === 2 : (u + vv) % 2 === 1)) id = Bk.GLASS;
+                  // porte (ouverture de 2 blocs)
+                  if (vv === 0 && u === b.door && yy <= y + 2) id = 0;
+                  set(X, yy, Z, id);
+                }
+              } else {
+                // mobilier
+                const Y = y + 1;
+                if (b.chest && X === b.chest[0] && Z === b.chest[2]) set(X, Y, Z, Bk.CHEST);
+                else if (u === 1 && vv === d - 2) set(X, Y, Z, smith ? Bk.FORGE : b.type === 'library' ? Bk.CARTOGRAPHY_TABLE : Bk.TABLE);
+                else if (u === w - 2 && vv === 1) set(X, Y, Z, Bk.LANTERN);
+                else if (smith && u === 2 && vv === d - 2) set(X, Y, Z, Bk.SMITHING_TABLE);
+                else if (b.type === 'library' && vv === d - 2 && u > 1 && u < w - 2) {
+                  set(X, Y, Z, Bk.BOOKSHELF);
+                  set(X, Y + 1, Z, Bk.BOOKSHELF);
+                } else if (b.type === 'bighouse' && u === w - 2 && vv === d - 2) {
+                  set(X, Y, Z, Bk.WOOL_RED); // lit
+                } else if (b.type === 'bighouse' && u > 1 && u < w - 2 && vv > 1 && vv < d - 2) set(X, Y, Z, Bk.CARPET_RED);
+              }
+            }
+            // toit
+            if (st.flat) {
+              if (!inside) continue;
+              const edge = u === 0 || u === w - 1 || vv === 0 || vv === d - 1;
+              set(X, y + H0 + 1, Z, st.roof);
+              if (edge) set(X, y + H0 + 2, Z, st.roofSlab);
+            } else {
+              // toit en escalier (pyramide), débord d'un bloc
+              const k = Math.min(u + 1, w - u, vv + 1, d - vv);
+              const top = y + H0 + k; // débord (k = 0) : dalle au niveau du haut des murs
+              if (!inside) {
+                for (let yy = y + H0; yy <= y + H0 + 3; yy++) if (soft(get(X, yy, Z))) set(X, yy, Z, 0);
+              }
+              set(X, top, Z, k === 0 ? st.roofSlab : st.roof);
+              if (st.snow) set(X, top + 1, Z, Bk.SNOW_LAYER);
+            }
+          }
+      }
+      // lampadaires
+      for (const [X, Z] of v.lamps) {
+        if (!inC(X, Z)) continue;
+        const h = this.column(X, Z).h;
+        if (h <= SEA) continue;
+        clear(X, h + 1, h + 4, Z);
+        set(X, h + 1, Z, st.lower);
+        set(X, h + 2, Z, st.log);
+        set(X, h + 3, Z, Bk.LANTERN);
+      }
     }
 
     // Un coffre d'origine (ruine) qui n'a jamais été touché par le joueur ?

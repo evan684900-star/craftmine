@@ -182,7 +182,7 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 2 }, (save && save.settings) || settings || {});
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 3 }, (save && save.settings) || settings || {});
       // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
       if (save && (save.v || 2) < 4) ws.gen = 1;
       this.settings = ws;
@@ -872,6 +872,22 @@
     fillLoot(slots, x, y, z) {
       const r = CM.rng((CM.hash3(x, y, z, this.world.seed + 999) * 4294967296) >>> 0);
       const I = CM.I;
+      // coffre d'une maison de village (celui du forgeron est mieux garni)
+      const vil = this.world.villageNear(x, z, 0);
+      const vc = vil && vil.chests.find((c) => c.x === x && c.y === y && c.z === z);
+      if (vc) {
+        const vt = vc.smith
+          ? [[I.IRON_INGOT, 0.8, 2, 6], [I.COAL, 0.6, 3, 10], [I.EMERALD, 0.5, 1, 4], [I.PICKAXE_IRON, 0.25, 1, 1], [I.SWORD_IRON, 0.2, 1, 1], [I.AXE_IRON, 0.2, 1, 1], [I.GOLD_INGOT, 0.3, 1, 3], [I.BREAD, 0.4, 1, 3], [I.DIAMOND, 0.06, 1, 1]]
+          : [[I.BREAD, 0.6, 1, 4], [I.WHEAT, 0.5, 2, 8], [I.SEEDS, 0.5, 2, 8], [I.APPLE, 0.45, 1, 4], [I.EMERALD, 0.35, 1, 3], [I.COAL, 0.3, 1, 4], [B.TORCH, 0.4, 2, 6], [I.PAPER, 0.25, 1, 5], [I.IRON_INGOT, 0.15, 1, 2], [I.PUMPKIN_PIE, 0.15, 1, 2]];
+        const its = [];
+        for (const [id, p, a, b] of vt) if (id !== undefined && r() < p) its.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
+        const free = [...Array(27).keys()];
+        for (const it of its) {
+          if (CM.itemInfo(it.id).type === 'tool') it.xp = 0;
+          slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
+        }
+        return;
+      }
       const table = [
         [B.TORCH, 0.6, 4, 12], [I.COAL, 0.5, 3, 8], [I.IRON_INGOT, 0.55, 1, 4], [I.COPPER_INGOT, 0.45, 2, 6],
         [I.GOLD_INGOT, 0.35, 1, 3], [I.APPLE, 0.4, 1, 3], [I.COOKED_MEAT, 0.35, 1, 3], [I.ROPE, 0.35, 1, 3],

@@ -575,6 +575,14 @@
         }
       } else this.mining = null;
 
+      // clic droit sur un villageois : échanges
+      if (input.pressed.mouse2) {
+        const vm = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
+        if (vm && vm.mob.type === 'villager' && (!this.target || vm.t < this.target.t)) {
+          g.ui.openTrade(vm.mob);
+          return;
+        }
+      }
       // utilisation (clic droit)
       if (input.mouse[2] && (input.pressed.mouse2 || this.useCd <= 0)) {
         this.use(input);

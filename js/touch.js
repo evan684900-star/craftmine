@@ -317,7 +317,7 @@
       p.updateTarget();
       const e = p.eye(), d = p.aim();
       const mob = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
-      if (mob && (!p.target || mob.t < p.target.t)) {
+      if (mob && (!p.target || mob.t < p.target.t) && mob.mob.type !== 'villager') {
         inp.pressed.mouse0 = true;
         return;
       }

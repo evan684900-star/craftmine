@@ -509,6 +509,20 @@
     for (let y = 0; y < 6; y++) for (let x = 0; x < 16; x++) if (y < 4 || r() < 0.5) put(d, x, y, vary(HAIR, r, 8));
   });
   make('player_hair', (d, r) => fill(d, r, HAIR, 9));
+  // villageois : visage (sourcils, yeux verts) et crâne
+  make('villager_face', (d, r) => {
+    fill(d, r, [190, 140, 108], 5);
+    for (let x = 2; x < 14; x++) put(d, x, 5, [70, 44, 30]);
+    for (const ex of [3, 10]) {
+      put(d, ex, 7, [255, 255, 255]); put(d, ex + 1, 7, [60, 140, 60]);
+      put(d, ex, 8, [230, 230, 230]); put(d, ex + 1, 8, [40, 100, 40]);
+    }
+    for (let x = 5; x < 11; x++) put(d, x, 14, [120, 70, 55]);
+  });
+  make('villager_head', (d, r) => {
+    fill(d, r, [190, 140, 108], 5);
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary([110, 72, 44], r, 8));
+  });
   make('player_pants', (d, r) => {
     fill(d, r, [44, 62, 118], 7);
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) if (r() < 0.3) put(d, x, y, [60, 82, 146]);

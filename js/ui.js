@@ -24,6 +24,7 @@
     ['🗺 Biomes', "Plus de 20 biomes : plaines, prairies fleuries, forêts (chêne, bouleau, chêne noir), bosquets de cerisiers, taïga, taïga enneigée, toundra, pics de glace, savane, jungle, bambouseraie, marais, mangrove, désert, canyon rouge, montagnes, champignonnière, terres volcaniques, forêts fongiques, océans chauds à coraux, océans, lacs… et la Sylve cristalline. La taille des biomes se règle en créant le monde."],
     ['⛏ Minerais', "Charbon, fer, cuivre, or (canyons rouges), lapis-lazuli, redstone, diamant (très profond), émeraude et rubis (montagnes), cristal (sous la couche 20), quartz et or du Nether (terres volcaniques), débris antiques → netherite, et éclats célestes. Sous la couche 14, les minerais sont dans l'ardoise des abîmes."],
     ['🏛 Ruines', "Des ruines cachent un coffre rempli de butin : lingots, nourriture, diamants, livres, pousses, parfois un rubis ou un éclat céleste."],
+    ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs de blé, forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
     ['🐗 Faune', "Mouflons dans les prairies (laine, viande), sangliers dans les forêts (cuir ; ils chargent si on les attaque !), pingouins sur la neige (plumes pour l'Amulette de plume)."],
     ["☀ Le Cœur d'aube", "Le but final : forge le Cœur d'aube (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et pose-le. Il chasse les Ombres alentour pour toujours."],
   ];
@@ -364,7 +365,7 @@
         const hours = Math.floor(((g.time + 0.25) % 1) * 24) % 24;
         const hh = String(hours).padStart(2, '0');
         let h = (night ? '<span class="danger">☾ Nuit ' : '<span>☀ Jour ') + (g.dayCount + 1) + '</span> · ' + hh + 'h';
-        if (o.showBiome) h += '<div class="biome">' + g.world.biomeName(p.x, p.z) + '</div>';
+        if (o.showBiome) h += '<div class="biome">' + g.world.biomeName(p.x, p.z) + (g.world.villageNear(p.x, p.z, 0) ? ' · Village' : '') + '</div>';
         if (o.showCoords) h += '<div class="biome">X ' + Math.floor(p.x) + ' · Y ' + Math.floor(p.y) + ' · Z ' + Math.floor(p.z) + '</div>';
         if (o.showFps) h += '<div class="biome">' + Math.round(g.fps) + ' images/s</div>';
         if (creative) h += '<div class="biome gold">Mode créatif</div>';
@@ -622,6 +623,54 @@
         html;
     }
 
+    // Échanges avec un villageois.
+    openTrade(m) {
+      if (this.invOpen || !this.game.player.alive) return;
+      if (!m.prof) m.prof = CM.villagerProf(m);
+      this.trade = m.prof;
+      this.chest = null;
+      $('trade-title').textContent = 'Villageois — ' + m.prof.name;
+      CM.Audio.play('hmm');
+      this.openInventory(true);
+    }
+    renderTrade() {
+      const inv = this.game.inventory, t = this.trade;
+      const list = $('trade-list');
+      list.innerHTML = '';
+      const icon = (id, n) => '<span class="ti"><i style="background-image:url(' + CM.Textures.icons[id] + ')"></i>' + n + '</span>';
+      t.offers.forEach((o) => {
+        const can = o.give.every(([id, n]) => inv.count(id) >= n);
+        const row = document.createElement('div');
+        row.className = 'trade' + (can ? '' : ' off');
+        row.innerHTML = o.give.map(([id, n]) => icon(id, n)).join('') + '<span class="arrow">→</span>' + icon(o.get[0], o.get[1]) +
+          '<span class="tname">' + esc(CM.itemName(o.get[0])) + '</span>';
+        const b = document.createElement('button');
+        b.textContent = 'Échanger';
+        b.disabled = !can;
+        this.tapOrPress(b, (e) => this.doTrade(o, (e && e.shiftKey) || this.quickMode));
+        row.appendChild(b);
+        list.appendChild(row);
+      });
+    }
+    doTrade(o, many) {
+      const g = this.game, inv = g.inventory;
+      let n = 0;
+      do {
+        if (!o.give.every(([id, k]) => inv.count(id) >= k)) break;
+        for (const [id, k] of o.give) inv.remove(id, k);
+        const [gid, gk] = o.get;
+        const extra = CM.itemInfo(gid).type === 'tool' ? { xp: 0 } : null;
+        const left = inv.add(gid, gk, extra);
+        if (left > 0) g.dropNearPlayer(gid, left, extra);
+        n++;
+      } while (many && n < 64);
+      if (n) {
+        CM.Audio.play('pop');
+        CM.Audio.play('hmm');
+        inv.changed();
+      }
+    }
+
     openChest(slots, title) {
       this.chest = slots;
       $('chest-title').textContent = title || 'Coffre';
@@ -629,8 +678,13 @@
     }
     openInventory(withChest) {
       if (this.invOpen || !this.game.player.alive) return;
-      if (!withChest) this.chest = null;
+      if (!withChest) {
+        this.chest = null;
+        this.trade = null;
+      }
       document.querySelector('.side-panel').classList.toggle('chest-mode', !!this.chest);
+      document.querySelector('.side-panel').classList.toggle('trade-mode', !!this.trade);
+      $('trade-panel').classList.toggle('hidden', !this.trade);
       $('chest-panel').classList.toggle('hidden', !this.chest);
       if (this.chest) CM.Audio.play('place', { mat: 'wood' });
       this.invOpen = true;
@@ -652,6 +706,7 @@
       }
       this.game.net.chestClosed();
       this.chest = null;
+      this.trade = null;
       $('cursor-stack').classList.add('hidden');
       this.hideTip();
       $('inventory').classList.add('hidden');
@@ -682,6 +737,7 @@
       const inv = this.game.inventory;
       for (let i = 0; i < 36; i++) this.invSlots[i].innerHTML = this.slotHTML(inv.slots[i], i < 9 ? i + 1 : 0);
       if (this.chest) for (let i = 0; i < 27; i++) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
+      if (this.trade) this.renderTrade();
       const c = $('cursor-stack');
       if (this.cursor) {
         c.innerHTML = this.slotHTML(this.cursor);

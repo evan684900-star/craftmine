@@ -203,6 +203,16 @@ input[type='text'], #seed {
 .side-panel { width: 500px; display: flex; flex-direction: column; min-height: 0; }
 .side-panel.chest-mode { width: auto; }
 .side-panel.chest-mode .tabs, .side-panel.chest-mode .tab { display: none !important; }
+.side-panel.trade-mode .tabs, .side-panel.trade-mode .tab { display: none !important; }
+.side-panel.trade-mode { width: auto; min-width: 330px; }
+#trade-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.trade { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.trade.off { opacity: 0.5; }
+.trade .ti { display: flex; align-items: center; gap: 3px; min-width: 64px; font-weight: 700; font-size: 13px; }
+.trade .ti i { width: 26px; height: 26px; background-size: contain; image-rendering: pixelated; display: block; }
+.trade .arrow { color: var(--gold); font-weight: 800; }
+.trade .tname { flex: 1; font-size: 12px; color: var(--muted); }
+.trade button { padding: 6px 10px; font-size: 13px; box-shadow: none; }
 #chest-panel .hint { margin-top: 10px; }
 .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .tabs button { flex: 1; padding: 8px; font-size: 14px; }

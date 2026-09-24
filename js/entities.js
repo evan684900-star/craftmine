@@ -111,6 +111,46 @@
     boar: { hw: 0.45, h: 0.95, hp: 12, speed: 1.5, passive: true },
     penguin: { hw: 0.28, h: 0.95, hp: 6, speed: 1.1, passive: true },
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
+    villager: { hw: 0.3, h: 1.95, hp: 20, speed: 1.1, passive: true },
+  };
+
+  // Métiers des villageois : robe et échanges ([ce qu'on donne], [ce qu'on reçoit]).
+  const PROFS = [
+    ['Fermier', 'wool_brown', [
+      [[['WHEAT', 20]], ['EMERALD', 1]], [[['SEEDS', 16]], ['EMERALD', 1]], [[['EMERALD', 1]], ['BREAD', 6]],
+      [[['EMERALD', 1]], ['APPLE', 4]], [[['EMERALD', 2]], ['PUMPKIN_PIE', 3]], [[['EMERALD', 6]], ['GOLDEN_APPLE', 1]],
+    ]],
+    ['Forgeron', 'wool_gray', [
+      [[['COAL', 12]], ['EMERALD', 1]], [[['IRON_INGOT', 4]], ['EMERALD', 1]], [[['EMERALD', 3]], ['AXE_IRON', 1]],
+      [[['EMERALD', 4]], ['PICKAXE_IRON', 1]], [[['EMERALD', 5]], ['SWORD_IRON', 1]], [[['EMERALD', 12], ['DIAMOND', 2]], ['PICKAXE_DIAMOND', 1]],
+    ]],
+    ['Bibliothécaire', 'wool', [
+      [[['PAPER', 24]], ['EMERALD', 1]], [[['EMERALD', 1]], ['BOOK', 2]], [[['EMERALD', 1]], ['GLASS', 6]],
+      [[['EMERALD', 1]], ['LANTERN', 2]], [[['EMERALD', 2]], ['BOOKSHELF', 1]], [[['EMERALD', 5]], ['LAPIS', 8]],
+    ]],
+    ['Berger', 'wool_green', [
+      [[['WOOL', 16]], ['EMERALD', 1]], [[['EMERALD', 1]], ['WOOL_RED', 4]], [[['EMERALD', 1]], ['WOOL_BLUE', 4]],
+      [[['EMERALD', 1]], ['WOOL_YELLOW', 4]], [[['EMERALD', 2]], ['LOOM', 1]],
+    ]],
+    ['Boucher', 'wool_red', [
+      [[['RAW_MEAT', 10]], ['EMERALD', 1]], [[['LEATHER', 6]], ['EMERALD', 1]], [[['EMERALD', 1]], ['COOKED_MEAT', 5]],
+      [[['EMERALD', 1]], ['MUSHROOM_STEW', 2]],
+    ]],
+    ['Prêtre', 'wool_purple', [
+      [[['SHADOW_ESSENCE', 4]], ['EMERALD', 1]], [[['EMERALD', 1]], ['REDSTONE', 4]], [[['EMERALD', 2]], ['GLOWSTONE_DUST', 4]],
+      [[['EMERALD', 3]], ['TORCH', 16]], [[['EMERALD', 8]], ['RUBY', 1]],
+    ]],
+  ];
+  const itemId = (k) => (CM.I[k] !== undefined ? CM.I[k] : CM.B[k]);
+  // Métier d'un villageois (déterminé par son identifiant : le même pour tous les joueurs).
+  CM.villagerProf = function (m) {
+    const [name, robe, offers] = PROFS[Math.floor(CM.hash3(m.uid, 5, 7, 0) * PROFS.length)];
+    return {
+      name, robe,
+      offers: offers
+        .map(([give, get]) => ({ give: give.map(([k, n]) => [itemId(k), n]), get: [itemId(get[0]), get[1]] }))
+        .filter((o) => o.give.every(([id]) => id !== undefined && CM.itemInfo(id)) && o.get[0] !== undefined && CM.itemInfo(o.get[0])),
+    };
   };
 
   let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
@@ -364,7 +404,7 @@
         m.hurt = Math.max(0, m.hurt - dt);
         const dist = Math.hypot(p.x - m.x, p.z - m.z);
         if (MOBS[m.type].passive) {
-          if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
+          if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
         } else {
           if (dist < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
           if (g.daylight < 0.4 && dist < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
@@ -425,6 +465,11 @@
             m.ai.timer = 2 + r() * 4;
             m.ai.dir = r() < 0.6 ? r() * Math.PI * 2 : null;
           }
+          // villageois : retour vers le centre du village s'il s'en éloigne
+          if (m.home) {
+            const hx = m.home[0] - m.x, hz = m.home[1] - m.z;
+            if (hx * hx + hz * hz > 20 * 20) m.ai.dir = Math.atan2(-hx, -hz);
+          }
         }
         if (m.ai.dir !== null) {
           const dx = -Math.sin(m.ai.dir), dz = -Math.cos(m.ai.dir);
@@ -437,7 +482,7 @@
             tvz = dz * speed;
           }
         }
-        if (distL < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : 'squeak');
+        if (distL < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
       } else if (m.type === 'ombre') {
         const bl = w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
         const sky = w.skyAt(fx, Math.floor(m.y + 1.5), fz);
@@ -572,6 +617,8 @@
         if (r() < 0.7) this.addDrop(I.LEATHER, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.5, m.z);
       } else if (m.type === 'penguin') {
         this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
+      } else if (m.type === 'villager') {
+        // rien : on ne gagne rien à s'en prendre aux villageois
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.8, m.z);
       }
@@ -583,7 +630,7 @@
       const L = CM.Textures.layer;
       if (type === 'mouflon') this.burst(L.mouflon_wool, x, y + 0.6, z, 16, { speed: 3 });
       else if (type === 'boar') this.burst(L.boar_hide, x, y + 0.5, z, 14, { speed: 3 });
-      else if (type === 'penguin') this.burst(L.white, x, y + 0.5, z, 14, { speed: 3, size: 0.06 });
+      else if (type === 'penguin' || type === 'villager') this.burst(L.white, x, y + 0.8, z, 14, { speed: 3, size: 0.06 });
       else {
         this.burst(L.smoke, x, y + 1, z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
         this.burst(L.ombre_face, x, y + 1, z, 10, { speed: 4, emissive: true });
@@ -662,9 +709,23 @@
       for (const m of this.mobs) {
         if (m.dead) continue;
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
+        if (m.type === 'villager') continue;
         if (MOBS[m.type].passive) {
           if (dist <= 110) nMouf++;
         } else if (dist <= 70) nOmbre++;
+      }
+      // villageois : les habitants du village le plus proche
+      const vil = w.villageNear(p.x, p.z, 48);
+      if (vil && r() < 0.5) {
+        let n = 0;
+        for (const m of this.mobs) if (m.type === 'villager' && !m.dead && m.home && m.home[0] === vil.x && m.home[1] === vil.z) n++;
+        if (n < vil.pop) {
+          const [sx, sy, sz] = vil.spots[Math.floor(r() * vil.spots.length)];
+          if (w.loaded(sx, sz) && !w.solidAt(sx, sy, sz) && !w.solidAt(sx, sy + 1, sz) && w.solidAt(sx, sy - 1, sz) && Math.hypot(sx - p.x, sz - p.z) > 6) {
+            const m = this.addMob('villager', sx + 0.5, sy, sz + 0.5);
+            m.home = [vil.x, vil.z];
+          }
+        }
       }
       if (nMouf < 9 && r() < 0.3) {
         for (let t = 0; t < 4; t++) {
@@ -805,6 +866,20 @@
           this.part(batch, this.M, 0.25, 0.66, 0, 0, [0, -0.42, -0.12, 0.05, 0, 0.12], bodyT, l, flags, null, 0, flap + 0.15);
           this.part(batch, this.M, -0.1, 0.12, -0.04, sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
           this.part(batch, this.M, 0.1, 0.12, -0.04, -sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
+        } else if (m.type === 'villager') {
+          if (!m.prof) m.prof = CM.villagerProf(m);
+          const robe = L[m.prof.robe] || L.wool;
+          const skin = L.skin;
+          this.part(batch, this.M, -0.12, 0.62, 0, sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
+          this.part(batch, this.M, 0.12, 0.62, 0, -sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
+          this.part(batch, this.M, 0, 0, 0, 0, [-0.27, 0.35, -0.17, 0.27, 1.45, 0.17], robe, l, flags);
+          // bras croisés
+          this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.3, -0.12, -0.1, 0.3, 0.1, 0.1], robe, l, flags);
+          this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.14, -0.1, -0.12, 0.14, 0.08, 0.08], skin, l, flags);
+          const nod = Math.sin(time * 1.3 + m.age) * 0.08;
+          const vh = L.villager_head;
+          this.part(batch, this.M, 0, 1.45, 0, nod, [-0.23, 0, -0.23, 0.23, 0.56, 0.23], [vh, vh, vh, skin, vh, L.villager_face], l, flags);
+          this.part(batch, this.M, 0, 1.45, 0, nod, [-0.05, 0.08, -0.34, 0.05, 0.3, -0.23], skin, l, flags);
         } else {
           const body = L.ombre_body;
           this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);
