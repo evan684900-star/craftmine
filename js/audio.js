@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note']);
 
   A.init = function () {
@@ -146,6 +146,14 @@
         break;
       case 'baa':
         tone(t, 0.35, 'sawtooth', 330, 300, 0.05, 0.03);
+        break;
+      case 'door':
+        if (opt.open) tone(t, 0.18, 'sawtooth', 190, 120, 0.05, 0.02);
+        noise(t + (opt.open ? 0.1 : 0), 0.08, 'lowpass', 600, 1, 0.25);
+        break;
+      case 'golem':
+        tone(t, 0.25, 'square', 70, 40, 0.12);
+        noise(t, 0.12, 'bandpass', 900, 2, 0.2);
         break;
       case 'hmm': {
         // « hmm » de villageois (deux notes nasales)

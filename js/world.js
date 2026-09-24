@@ -193,20 +193,20 @@
     const B = CM.B;
     const wood = (planks, log, roof, extra) => Object.assign({
       planks: B[planks], log: B[log], lower: B.COBBLE, floor: B[planks], roof: B[roof], roofSlab: B[roof + '_SLAB'],
-      path: [B.GRAVEL, B.COARSE_DIRT, B.GRAVEL], flat: false, snow: false,
+      path: [B.GRAVEL, B.COARSE_DIRT, B.GRAVEL], flat: false, snow: false, door: 'OAK',
     }, extra || {});
     switch (bi) {
       case BIO.DESERT:
         return {
           planks: B.SANDSTONE, log: B.CUT_SANDSTONE, lower: B.SANDSTONE, floor: B.CUT_SANDSTONE, roof: B.SMOOTH_SANDSTONE,
-          roofSlab: B.SMOOTH_SANDSTONE_SLAB, path: [B.SMOOTH_SANDSTONE, B.SMOOTH_SANDSTONE, B.CUT_SANDSTONE], flat: true, snow: false,
+          roofSlab: B.SMOOTH_SANDSTONE_SLAB, path: [B.SMOOTH_SANDSTONE, B.SMOOTH_SANDSTONE, B.CUT_SANDSTONE], flat: true, snow: false, door: 'BIRCH',
         };
-      case BIO.SAVANNA: return wood('ACACIA_PLANKS', 'ACACIA_LOG', 'ACACIA_PLANKS', { lower: B.TERRACOTTA, path: [B.COARSE_DIRT, B.COARSE_DIRT, B.GRAVEL] });
-      case BIO.TAIGA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS');
+      case BIO.SAVANNA: return wood('ACACIA_PLANKS', 'ACACIA_LOG', 'ACACIA_PLANKS', { lower: B.TERRACOTTA, path: [B.COARSE_DIRT, B.COARSE_DIRT, B.GRAVEL], door: 'ACACIA' });
+      case BIO.TAIGA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS', { door: 'SPRUCE' });
       case BIO.SNOWY_TAIGA:
-      case BIO.TUNDRA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS', { snow: true });
+      case BIO.TUNDRA: return wood('SPRUCE_PLANKS', 'SPRUCE_LOG', 'SPRUCE_PLANKS', { snow: true, door: 'SPRUCE' });
       case BIO.CHERRY: return wood('CHERRY_PLANKS', 'CHERRY_LOG', 'CHERRY_PLANKS');
-      case BIO.BIRCH: return wood('BIRCH_PLANKS', 'BIRCH_LOG', 'SPRUCE_PLANKS');
+      case BIO.BIRCH: return wood('BIRCH_PLANKS', 'BIRCH_LOG', 'SPRUCE_PLANKS', { door: 'BIRCH' });
       default: return wood('PLANKS', 'LOG', 'DARK_OAK_PLANKS');
     }
   }
@@ -1230,7 +1230,8 @@
             b.y = hs[0];
             taken.push([b.x0, b.z0, b.x1, b.z1]);
             if (kind !== 'farm') {
-              const [sx, sz] = P(b.door, 1);
+              // les villageois apparaissent sur le seuil (les portes sont fermées)
+              const [sx, sz] = P(b.door, -1);
               v.spots.push([sx, b.y + 1, sz]);
               v.pop++;
               // coffre (toujours chez le forgeron, parfois ailleurs)
@@ -1368,8 +1369,11 @@
                   let id = corner ? st.log : yy === y + 1 ? st.lower : wallId;
                   // fenêtres
                   if (!corner && yy === y + 2 && (vv === 0 ? Math.abs(u - b.door) === 2 : (u + vv) % 2 === 1)) id = Bk.GLASS;
-                  // porte (ouverture de 2 blocs)
-                  if (vv === 0 && u === b.door && yy <= y + 2) id = 0;
+                  // porte (fermée), dans l'axe du mur de façade
+                  if (vv === 0 && u === b.door && yy <= y + 2) {
+                    const ds = CM.DOORS[st.door], ax = b.ux ? 0 : 1;
+                    id = yy === y + 1 ? ds[ax * 2] : ds[4 + ax * 2];
+                  }
                   set(X, yy, Z, id);
                 }
               } else {
@@ -1382,8 +1386,8 @@
                 else if (b.type === 'library' && vv === d - 2 && u > 1 && u < w - 2) {
                   set(X, Y, Z, Bk.BOOKSHELF);
                   set(X, Y + 1, Z, Bk.BOOKSHELF);
-                } else if (b.type === 'bighouse' && u === w - 2 && vv === d - 2) {
-                  set(X, Y, Z, Bk.WOOL_RED); // lit
+                } else if (!smith && u === 1 && vv === 1) {
+                  set(X, Y, Z, Bk.BED);
                 } else if (b.type === 'bighouse' && u > 1 && u < w - 2 && vv > 1 && vv < d - 2) set(X, Y, Z, Bk.CARPET_RED);
               }
             }

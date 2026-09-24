@@ -501,6 +501,39 @@ nb('CRIMSON_NYLIUM', { name: 'Nylium carmin', tex: { top: tx('crimson_nylium_top
 nb('WARPED_NYLIUM', { name: 'Nylium biscornu', tex: { top: tx('warped_nylium_top', { type: 'rock', c: [40, 114, 104], s: [[[60, 150, 136], 0.2], [[26, 84, 76], 0.2]] }), bottom: 'netherrack', side: tx('warped_nylium_side', { type: 'nylium', c: [40, 114, 104] }) }, hardness: 0.4, tool: 'pickaxe', tier: 1, drop: 0, soil: true });
 CM.blocks[CM.B.CRIMSON_NYLIUM].drop = CM.B.NETHERRACK;
 CM.blocks[CM.B.WARPED_NYLIUM].drop = CM.B.NETHERRACK;
+// ---- Portes (en deux moitiés ; axe x ou z ; ouvertes ou fermées) et lit ----
+// Chaque état est un bloc à part (synchronisé et sauvegardé comme les autres).
+// La variante « bas, axe x, fermée » est l'objet que l'on tient et que l'on fabrique.
+const doorBox = (axis, open) => (open ? (axis ? [0, 0, 0, 16, 16, 3] : [0, 0, 0, 3, 16, 16]) : axis ? [6.5, 0, 0, 9.5, 16, 16] : [0, 0, 6.5, 16, 16, 9.5]);
+CM.DOORS = {};
+for (const [wk, wn, planks, c] of [['OAK', 'chêne', 'PLANKS', [156, 116, 68]], ['SPRUCE', 'sapin', 'SPRUCE_PLANKS', [110, 80, 50]], ['BIRCH', 'bouleau', 'BIRCH_PLANKS', [214, 198, 142]], ['ACACIA', 'acacia', 'ACACIA_PLANKS', [178, 96, 52]]]) {
+  const key = wk === 'OAK' ? 'DOOR' : wk + '_DOOR';
+  const lower = tx('door_' + lc(wk) + '_lower', { type: 'door', c, half: 0 });
+  const upper = tx('door_' + lc(wk) + '_upper', { type: 'door', c, half: 1 });
+  const item = tx('door_' + lc(wk) + '_item', { type: 'door', c, half: 2 });
+  const ptex = CM.blocks[CM.B[planks]].tex.top;
+  const set = [];
+  for (const half of [0, 1])
+    for (const axis of [0, 1])
+      for (const open of [0, 1]) {
+        const base = !half && !axis && !open;
+        const face = half ? upper : lower;
+        set[half * 4 + axis * 2 + open] = nb(key + (base ? '' : '_' + half + axis + open), {
+          name: 'Porte en ' + wn, render: 'door', tex: { side: face, front: face, back: face, top: ptex, bottom: ptex }, iconTex: item,
+          solid: !open, opaque: false, hardness: 1.5, tool: 'axe', sound: 'wood', hidden: !base, box: doorBox(axis, open),
+          door: { half, axis, open },
+        }).id;
+      }
+  for (const id of set) {
+    CM.blocks[id].door.set = set;
+    CM.blocks[id].drop = set[0];
+  }
+  CM.DOORS[wk] = set;
+}
+nb('BED', {
+  name: 'Lit', render: 'slab', height: 9 / 16, tex: { top: tx('bed_top', { type: 'bed', part: 0 }), bottom: 'planks', side: tx('bed_side', { type: 'bed', part: 1 }) },
+  hardness: 0.3, sound: 'wool', bed: true,
+});
 CM.BLOCK_COUNT = NEXT;
 
 // Les blocs qui laissent passer la lumière sans atténuation.
@@ -863,6 +896,9 @@ for (const d of CM.DYES) {
   CM.recipes.push(r(CM.COLOR.sglass[d.key], 8, [[B.GLASS, 8], [dye, 1]], 'table', 'deco'));
 }
 CM.recipes.push(r(27, 1, [[I.FIBER, 4]], 'table', 'deco'));
+// Portes (6 planches -> 3 portes) et lit
+for (const [wk, planks] of [['OAK', 'PLANKS'], ['SPRUCE', 'SPRUCE_PLANKS'], ['BIRCH', 'BIRCH_PLANKS'], ['ACACIA', 'ACACIA_PLANKS']]) CM.recipes.push(r(CM.DOORS[wk][0], 3, [[B[planks], 6]], 'table', 'deco'));
+CM.recipes.push(r(B.BED, 1, [[B.WOOL, 3], ['planks', 3]], 'table', 'deco'));
 // Dalles : 3 blocs -> 6 dalles
 for (const s of CM.SLABS) CM.recipes.push(r(s, 6, [[CM.blocks[s].full, 3]], 'table', 'blocs'));
 // Objets divers

@@ -311,6 +311,8 @@
             const pf = wflag ? 5 : 0; // plante : ondule, pied fixe
             crossQuad(bx + a, bz + a, bx + c, bz + c, by, layer, pf);
             crossQuad(bx + c, bz + a, bx + a, bz + c, by, layer, pf);
+          } else if (r === 'door') {
+            solidBox(opaqueBuf, LAYERS[id], bx, by, bz, b.box, p);
           } else if (r === 'torch') {
             for (let k = 0; k < 4; k++) {
               sky4[k] = 255;
@@ -343,6 +345,40 @@
     opaqueBuf.quad(q, layer, sky4, blk4, sh4, flags);
     const r = [q[1], q[0], q[3], q[2]];
     opaqueBuf.quad(r, layer, sky4, blk4, sh4, flags);
+  }
+
+  // Boîte pleine (porte) dans la case : box = [x0, y0, z0, x1, y1, z1] en 1/16 de bloc.
+  // Texture calée sur la grille du bloc, éclairage de la case elle-même.
+  function solidBox(buf, layers, bx, by, bz, box, p) {
+    const l = padL[p];
+    const s = Math.round((l >> 4) * 17), bl = Math.round((l & 15) * 17);
+    const [x0, y0, z0, x1, y1, z1] = box;
+    for (let fi = 0; fi < 6; fi++) {
+      const f = FACES[fi];
+      const sh = Math.round(255 * FACE_SHADE[fi]);
+      for (let k = 0; k < 4; k++) {
+        const v = f.v[k];
+        const X = v[0] ? x1 : x0, Y = v[1] ? y1 : y0, Z = v[2] ? z1 : z0;
+        const t = vs[k];
+        t[0] = bx + X;
+        t[1] = by + Y;
+        t[2] = bz + Z;
+        if (f.n[0]) {
+          t[3] = f.n[0] > 0 ? 16 - Z : Z;
+          t[4] = 16 - Y;
+        } else if (f.n[2]) {
+          t[3] = f.n[2] > 0 ? X : 16 - X;
+          t[4] = 16 - Y;
+        } else {
+          t[3] = X;
+          t[4] = f.n[1] > 0 ? Z : 16 - Z;
+        }
+        sky4[k] = s;
+        blk4[k] = bl;
+        sh4[k] = sh;
+      }
+      buf.quad(vs, layers[fi], sky4, blk4, sh4, 0);
+    }
   }
 
   // Petite boîte (torche) avec coordonnées de texture personnalisées.

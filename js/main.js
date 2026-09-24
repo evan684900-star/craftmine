@@ -192,6 +192,7 @@
       this.entities = new CM.Entities(this);
       this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
+      this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
       this.stats = this.freshStats();
       this.time = 0.03;
       this.dayCount = 0;
@@ -231,6 +232,7 @@
           sat: Number.isFinite(p.sat) ? p.sat : 5,
           flying: !!p.flying,
         });
+        this.player.bed = Array.isArray(p.bed) ? p.bed : null;
         this.player.fallStart = this.player.y;
         this.inventory.load(save.inv, v);
         this.time = save.time || 0.03;
@@ -324,7 +326,7 @@
         edits: this.world.editsObject(),
         player: {
           x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z,
-          yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying,
+          yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
         },
         inv: this.inventory.serialize(),
         time: this.time,
@@ -334,6 +336,7 @@
         victory: this.victory,
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
+        golems: this.golemHomes,
         guests: this.net.guests,
         savedAt: new Date().toISOString(),
       };
@@ -462,7 +465,7 @@
           return;
         }
         this.clearInput();
-        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && !this.net.chatOpen && $('victory').classList.contains('hidden')) this.pause();
+        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && !this.net.chatOpen && !this.player.sleeping && $('victory').classList.contains('hidden')) this.pause();
       });
       document.addEventListener('pointerlockerror', () => {
         if (this.state === 'playing' && !this.paused && !this.ui.invOpen) this.ui.show('start');
@@ -624,6 +627,7 @@
       on('btn-resume', () => this.resume());
       on('btn-save', () => this.save(false));
       on('btn-quit', () => this.exitToMenu());
+      on('btn-wake', () => this.wake('button'));
       // multijoueur
       on('btn-multi', () => this.openMulti());
       on('btn-mp-back', () => {
@@ -668,7 +672,7 @@
       this.releaseMouse();
       document.body.classList.remove('ingame');
       this.touch.reset();
-      for (const id of ['pause', 'hud', 'death', 'victory', 'start', 'hostdlg', 'options', 'loading']) this.ui.hide(id);
+      for (const id of ['pause', 'hud', 'death', 'victory', 'start', 'hostdlg', 'options', 'loading', 'sleep']) this.ui.hide(id);
       this.renderer.freeAll();
       this.refreshMenu();
       this.ui.show('menu');
@@ -1008,6 +1012,85 @@
       this.entities.burst(CM.Textures.layer.white, x + 0.5, y + 1.2, z + 0.5, 3, { speed: 1, grav: -2, life: 0.6, size: 0.08, emissive: true });
     }
 
+    // --------------------------------------------------------- portes ---
+    toggleDoor(x, y, z) {
+      const w = this.world, b = CM.blocks[w.get(x, y, z)];
+      if (!b.door) return;
+      const y0 = b.door.half ? y - 1 : y;
+      const { set, axis, open } = b.door;
+      const n = open ? 0 : 1;
+      const same = (id) => CM.blocks[id].door && CM.blocks[id].door.set === set;
+      if (same(w.get(x, y0, z))) w.setBlock(x, y0, z, set[axis * 2 + n]);
+      if (same(w.get(x, y0 + 1, z))) w.setBlock(x, y0 + 1, z, set[4 + axis * 2 + n]);
+      CM.Audio.play('door', { open: !!n });
+    }
+
+    // ----------------------------------------------------------- lits -----
+    tryBed(x, y, z) {
+      const p = this.player;
+      if (!p.bed || p.bed.join() !== [x, y, z].join()) this.ui.toast('Point de réapparition défini sur ce lit', 'good', 'bedspawn');
+      p.bed = [x, y, z];
+      if (this.daylight >= 0.35) {
+        this.ui.toast('Tu ne peux dormir que la nuit', 'info', 'bedday');
+        return;
+      }
+      if (this.entities.mobs.some((m) => m.type === 'ombre' && Math.hypot(m.x - x, m.z - z) < 10 && Math.abs(m.y - y) < 6)) {
+        this.ui.toast('Impossible de dormir : des Ombres rôdent tout près !', 'warn', 'bedombre');
+        return;
+      }
+      const p2 = this.player;
+      p2.sleeping = { x, y, z, t0: this.clock };
+      this.clearInput();
+      if (this.touch.enabled) this.touch.reset();
+      this.releaseMouse();
+      $('sleep-text').textContent = this.net.active ? 'Le jour se lèvera quand tout le monde sera couché.' : 'Le jour va bientôt se lever…';
+      this.ui.show('sleep');
+      this.net.sleepChanged(true);
+    }
+    wake(reason) {
+      const p = this.player;
+      if (!p || !p.sleeping) return;
+      p.sleeping = null;
+      p.y += 0.02;
+      this.ui.hide('sleep');
+      this.net.sleepChanged(false);
+      if (reason === 'button' || reason === 'day') this.captureMouse();
+    }
+    // Solo ou hôte : quand tous les joueurs dorment depuis un moment, on passe au matin.
+    checkSleep() {
+      const p = this.player;
+      if (this.net.isClient || !p.sleeping || this.clock - p.sleeping.t0 < 2.5) return;
+      for (const rp of this.net.remotes.values()) if (rp.seen && rp.alive && !(rp.flags & 32)) return;
+      if (this.time > 0.4) this.dayCount++;
+      this.time = 0.02;
+      this.ui.toast('Jour ' + (this.dayCount + 1) + ' — bien dormi !', 'good');
+      if (this.net.isHost) this.net.broadcast({ t: 'time', ti: this.time, d: this.dayCount, l: this.dayLen });
+    }
+
+    // ---------------------------------------------------------- golems ---
+    // Citrouille posée sur un T de 4 blocs de fer : le golem se réveille.
+    tryBuildGolem(x, y, z) {
+      const w = this.world, IB = B.IRON_BLOCK;
+      if (w.get(x, y - 1, z) !== IB || w.get(x, y - 2, z) !== IB) return false;
+      let arms = null;
+      if (w.get(x - 1, y - 1, z) === IB && w.get(x + 1, y - 1, z) === IB) arms = [[x - 1, y - 1, z], [x + 1, y - 1, z]];
+      else if (w.get(x, y - 1, z - 1) === IB && w.get(x, y - 1, z + 1) === IB) arms = [[x, y - 1, z - 1], [x, y - 1, z + 1]];
+      if (!arms) return false;
+      for (const [a, b, c] of [[x, y, z], [x, y - 1, z], [x, y - 2, z], ...arms]) w.setBlock(a, b, c, 0);
+      this.entities.burst(CM.Textures.layer.white, x + 0.5, y - 1, z + 0.5, 24, { speed: 3, size: 0.08 });
+      this.ui.toast('Un golem de fer se réveille ! Il protégera les environs des Ombres.', 'gold');
+      if (this.net.isClient) this.net.send({ t: 'golem', x, y: y - 2, z });
+      else this.spawnBuiltGolem(x, y - 2, z);
+      return true;
+    }
+    spawnBuiltGolem(x, y, z) {
+      const m = this.entities.addMob('golem', x + 0.5, y, z + 0.5);
+      m.home = [x, z];
+      m.built = true;
+      this.golemHomes.push([x, y, z]);
+      CM.Audio.play('golem');
+    }
+
     // ---------------------------------------------------------- TNT -----
     primeTnt(x, y, z) {
       this.world.setBlock(x, y, z, 0);
@@ -1189,7 +1272,11 @@
         this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
         this.entities.nightfall = true;
       }
-      const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen;
+      const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen && !this.player.sleeping;
+      if (this.player.sleeping) {
+        this.checkSleep();
+        if (this.daylight > 0.45 && this.clock - this.player.sleeping.t0 > 0.5) this.wake('day');
+      }
       // l'hôte garde aussi chargés les alentours de ses invités (créatures, objets)
       this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5, net.isHost ? net.simCenters() : null);
       this.player.update(dt, active ? this.input : this.noInput);

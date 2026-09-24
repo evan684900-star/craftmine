@@ -520,7 +520,7 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0);
       const held = g.inventory.held();
       return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0];
     }
@@ -545,7 +545,7 @@
         d: {
           player: {
             x: p.alive ? p.x : sp.x, y: p.alive ? p.y : sp.y, z: p.alive ? p.z : sp.z,
-            yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying,
+            yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
           },
           inv: g.inventory.serialize(),
           stats: g.stats,
@@ -798,6 +798,14 @@
           }
           break;
         }
+        case 'sleep':
+          this.sysAll('💤 ' + e.name + ' est allé se coucher');
+          break;
+        case 'golem': {
+          const x = m.x | 0, y = m.y | 0, z = m.z | 0;
+          if (Math.hypot(x - rp.x, z - rp.z) < 16) g.spawnBuiltGolem(x, y, z);
+          break;
+        }
         case 'bye':
           this.dropClient(e, 'left');
           break;
@@ -1037,6 +1045,11 @@
     noteChanged(x, y, z, n) {
       if (this.isClient) this.send({ t: 'note', x, y, z, n });
       else if (this.isHost) this.broadcast({ t: 'note', x, y, z, n });
+    }
+    sleepChanged(on) {
+      if (!this.active || !on) return;
+      if (this.isClient) this.send({ t: 'sleep' });
+      else this.sysAll('💤 ' + this.name + ' est allé se coucher');
     }
     died(cause) {
       const txt = this.name + ' a perdu la vie' + (cause ? ' (' + cause + ')' : '');

@@ -112,6 +112,7 @@
     penguin: { hw: 0.28, h: 0.95, hp: 6, speed: 1.1, passive: true },
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
     villager: { hw: 0.3, h: 1.95, hp: 20, speed: 1.1, passive: true },
+    golem: { hw: 0.65, h: 2.6, hp: 100, speed: 0.9 },
   };
 
   // Métiers des villageois : robe et échanges ([ce qu'on donne], [ce qu'on reçoit]).
@@ -154,6 +155,7 @@
   };
 
   let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
+  const vilG = (w, p) => w.villageNear(p.x, p.z, 48);
 
   class Mob {
     constructor(type, x, y, z) {
@@ -441,7 +443,66 @@
       const dxp = p.x - m.x, dzp = p.z - m.z, dyp = p.y - m.y;
       const distP = Math.hypot(dxp, dzp);
 
-      if (def.passive && m.ai.angry > 0) {
+      if (m.type === 'golem') {
+        // golem de fer : chasse les Ombres autour de lui ; se fâche contre qui l'attaque
+        let tgt = null, td = 18;
+        if (m.ai.angry > 0 && m.ai.foe && m.ai.foe.alive) {
+          m.ai.angry -= dt;
+          tgt = m.ai.foe;
+          td = Math.hypot(tgt.x - m.x, tgt.z - m.z);
+          if (td > 32) m.ai.angry = 0;
+        } else {
+          m.ai.foe = null;
+          for (const o of this.mobs) {
+            if (o.type !== 'ombre' || o.dead || Math.abs(o.y - m.y) > 8) continue;
+            const d = Math.hypot(o.x - m.x, o.z - m.z);
+            if (d < td) {
+              td = d;
+              tgt = o;
+            }
+          }
+        }
+        m.ai.chasing = !!tgt;
+        m.ai.swing = Math.max(0, (m.ai.swing || 0) - dt);
+        if (tgt) {
+          const dx = tgt.x - m.x, dz = tgt.z - m.z;
+          const dir = Math.atan2(-dx, -dz);
+          if (td > 1.8) {
+            tvx = -Math.sin(dir) * 2.6;
+            tvz = -Math.cos(dir) * 2.6;
+          } else m.yaw = dir;
+          if (td < 2.5 && Math.abs(tgt.y - m.y) < 2.6 && m.ai.attackCd <= 0) {
+            m.ai.attackCd = 1.3;
+            m.ai.swing = 0.5;
+            if (tgt.damage) tgt.damage(7, m.x, m.z, 'Un golem de fer');
+            else {
+              this.hurtMob(tgt, 22, [m.x, m.z]);
+              tgt.vy = 9;
+            }
+            if (distL < 24) CM.Audio.play('golem');
+          }
+        } else {
+          // ronde tranquille autour de son village
+          m.ai.timer -= dt;
+          if (m.ai.timer <= 0) {
+            m.ai.timer = 3 + r() * 5;
+            m.ai.dir = r() < 0.5 ? r() * Math.PI * 2 : null;
+          }
+          if (m.home) {
+            const hx = m.home[0] - m.x, hz = m.home[1] - m.z;
+            if (hx * hx + hz * hz > 16 * 16) m.ai.dir = Math.atan2(-hx, -hz);
+          }
+          if (m.ai.dir !== null) {
+            const dx = -Math.sin(m.ai.dir), dz = -Math.cos(m.ai.dir);
+            const ax = Math.floor(m.x + dx * 1.2), az = Math.floor(m.z + dz * 1.2), ay = Math.floor(m.y);
+            if (m.onGround && !w.solidAt(ax, ay - 1, az) && !w.solidAt(ax, ay - 2, az) && !w.solidAt(ax, ay, az)) m.ai.dir = null;
+            else {
+              tvx = dx * def.speed;
+              tvz = dz * def.speed;
+            }
+          }
+        }
+      } else if (def.passive && m.ai.angry > 0) {
         // sanglier en colère : charge le joueur
         m.ai.angry -= dt;
         if (distP > 22 || !p.alive) m.ai.angry = 0;
@@ -590,14 +651,30 @@
         if (src) {
           const dx = m.x - src[0], dz = m.z - src[1];
           const l = Math.hypot(dx, dz) || 1;
-          m.vx = (dx / l) * 7;
-          m.vz = (dz / l) * 7;
-          m.vy = 5;
+          const kb = m.type === 'golem' ? 1.2 : 7;
+          m.vx = (dx / l) * kb;
+          m.vz = (dz / l) * kb;
+          m.vy = m.type === 'golem' ? 1 : 5;
           m.knock = 0.3;
+        }
+        // un joueur frappe le golem (ou un villageois devant lui) : le golem riposte
+        if (by && by.alive !== undefined) {
+          if (m.type === 'golem') {
+            m.ai.angry = 30;
+            m.ai.foe = by;
+          } else if (m.type === 'villager') {
+            for (const o of this.mobs) {
+              if (o.type === 'golem' && Math.hypot(o.x - m.x, o.z - m.z) < 32) {
+                o.ai.angry = 30;
+                o.ai.foe = by;
+              }
+            }
+          }
         }
         if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
         if (m.type === 'boar') m.ai.angry = 12;
         else if (MOBS[m.type].passive) m.ai.flee = 5;
+        if (m.type === 'golem') CM.Audio.play('golem');
       }
       if (m.hp <= 0 && !m.dead) this.killMob(m, by);
     }
@@ -619,6 +696,11 @@
         this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
       } else if (m.type === 'villager') {
         // rien : on ne gagne rien à s'en prendre aux villageois
+      } else if (m.type === 'golem') {
+        this.addDrop(I.IRON_INGOT, 3 + Math.floor(r() * 3), m.x, m.y + 1, m.z);
+        if (r() < 0.6) this.addDrop(B.FLOWER, 1 + Math.floor(r() * 2), m.x, m.y + 1, m.z);
+        // golem construit : il ne reviendra pas
+        if (m.built && g.golemHomes) g.golemHomes = g.golemHomes.filter((h) => h[0] !== m.home[0] || h[2] !== m.home[1]);
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.8, m.z);
       }
@@ -631,6 +713,7 @@
       if (type === 'mouflon') this.burst(L.mouflon_wool, x, y + 0.6, z, 16, { speed: 3 });
       else if (type === 'boar') this.burst(L.boar_hide, x, y + 0.5, z, 14, { speed: 3 });
       else if (type === 'penguin' || type === 'villager') this.burst(L.white, x, y + 0.8, z, 14, { speed: 3, size: 0.06 });
+      else if (type === 'golem') this.burst(L.golem_body, x, y + 1.3, z, 30, { speed: 4, size: 0.1 });
       else {
         this.burst(L.smoke, x, y + 1, z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
         this.burst(L.ombre_face, x, y + 1, z, 10, { speed: 4, emissive: true });
@@ -709,13 +792,29 @@
       for (const m of this.mobs) {
         if (m.dead) continue;
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
-        if (m.type === 'villager') continue;
+        if (m.type === 'villager' || m.type === 'golem') continue;
         if (MOBS[m.type].passive) {
           if (dist <= 110) nMouf++;
         } else if (dist <= 70) nOmbre++;
       }
+      // golems : un par village assez grand, et ceux construits par les joueurs
+      const homes = [];
+      if (vilG(w, p)) {
+        const v = vilG(w, p);
+        if (v.pop >= 4) homes.push([v.x, v.z, v.spots[0]]);
+      }
+      for (const h of g.golemHomes || []) if (Math.hypot(h[0] - p.x, h[2] - p.z) < 64) homes.push([h[0], h[2], [h[0], h[1], h[2]]]);
+      for (const [hx, hz, spot] of homes) {
+        if (r() > 0.3 || this.mobs.some((m) => m.type === 'golem' && !m.dead && m.home && m.home[0] === hx && m.home[1] === hz)) continue;
+        const [sx, sy, sz] = spot;
+        const built = (g.golemHomes || []).some((h) => h[0] === hx && h[2] === hz);
+        if (!w.loaded(sx, sz) || w.solidAt(sx, sy, sz) || w.solidAt(sx, sy + 1, sz) || w.solidAt(sx, sy + 2, sz) || Math.hypot(sx - p.x, sz - p.z) < (built ? 1.5 : 5)) continue;
+        const gm = this.addMob('golem', sx + 0.5, sy, sz + 0.5);
+        gm.home = [hx, hz];
+        gm.built = built;
+      }
       // villageois : les habitants du village le plus proche
-      const vil = w.villageNear(p.x, p.z, 48);
+      const vil = vilG(w, p);
       if (vil && r() < 0.5) {
         let n = 0;
         for (const m of this.mobs) if (m.type === 'villager' && !m.dead && m.home && m.home[0] === vil.x && m.home[1] === vil.z) n++;
@@ -866,6 +965,21 @@
           this.part(batch, this.M, 0.25, 0.66, 0, 0, [0, -0.42, -0.12, 0.05, 0, 0.12], bodyT, l, flags, null, 0, flap + 0.15);
           this.part(batch, this.M, -0.1, 0.12, -0.04, sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
           this.part(batch, this.M, 0.1, 0.12, -0.04, -sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
+        } else if (m.type === 'golem') {
+          const G = L.golem_body;
+          const leg = [-0.2, -0.95, -0.2, 0.2, 0, 0.2];
+          this.part(batch, this.M, -0.26, 0.95, 0, sw * 0.5, leg, G, l, flags);
+          this.part(batch, this.M, 0.26, 0.95, 0, -sw * 0.5, leg, G, l, flags);
+          this.part(batch, this.M, 0, 0, 0, 0, [-0.45, 0.95, -0.28, 0.45, 1.55, 0.28], G, l, flags);
+          this.part(batch, this.M, 0, 0, 0, 0, [-0.62, 1.55, -0.34, 0.62, 2.2, 0.34], G, l, flags);
+          // bras : balancement, levés quand il charge, frappe vers le haut
+          const hit = (m.ai.swing || 0) > 0 ? Math.sin(((0.5 - m.ai.swing) / 0.5) * Math.PI) * 1.8 : 0;
+          const armA = hit || (m.ai.chasing ? 0.35 : sw * 0.45);
+          const arm = [-0.17, -1.55, -0.17, 0.17, 0.05, 0.17];
+          this.part(batch, this.M, -0.8, 2.12, 0, hit ? armA : armA, arm, G, l, flags);
+          this.part(batch, this.M, 0.8, 2.12, 0, hit ? armA : -armA, arm, G, l, flags);
+          this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.24, 0, -0.26, 0.24, 0.48, 0.22], [G, G, G, G, G, L.golem_face], l, flags);
+          this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.05, 0.04, -0.38, 0.05, 0.26, -0.26], G, l, flags);
         } else if (m.type === 'villager') {
           if (!m.prof) m.prof = CM.villagerProf(m);
           const robe = L[m.prof.robe] || L.wool;

@@ -63,6 +63,7 @@
       this.lastJumpTap = -10;
       this.eyeOffset = 0;
       this.aimDir = null; // écran tactile : direction du doigt (sinon, le centre de l'écran)
+      this.sleeping = null; // { x, y, z, t0 } : couché dans un lit
     }
 
     get creative() {
@@ -114,6 +115,20 @@
       this.comboTimer = Math.max(0, this.comboTimer - dt);
       if (this.comboTimer <= 0) this.combo = 0;
       if (!this.creative) this.flying = false;
+      // couché dans un lit : on ne bouge plus (la faim continue)
+      if (this.sleeping) {
+        const s = this.sleeping;
+        this.x = s.x + 0.5;
+        this.y = s.y + 9 / 16;
+        this.z = s.z + 0.5;
+        this.vx = this.vy = this.vz = 0;
+        this.fallStart = this.y;
+        this.mining = null;
+        this.target = null;
+        this.eyeOffset = 1.15;
+        this.updateVitals(dt, false);
+        return;
+      }
 
       const k = input.keys;
       const fx = Math.floor(this.x), fz = Math.floor(this.z);
@@ -650,7 +665,7 @@
       this.attackCd = 0.38;
       this.swing = 1;
       this.exhaust(EXH.attack);
-      g.entities.hurtMob(mob, dmg, [this.x, this.z]);
+      g.entities.hurtMob(mob, dmg, [this.x, this.z], false, this);
       if (crit) g.entities.burst(CM.Textures.layer.white, mob.x, mob.y + mob.h * 0.7, mob.z, 10, { speed: 4, grav: 4, life: 0.5, size: 0.05, emissive: true });
       if (info && info.toolType === 'sword') this.gainXp(stack, mob.dead ? 4 : 1);
     }
@@ -673,13 +688,18 @@
       if (b.container) g.chestAt(x, y, z); // un coffre de ruine se remplit avant d'être cassé
       w.setBlock(x, y, z, 0);
       if (b.container) g.spillChest(x, y, z);
+      // porte : l'autre moitié part avec
+      if (b.door) {
+        const oy = b.door.half ? y - 1 : y + 1, o = w.get(x, oy, z);
+        if (CM.blocks[o].door && CM.blocks[o].door.set === b.door.set) w.setBlock(x, oy, z, 0);
+      }
       g.entities.blockParticles(id, x, y, z, primary ? 16 : 8);
       CM.Audio.play('break', { mat: b.sound });
       g.stats.mined[id] = (g.stats.mined[id] || 0) + 1;
       // plantes, torches et tapis posés dessus tombent aussi
       const above = w.get(x, y + 1, z);
       const ab = CM.blocks[above];
-      if (above && (ab.plant || ab.render === 'torch' || above === B.CACTUS || ab.render === 'carpet' || above === B.SUGAR_CANE || above === B.BAMBOO)) {
+      if (above && (ab.plant || ab.render === 'torch' || above === B.CACTUS || ab.render === 'carpet' || above === B.SUGAR_CANE || above === B.BAMBOO || (ab.door && !ab.door.half))) {
         this.breakBlock(x, y + 1, z, above, !this.creative, false);
       }
       if (this.creative) return;
@@ -807,6 +827,16 @@
           g.ui.openInventory();
           return;
         }
+        if (tb.door) {
+          g.toggleDoor(t.x, t.y, t.z);
+          this.swing = 1;
+          return;
+        }
+        if (tb.bed) {
+          g.tryBed(t.x, t.y, t.z);
+          this.swing = 1;
+          return;
+        }
         if (tb.container) {
           g.openChestAt(t.x, t.y, t.z, tb.name);
           return;
@@ -900,7 +930,7 @@
       if (!info.isBlock || !t) return;
       const b = info.block;
       // dalle posée sur une dalle identique : bloc plein
-      if (b.render === 'slab' && t.id === stack.id && t.ny === 1) {
+      if (b.render === 'slab' && b.full && t.id === stack.id && t.ny === 1) {
         w.setBlock(t.x, t.y, t.z, b.full);
         this.afterPlace(b, stack.id, t.x, t.y, t.z);
         return;
@@ -914,7 +944,7 @@
       const cur = w.get(px, py, pz);
       if (cur !== 0 && !CM.blocks[cur].replaceable) {
         // dalle posée à côté d'une dalle identique (case déjà occupée par la même dalle)
-        if (cur === stack.id && b.render === 'slab') {
+        if (cur === stack.id && b.render === 'slab' && b.full) {
           w.setBlock(px, py, pz, b.full);
           this.afterPlace(b, stack.id, px, py, pz);
         }
@@ -937,6 +967,19 @@
       if (b.render === 'torch') {
         const sup = w.solidAt(px, py - 1, pz) || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.solidAt(px + dx, py, pz + dz));
         if (!sup || cur === B.WATER) return;
+      }
+      // porte : deux cases libres, tournée face au joueur
+      if (b.door) {
+        const up = w.get(px, py + 1, pz);
+        if (!bb.solid || !w.inside(px, py + 1, pz) || (up !== 0 && !CM.blocks[up].replaceable)) return;
+        const inDoor = (ex, ey, ez, hw, h) => ex + hw > px && ex - hw < px + 1 && ey + h > py && ey < py + 2 && ez + hw > pz && ez - hw < pz + 1;
+        if (inDoor(this.x, this.y, this.z, this.hw, this.h)) return;
+        for (const m of g.entities.mobs) if (inDoor(m.x, m.y, m.z, m.hw, m.h)) return;
+        const axis = Math.abs(Math.cos(this.yaw)) >= Math.abs(Math.sin(this.yaw)) ? 0 : 1;
+        w.setBlock(px, py, pz, b.door.set[axis * 2]);
+        w.setBlock(px, py + 1, pz, b.door.set[4 + axis * 2]);
+        this.afterPlace(b, stack.id, px, py, pz);
+        return;
       }
       if (b.solid) {
         const top = py + b.height;
@@ -964,12 +1007,15 @@
       CM.Audio.play('place', { mat: b.sound });
       this.swing = 1;
       if (id === B.DAWN_HEART) g.onDawnHeart(px, py, pz);
+      // citrouille sur un T de blocs de fer : golem de fer
+      if (id === B.JACK_O_LANTERN || id === B.CARVED_PUMPKIN || id === B.PUMPKIN) g.tryBuildGolem(px, py, pz);
       this.consume(1);
     }
 
     damage(n, sx, sz, cause, bypass) {
       const g = this.game;
       if (!this.alive || n <= 0) return;
+      if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
       if (this.invul > 0 && !bypass) return;
       if (sx !== null && sx !== undefined) {
@@ -1017,7 +1063,19 @@
     }
 
     respawn() {
-      const w = this.game.world;
+      const g = this.game, w = g.world;
+      // lit : on y réapparaît s'il existe encore
+      const bed = this.bed;
+      if (bed) {
+        w.stream(bed[0], bed[2], 2, 0);
+        if (w.loaded(bed[0], bed[2]) && CM.blocks[w.get(bed[0], bed[1], bed[2])].bed) {
+          this.reset({ x: bed[0] + 0.5, y: bed[1] + 9 / 16 + 0.01, z: bed[2] + 0.5 });
+          g.ui.hideDeath();
+          return;
+        }
+        this.bed = null;
+        g.ui.toast('Ton lit a disparu : retour au point de départ du monde', 'warn');
+      }
       w.stream(w.spawn.x, w.spawn.z, 2, 0);
       w.fixSpawn();
       this.reset(w.spawn);

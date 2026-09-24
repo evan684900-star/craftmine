@@ -509,6 +509,23 @@
     for (let y = 0; y < 6; y++) for (let x = 0; x < 16; x++) if (y < 4 || r() < 0.5) put(d, x, y, vary(HAIR, r, 8));
   });
   make('player_hair', (d, r) => fill(d, r, HAIR, 9));
+  // golem de fer : fer patiné, fissures et lierre
+  const golemBase = (d, r) => {
+    fill(d, r, [196, 190, 180], 10);
+    speckle(d, r, [160, 154, 146], 0.18, 8);
+    line(d, 3, 2, 6, 7, [120, 114, 108]);
+    line(d, 11, 9, 13, 14, [120, 114, 108]);
+  };
+  make('golem_body', (d, r) => {
+    golemBase(d, r);
+    for (let y = 0; y < 16; y++) if (r() < 0.55) put(d, 1 + (y % 3 === 0 ? 1 : 0), y, vary([74, 128, 52], r, 14));
+    for (let k = 0; k < 6; k++) put(d, 1 + Math.floor(r() * 3), Math.floor(r() * 16), vary([96, 150, 70], r, 10));
+  });
+  make('golem_face', (d, r) => {
+    golemBase(d, r);
+    for (let x = 2; x < 14; x++) put(d, x, 5, [110, 104, 98]);
+    for (const ex of [4, 10]) { put(d, ex, 7, [150, 30, 20]); put(d, ex + 1, 7, [120, 20, 14]); }
+  });
   // villageois : visage (sourcils, yeux verts) et crâne
   make('villager_face', (d, r) => {
     fill(d, r, [190, 140, 108], 5);
@@ -1454,6 +1471,53 @@
 
   // Générateurs utilisés par les descriptions de CM.TEXSPEC (voir blocks.js).
   const GEN = {
+    // porte : s.half 0 (bas, panneaux + poignée), 1 (haut, vitrée), 2 (icône complète)
+    door(d, r, s) {
+      const c = s.c, dark = shade(s.c, 0.62), mid = shade(s.c, 0.82);
+      const plank = (x0, x1, y0, y1) => {
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(d, x, y, vary(x % 4 === 0 ? mid : c, r, 7));
+      };
+      const glass = (x0, x1, y0, y1) => {
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(d, x, y, vary([176, 210, 226], r, 6));
+      };
+      if (s.half === 2) {
+        for (let i = 0; i < 1024; i++) d[i] = 0;
+        plank(4, 11, 0, 15);
+        for (let y = 0; y < 16; y++) { put(d, 4, y, dark); put(d, 11, y, dark); }
+        for (let x = 4; x <= 11; x++) { put(d, x, 0, dark); put(d, x, 15, dark); put(d, x, 7, dark); }
+        glass(6, 9, 2, 5);
+        put(d, 10, 9, [60, 60, 66]); put(d, 10, 10, [90, 90, 96]);
+        return;
+      }
+      plank(0, 15, 0, 15);
+      for (let i = 0; i < 16; i++) { put(d, 0, i, dark); put(d, 15, i, dark); }
+      if (s.half === 1) {
+        for (let x = 0; x < 16; x++) put(d, x, 0, dark);
+        glass(3, 7, 3, 7); glass(9, 13, 3, 7); glass(3, 7, 9, 12); glass(9, 13, 9, 12);
+        for (let x = 2; x <= 14; x++) { put(d, x, 2, dark); put(d, x, 8, dark); put(d, x, 13, dark); }
+        for (let y = 2; y <= 13; y++) { put(d, 2, y, dark); put(d, 8, y, dark); put(d, 14, y, dark); }
+      } else {
+        for (let x = 0; x < 16; x++) put(d, x, 15, dark);
+        for (const [x0, x1, y0, y1] of [[3, 7, 3, 12], [9, 13, 3, 12]]) {
+          for (let x = x0; x <= x1; x++) { put(d, x, y0, dark); put(d, x, y1, shade(s.c, 1.12)); }
+          for (let y = y0; y <= y1; y++) { put(d, x0, y, dark); put(d, x1, y, shade(s.c, 1.12)); }
+        }
+        put(d, 12, 0, [70, 70, 76]); put(d, 12, 1, [110, 110, 116]); put(d, 13, 1, [70, 70, 76]);
+      }
+    },
+    // lit : dessus (couverture rouge et oreiller) ou côté (couverture sur le cadre en bois)
+    bed(d, r, s) {
+      const red = [168, 36, 40], wood = [150, 110, 66];
+      if (s.part === 0) {
+        fill(d, r, red, 8);
+        for (let y = 1; y < 5; y++) for (let x = 1; x < 15; x++) put(d, x, y, vary([236, 234, 228], r, 5));
+        for (let x = 0; x < 16; x++) put(d, x, 6, shade(red, 0.8));
+      } else {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(y < 9 ? red : wood, r, 7));
+        for (let x = 0; x < 16; x++) put(d, x, 9, shade(wood, 0.7));
+        for (let y = 10; y < 16; y++) for (let x = 3; x < 13; x++) put(d, x, y, [0, 0, 0, 0]);
+      }
+    },
     rock(d, r, s) {
       fill(d, r, s.c, s.v || 7);
       for (const [c, p] of s.s || []) speckle(d, r, c, p, 5);
@@ -2322,7 +2386,7 @@
     for (const b of CM.blocks) {
       if (!b || !b.tex || b.id === 0) continue;
       const cubeLike = b.render === 'cube' || b.render === 'glass' || b.render === 'tglass' || b.render === 'slab' || b.render === 'carpet';
-      T.icons[b.id] = cubeLike ? blockIcon(b) : flatIcon(b.tex.side);
+      T.icons[b.id] = cubeLike ? blockIcon(b) : flatIcon(b.iconTex || b.tex.side);
     }
     for (const it of CM.items) if (it) T.icons[it.id] = flatIcon(it.tex);
   };
