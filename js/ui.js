@@ -580,6 +580,25 @@
       };
       inv.addEventListener('pointermove', follow);
       inv.addEventListener('pointerdown', follow, true);
+      // Jeter un objet en le sortant du cadre (comme dans Minecraft) : clic hors des panneaux avec un
+      // objet au curseur (clic gauche : tout, clic droit ou « Moitié » : un seul), ou glisser un objet
+      // pris dans une case et le relâcher dehors.
+      const outside = (e) => {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        return !!el && !el.closest('.panel') && !el.closest('#tooltip');
+      };
+      inv.addEventListener('pointerdown', (e) => {
+        if (!this.cursor || !outside(e)) return;
+        e.preventDefault();
+        this.throwCursor(e.button === 2 || this.halfMode ? 1 : this.cursor.count);
+      });
+      inv.addEventListener('pointermove', (e) => $('cursor-stack').classList.toggle('drop', !!this.cursor && outside(e)));
+      document.addEventListener('pointerup', (e) => {
+        const drag = this.dragPick;
+        this.dragPick = null;
+        if (!drag || !this.invOpen || !this.cursor || this.cursor !== drag.stack) return;
+        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 12 && outside(e)) this.throwCursor(this.cursor.count);
+      });
       document.querySelectorAll('.side-panel .tabs button').forEach((b) => b.addEventListener('click', () => this.setTab(b.dataset.tab)));
       document.querySelectorAll('#tab-craft .filters button').forEach((b) =>
         b.addEventListener('click', () => {
@@ -911,6 +930,7 @@
           if (s) {
             this.cursor = s;
             slots[i] = null;
+            this.dragPick = { stack: s, x: e.clientX, y: e.clientY };
           }
         } else if (!s) {
           slots[i] = this.cursor;
@@ -1156,6 +1176,19 @@
             );
           })
           .join('');
+    }
+
+    // Jette n objets du curseur devant le joueur.
+    throwCursor(n) {
+      const c = this.cursor;
+      if (!c || n <= 0) return;
+      n = Math.min(n, c.count);
+      this.game.dropNearPlayer(c.id, n, c);
+      c.count -= n;
+      if (c.count <= 0) this.cursor = null;
+      CM.Audio.play('pop');
+      $('cursor-stack').classList.remove('drop');
+      this.game.inventory.changed();
     }
 
     showTip(s, e) {
