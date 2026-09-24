@@ -2,17 +2,20 @@
 // Monde voxel infini : tronçons 16x16 générés à la demande autour du joueur,
 // éclairage (ciel + blocs) propagé d'un tronçon à l'autre.
 (function () {
-  const H = 96, SEA = 32, SY = H / 16;
-  const CVOL = 16 * 16 * H;
+  // Hauteurs : de MINY (socle, −64 comme dans Minecraft) à H − 1 (95). Les index des tronçons
+  // commencent à MINY : la case y est rangée à la ligne y − MINY.
+  const H = 96, SEA = 32, MINY = -64, TH = H - MINY, SY = TH / 16;
+  const CVOL = 16 * 16 * TH;
   const LIMIT = 30000; // tronçons max depuis l'origine (±480 000 blocs)
   const REGION = 192; // taille des régions qui accueillent chacune au plus une île céleste
-  CM.WORLD = { H, SEA, SY, LIMIT };
+  CM.WORLD = { H, SEA, SY, LIMIT, MINY, TH };
 
   const ckey = (cx, cz) => (cx + 0x8000) * 0x10000 + (cz + 0x8000);
-  const skey = (cx, sy, cz) => ckey(cx, cz) * 8 + sy;
+  const skey = (cx, sy, cz) => ckey(cx, cz) * 16 + sy;
   CM.ckey = ckey;
   CM.skey = skey;
-  const lidx = (lx, y, lz) => (y << 8) | (lz << 4) | lx;
+  const lidx = (lx, y, lz) => ((y - MINY) << 8) | (lz << 4) | lx;
+  const yOf = (i) => (i >> 8) + MINY; // hauteur d'un index local
 
   // Files d'attente de propagation de la lumière : (tronçon, index local).
   const QN = 1 << 21, QM = QN - 1;
@@ -36,14 +39,14 @@
   // dir : 0 -x, 1 +x, 2 -z, 3 +z, 4 -y, 5 +y
   let nbC = null;
   function step(c, i, dir) {
-    const lx = i & 15, lz = (i >> 4) & 15, y = i >> 8;
+    const lx = i & 15, lz = (i >> 4) & 15, iy = i >> 8;
     switch (dir) {
       case 0: if (lx > 0) { nbC = c; return i - 1; } nbC = c.nb[0]; return nbC ? i + 15 : -1;
       case 1: if (lx < 15) { nbC = c; return i + 1; } nbC = c.nb[1]; return nbC ? i - 15 : -1;
       case 2: if (lz > 0) { nbC = c; return i - 16; } nbC = c.nb[2]; return nbC ? i + 240 : -1;
       case 3: if (lz < 15) { nbC = c; return i + 16; } nbC = c.nb[3]; return nbC ? i - 240 : -1;
-      case 4: nbC = c; return y > 0 ? i - 256 : -1;
-      default: nbC = c; return y < H - 1 ? i + 256 : -1;
+      case 4: nbC = c; return iy > 0 ? i - 256 : -1;
+      default: nbC = c; return iy < TH - 1 ? i + 256 : -1;
     }
   }
 
@@ -55,16 +58,16 @@
       this.z0 = cz * 16;
       this.blocks = new Uint16Array(CVOL);
       this.light = new Uint8Array(CVOL);
-      this.top = new Uint8Array(256);
+      this.top = new Int16Array(256);
       this.nb = [null, null, null, null];
     }
   }
 
   // Grilles de bruit pour les grottes (réutilisées d'un tronçon à l'autre).
-  const GS = 4, G = 5, GY = H / GS + 1;
+  const GS = 4, G = 5, GY = TH / GS + 1;
   const gA = new Float32Array(G * G * GY), gB = new Float32Array(G * G * GY), gC = new Float32Array(G * G * GY);
   function tri(g, lx, y, lz) {
-    const fx = lx / GS, fy = y / GS, fz = lz / GS;
+    const fx = lx / GS, fy = (y - MINY) / GS, fz = lz / GS;
     const x0 = fx | 0, y0 = fy | 0, z0 = fz | 0;
     const tx = fx - x0, ty = fy - y0, tz = fz - z0;
     const i000 = (y0 * G + z0) * G + x0;
@@ -177,6 +180,15 @@
     ['NETHER_QUARTZ_ORE', 6, 10, 80, 6, BIO.VOLCANIC],
     ['NETHER_GOLD_ORE', 3, 10, 80, 5, BIO.VOLCANIC],
     ['ANCIENT_DEBRIS', 0.6, 3, 20, 2, BIO.VOLCANIC],
+    // couches négatives (ajoutées à la fin : les filons plus haut ne changent pas)
+    ['DIAMOND_ORE', 1.4, -63, 0, 5],
+    ['REDSTONE_ORE', 3.2, -63, 2, 7],
+    ['LAPIS_ORE', 1.4, -56, 4, 5],
+    ['GOLD_ORE', 1.8, -60, 4, 5],
+    ['IRON_ORE', 3.4, -60, 4, 6],
+    ['CRYSTAL_ORE', 1.5, -60, 3, 5],
+    ['COPPER_ORE', 1.2, -30, 4, 6],
+    ['ANCIENT_DEBRIS', 0.12, -62, -36, 2],
   ];
   // Roches qu'un filon peut remplacer, et version « ardoise des abîmes » des minerais
   const ROCK = new Uint8Array(1024);
@@ -263,12 +275,18 @@
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
       this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
+      // sauvegarde d'avant les couches négatives : ses index commençaient à y = 0
+      const shift = this.settings.ymin === MINY ? 0 : -MINY * 256;
+      this.settings.ymin = MINY;
       if (edits) {
         for (const k in edits) {
           const [cx, cz] = k.split(',').map(Number);
           const arr = edits[k];
           const m = new Map();
-          for (let j = 0; j + 1 < arr.length; j += 2) if (CM.blocks[arr[j + 1]] && arr[j] >= 0 && arr[j] < CVOL) m.set(arr[j], arr[j + 1]);
+          for (let j = 0; j + 1 < arr.length; j += 2) {
+            const i = arr[j] + shift;
+            if (CM.blocks[arr[j + 1]] && i >= 0 && i < CVOL) m.set(i, arr[j + 1]);
+          }
           if (m.size) this.edits.set(ckey(cx, cz), m);
         }
       }
@@ -288,23 +306,23 @@
       return !!this.chunkAt(Math.floor(x), Math.floor(z));
     }
     inside(x, y, z) {
-      return y >= 0 && y < H && !!this.chunkAt(x, z);
+      return y >= MINY && y < H && !!this.chunkAt(x, z);
     }
     get(x, y, z) {
-      if (y < 0 || y >= H) return 0;
+      if (y < MINY || y >= H) return 0;
       const c = this.chunkAt(x, z);
       return c ? c.blocks[lidx(x & 15, y, z & 15)] : 0;
     }
     // Pour les collisions : un tronçon pas encore chargé fait office de mur.
     solidAt(x, y, z) {
-      if (y < 0) return true;
+      if (y < MINY) return true;
       if (y >= H) return false;
       const c = this.chunkAt(x, z);
       return c ? CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]].solid : true;
     }
     // Boîte de collision d'une case (null : vide ou traversable). Tronçon non chargé : mur.
     colBox(x, y, z) {
-      if (y < 0) return CM.FULL_BOX;
+      if (y < MINY) return CM.FULL_BOX;
       if (y >= H) return null;
       const c = this.chunkAt(x, z);
       if (!c) return CM.FULL_BOX;
@@ -317,12 +335,12 @@
     }
     skyAt(x, y, z) {
       if (y >= H) return 15;
-      if (y < 0) return 0;
+      if (y < MINY) return 0;
       const c = this.chunkAt(x, z);
       return c ? c.light[lidx(x & 15, y, z & 15)] >> 4 : 15;
     }
     blockLightAt(x, y, z) {
-      if (y < 0 || y >= H) return 0;
+      if (y < MINY || y >= H) return 0;
       const c = this.chunkAt(x, z);
       return c ? c.light[lidx(x & 15, y, z & 15)] & 15 : 0;
     }
@@ -796,11 +814,13 @@
       const infos = new Array(256);
 
       if (this.type === 'flat') {
+        // monde plat : socle en y = 0 comme avant (rien en dessous)
+        const fi = (y, i) => ((y - MINY) << 8) | i;
         for (let i = 0; i < 256; i++) {
-          blocks[i] = Bk.BEDROCK;
-          for (let y = 1; y < SEA + 5; y++) blocks[(y << 8) | i] = Bk.STONE;
-          for (let y = SEA + 5; y < SEA + 8; y++) blocks[(y << 8) | i] = Bk.DIRT;
-          blocks[((SEA + 8) << 8) | i] = Bk.GRASS;
+          blocks[fi(0, i)] = Bk.BEDROCK;
+          for (let y = 1; y < SEA + 5; y++) blocks[fi(y, i)] = Bk.STONE;
+          for (let y = SEA + 5; y < SEA + 8; y++) blocks[fi(y, i)] = Bk.DIRT;
+          blocks[fi(SEA + 8, i)] = Bk.GRASS;
         }
         const e = this.edits.get(ckey(cx, cz));
         if (e) for (const [i, id] of e) blocks[i] = id;
@@ -816,10 +836,10 @@
           const deep = 14 + Math.floor(this.nC.noise2(x / 20, z / 20) * 3);
           const h = info.h;
           const subTop = h - info.subDepth;
-          for (let y = 0; y < H; y++) {
+          for (let y = MINY; y < H; y++) {
             let id = 0;
-            if (y === 0) id = Bk.BEDROCK;
-            else if (y <= 2 && CM.hash3(x, y, z, seed + 11) < 0.55) id = Bk.BEDROCK;
+            if (y === MINY) id = Bk.BEDROCK;
+            else if (y <= MINY + 2 && CM.hash3(x, y, z, seed + 11) < 0.55) id = Bk.BEDROCK;
             else if (y < h) {
               if (y >= subTop) id = info.subB === -1 ? (y > SEA - 4 ? this.band(x, y, z) : Bk.STONE) : info.subB;
               else if (info.deepSub && y >= subTop - 3) id = info.deepSub;
@@ -834,7 +854,7 @@
       for (let gy = 0; gy < GY; gy++)
         for (let gz = 0; gz < G; gz++)
           for (let gx = 0; gx < G; gx++) {
-            const x = x0 + gx * GS, y = gy * GS, z = z0 + gz * GS;
+            const x = x0 + gx * GS, y = MINY + gy * GS, z = z0 + gz * GS;
             const gi = (gy * G + gz) * G + gx;
             gA[gi] = this.nA.noise3(x / 38, y / 22, z / 38);
             gB[gi] = this.nB.noise3(x / 38 + 70, y / 22, z / 38);
@@ -849,7 +869,7 @@
           let maxY = h;
           if (h <= SEA + 2) maxY = h - 6;
           else if (this.treeAt(x0 + lx, z0 + lz, info)) maxY = h - 3;
-          for (let y = 3; y < h; y++) {
+          for (let y = MINY + 3; y < h; y++) {
             const i = lidx(lx, y, lz);
             const cur = blocks[i];
             if (cur !== Bk.STONE && cur !== Bk.DEEPSTONE) continue;
@@ -863,14 +883,15 @@
             else if (e > 0.55) blocks[i] = Bk.ANDESITE;
             else if (e < -0.6 && y < 60) blocks[i] = Bk.GRAVEL;
           }
-          for (let y = 3; y <= maxY; y++) {
+          for (let y = MINY + 3; y <= maxY; y++) {
             const a = tri(gA, lx, y, lz);
             const b = tri(gB, lx, y, lz);
             let carve = a * a + b * b < 0.011;
-            if (!carve && y < 34) carve = tri(gC, lx, y, lz) > 0.58 - (34 - y) * 0.004;
+            // grandes cavernes en profondeur (plafonnées sous y = −6 pour ne pas tout creuser)
+            if (!carve && y < 34) carve = tri(gC, lx, y, lz) > Math.max(0.42, 0.58 - (34 - y) * 0.004);
             if (carve) {
               const i = lidx(lx, y, lz);
-              if (blocks[i] !== Bk.BEDROCK) blocks[i] = y <= 5 ? Bk.BEDROCK : 0;
+              if (blocks[i] !== Bk.BEDROCK) blocks[i] = y <= MINY + 5 ? Bk.BEDROCK : 0;
             }
           }
         }
@@ -893,7 +914,7 @@
               let z = ocz * 16 + Math.floor(rand() * 16);
               for (let s = 0; s < size; s++) {
                 const lx = x - x0, lz = z - z0;
-                if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && y >= 0 && y < H) {
+                if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && y > MINY && y < H) {
                   const i = lidx(lx, y, lz);
                   const cur = blocks[i];
                   if (ROCK[cur]) blocks[i] = (cur === Bk.DEEPSTONE || cur === Bk.TUFF) && DEEP_ORE[id] ? DEEP_ORE[id] : id;
@@ -989,12 +1010,19 @@
         for (let lx = 0; lx < 16; lx++) {
           const h = infos[(lz << 4) | lx].h;
           const x = x0 + lx, z = z0 + lz;
-          for (let y = 4; y < h - 6; y++) {
+          // zone « sombre » (sculk) en profondeur, par régions
+          const dark = this.nD.noise2(x / 180 + 11, z / 180 - 7) > 0.2;
+          for (let y = MINY + 4; y < h - 6; y++) {
             const i = lidx(lx, y, lz);
             if (blocks[i] !== 0) continue;
             const below = blocks[i - 256];
             if (!ROCK[below]) continue;
-            if (y < 13 && (below === Bk.DEEPSTONE || below === Bk.TUFF) && tri(gC, lx, y, lz) > 0.25 && CM.hash3(x, y, z, seed + 12) < 0.6) {
+            // sol de magma au fond du monde
+            if (y < MINY + 12 && CM.hash3(x, y, z, seed + 13) < 0.3) {
+              blocks[i - 256] = Bk.MAGMA;
+              continue;
+            }
+            if (y < 13 && (y >= 0 || dark) && (below === Bk.DEEPSTONE || below === Bk.TUFF) && tri(gC, lx, y, lz) > 0.25 && CM.hash3(x, y, z, seed + 12) < 0.6) {
               blocks[i - 256] = Bk.SCULK;
               continue;
             }
@@ -1022,7 +1050,7 @@
       if (x + 6 < c.x0 || x - 6 > c.x0 + 15 || z + 6 < c.z0 || z - 6 > c.z0 + 15) return;
       for (const [X, Y, Z, id, onlyAir] of this.treeShape(type, big, x, y, z, bees)) {
         const lx = X - c.x0, lz = Z - c.z0;
-        if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || Y < 0 || Y >= H) continue;
+        if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || Y < MINY || Y >= H) continue;
         const i = lidx(lx, Y, lz);
         if (onlyAir) {
           const cur = c.blocks[i];
@@ -1033,13 +1061,14 @@
     }
 
     // ---------------------------------------------------------- géodes ----
-    geodeAt(rx, rz) {
-      const rand = CM.rng((CM.hash3(rx, 171, rz, this.seed) * 4294967296) >>> 0);
-      if (rand() > 0.35) return null;
+    // deep : géodes des couches négatives (tirage à part, les anciennes ne bougent pas)
+    geodeAt(rx, rz, deep) {
+      const rand = CM.rng((CM.hash3(rx, deep ? 172 : 171, rz, this.seed) * 4294967296) >>> 0);
+      if (rand() > (deep ? 0.45 : 0.35)) return null;
       return {
         x: rx * GEODE_REGION + 8 + Math.floor(rand() * (GEODE_REGION - 16)),
         z: rz * GEODE_REGION + 8 + Math.floor(rand() * (GEODE_REGION - 16)),
-        y: 7 + Math.floor(rand() * 20),
+        y: deep ? MINY + 8 + Math.floor(rand() * 50) : 7 + Math.floor(rand() * 20),
         r: 3.6 + rand() * 1.6,
         s: Math.floor(rand() * 1e9),
       };
@@ -1048,9 +1077,10 @@
       const Bk = CM.B;
       const r0x = Math.floor((c.x0 - 6) / GEODE_REGION), r1x = Math.floor((c.x0 + 21) / GEODE_REGION);
       const r0z = Math.floor((c.z0 - 6) / GEODE_REGION), r1z = Math.floor((c.z0 + 21) / GEODE_REGION);
+      for (const deep of [false, true])
       for (let rz = r0z; rz <= r1z; rz++)
         for (let rx = r0x; rx <= r1x; rx++) {
-          const g = this.geodeAt(rx, rz);
+          const g = this.geodeAt(rx, rz, deep);
           if (!g) continue;
           const R = Math.ceil(g.r);
           for (let dz = -R; dz <= R; dz++)
@@ -1060,7 +1090,7 @@
               if (lx < 0 || lx > 15 || lz < 0 || lz > 15) continue;
               for (let dy = -R; dy <= R; dy++) {
                 const Y = g.y + dy;
-                if (Y <= 2) continue;
+                if (Y <= MINY + 2) continue;
                 const d = Math.hypot(dx, dy * 1.15, dz) + (CM.hash3(X, Y, Z, g.s) - 0.5) * 0.5;
                 if (d > g.r) continue;
                 const i = lidx(lx, Y, lz);
@@ -1123,7 +1153,7 @@
               const lx = X - c.x0, lz = Z - c.z0;
               if (lx < 0 || lx > 15 || lz < 0 || lz > 15) continue;
               // fondations
-              for (let y = y0 - 1; y > y0 - 7 && y > 0; y--) {
+              for (let y = y0 - 1; y > y0 - 7 && y > MINY; y--) {
                 const i = lidx(lx, y, lz);
                 const cur = c.blocks[i];
                 if (cur !== 0 && cur !== Bk.WATER && !CM.blocks[cur].plant) break;
@@ -1284,7 +1314,7 @@
       const soft = (id) => id === 0 || id === Bk.WATER || id === Bk.SNOW_LAYER || CM.blocks[id].replaceable || CM.blocks[id].render === 'cross';
       const hsh = (X, Y, Z, k) => CM.hash3(X, Y + k * 97, Z, v.seed);
       const found = (X, Y, Z, id) => {
-        for (let yy = Y; yy > Y - 12 && yy > 0; yy--) {
+        for (let yy = Y; yy > Y - 12 && yy > MINY; yy--) {
           if (!soft(get(X, yy, Z))) break;
           set(X, yy, Z, id);
         }
@@ -1639,7 +1669,7 @@
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
           let y = H - 1;
-          for (; y >= 0; y--) {
+          for (; y >= MINY; y--) {
             const i = lidx(lx, y, lz);
             const b = defs[blocks[i]];
             if (!b.lightPass || b.atten > 0) break;
@@ -1653,7 +1683,7 @@
       const topOf = (lx, lz) => {
         if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16) return top[(lz << 4) | lx];
         const n = lx < 0 ? c.nb[0] : lx > 15 ? c.nb[1] : lz < 0 ? c.nb[2] : c.nb[3];
-        return n ? n.top[((lz & 15) << 4) | (lx & 15)] : -1;
+        return n ? n.top[((lz & 15) << 4) | (lx & 15)] : MINY - 1;
       };
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
@@ -1684,7 +1714,7 @@
         const n = c.nb[s];
         if (!n) continue;
         const L = n.light;
-        for (let y = 0; y < H; y++)
+        for (let y = MINY; y < H; y++)
           for (let k = 0; k < 16; k++) {
             let i;
             if (s === 0) i = lidx(15, y, k);
@@ -1758,12 +1788,12 @@
     }
 
     markCell(c, i) {
-      this.markDirty(c.x0 + (i & 15), i >> 8, c.z0 + ((i >> 4) & 15), 1);
+      this.markDirty(c.x0 + (i & 15), yOf(i), c.z0 + ((i >> 4) & 15), 1);
     }
     markDirty(x, y, z, level) {
       const cx0 = (x - 1) >> 4, cx1 = (x + 1) >> 4;
       const cz0 = (z - 1) >> 4, cz1 = (z + 1) >> 4;
-      const sy0 = Math.max(0, (y - 1) >> 4), sy1 = Math.min(SY - 1, (y + 1) >> 4);
+      const sy0 = Math.max(0, (y - 1 - MINY) >> 4), sy1 = Math.min(SY - 1, (y + 1 - MINY) >> 4);
       for (let cz = cz0; cz <= cz1; cz++)
         for (let cx = cx0; cx <= cx1; cx++)
           for (let sy = sy0; sy <= sy1; sy++) {
@@ -1774,7 +1804,7 @@
 
     // Pose/retire un bloc et met à jour la lumière localement.
     setBlock(x, y, z, id) {
-      if (y < 0 || y >= H) return false;
+      if (y < MINY || y >= H) return false;
       const c = this.chunkAt(x, z);
       if (!c) return false;
       const i = lidx(x & 15, y, z & 15);
@@ -1810,7 +1840,7 @@
     // Modification venue du réseau : appliquée tout de suite si le tronçon est chargé,
     // sinon simplement notée (elle sera appliquée à la génération du tronçon).
     applyRemote(x, y, z, id) {
-      if (y < 0 || y >= H || !CM.blocks[id]) return false;
+      if (y < MINY || y >= H || !CM.blocks[id]) return false;
       const c = this.chunkAt(x, z);
       if (c) return this.setBlock(x, y, z, id);
       const k = ckey(x >> 4, z >> 4);
@@ -1843,7 +1873,7 @@
       const out = [];
       for (const [k, m] of this.edits) {
         const cx = Math.floor(k / 0x10000) - 0x8000, cz = (k % 0x10000) - 0x8000;
-        for (const [i, b] of m) if (test(b)) out.push([cx * 16 + (i & 15), i >> 8, cz * 16 + ((i >> 4) & 15), b]);
+        for (const [i, b] of m) if (test(b)) out.push([cx * 16 + (i & 15), yOf(i), cz * 16 + ((i >> 4) & 15), b]);
       }
       return out;
     }
@@ -1851,7 +1881,7 @@
       const out = [];
       for (const [k, m] of this.edits) {
         const cx = Math.floor(k / 0x10000) - 0x8000, cz = (k % 0x10000) - 0x8000;
-        for (const [i, b] of m) if (b === id) out.push([cx * 16 + (i & 15), i >> 8, cz * 16 + ((i >> 4) & 15)]);
+        for (const [i, b] of m) if (b === id) out.push([cx * 16 + (i & 15), yOf(i), cz * 16 + ((i >> 4) & 15)]);
       }
       return out;
     }
@@ -1879,7 +1909,7 @@
 
     // Hauteur du premier bloc solide sous une position (pour faire apparaître des créatures).
     groundBelow(x, y, z) {
-      for (let yy = Math.min(y, H - 1); yy > 0; yy--) {
+      for (let yy = Math.min(y, H - 1); yy > MINY; yy--) {
         const id = this.get(x, yy, z);
         if (CM.blocks[id].solid) return yy;
       }
@@ -1898,7 +1928,7 @@
       let tmz = dz > 0 ? (z + 1 - oz) * tdz : dz < 0 ? (oz - z) * tdz : Infinity;
       let t = 0, nx = 0, ny = 0, nz = 0;
       for (let i = 0; i < 512 && t <= maxDist; i++) {
-        if (y >= 0 && y < H) {
+        if (y >= MINY && y < H) {
           const id = this.get(x, y, z);
           const s = id && filter(id) ? CM.blocks[id].sel : null;
           if (s === CM.FULL_BOX) return { x, y, z, nx, ny, nz, t, id, box: s };

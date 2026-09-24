@@ -705,7 +705,7 @@
         while (d < -Math.PI) d += Math.PI * 2;
         m.yaw += d * Math.min(1, dt * 8);
       }
-      if (m.y < -20) m.dead = true;
+      if (m.y < CM.WORLD.MINY - 20) m.dead = true;
     }
 
     // by : joueur à l'origine du coup (autre joueur en multijoueur).
@@ -872,7 +872,7 @@
         d.vx *= Math.max(0, 1 - dt * 8);
         d.vz *= Math.max(0, 1 - dt * 8);
       }
-      if (d.y < -20) d.dead = true;
+      if (d.y < CM.WORLD.MINY - 20) d.dead = true;
     }
 
     // ------------------------------------------------------ apparitions --

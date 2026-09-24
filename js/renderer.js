@@ -1,7 +1,7 @@
 'use strict';
 // Rendu WebGL2 : sections du monde, ciel, entités, main du joueur, contours.
 (function () {
-  const { SY } = CM.WORLD;
+  const { SY, MINY } = CM.WORLD;
   const mat4 = CM.mat4;
 
   const LIGHT_FN = `
@@ -594,7 +594,7 @@
       const waterList = [];
       for (const sec of this.sections.values()) {
         if (!sec.opaque && !sec.water) continue;
-        const x0 = sec.cx * 16 - cam[0], y0 = sec.sy * 16 - cam[1], z0 = sec.cz * 16 - cam[2];
+        const x0 = sec.cx * 16 - cam[0], y0 = MINY + sec.sy * 16 - cam[1], z0 = sec.cz * 16 - cam[2];
         if (!CM.aabbInFrustum(this.planes, x0, y0, z0, x0 + 16, y0 + 16, z0 + 16)) continue;
         if (sec.water) {
           const dx = x0 + 8, dy = y0 + 8, dz = z0 + 8;

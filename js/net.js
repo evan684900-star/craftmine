@@ -845,7 +845,7 @@
       for (let i = 0; i + 3 < b.length; i += 4) {
         const x = b[i] | 0, y = b[i + 1] | 0, z = b[i + 2] | 0, id = b[i + 3] | 0;
         this.queueSet(pid, x, y, z, id);
-        if (id < 0 || id >= CM.ITEM_BASE || !CM.blocks[id] || y < 0 || y >= CM.WORLD.H) continue;
+        if (id < 0 || id >= CM.ITEM_BASE || !CM.blocks[id] || y < CM.WORLD.MINY || y >= CM.WORLD.H) continue;
         const old = w.get(x, y, z);
         this.muted = true;
         w.applyRemote(x, y, z, id);

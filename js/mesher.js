@@ -1,7 +1,7 @@
 'use strict';
 // Construction des maillages des sections 16x16x16 (occlusion ambiante + lumière douce).
 (function () {
-  const { H } = CM.WORLD;
+  const { H, MINY } = CM.WORLD;
   const P = 18; // taille de la copie locale avec bordure
   const PP = P * P;
   const BORDER = 0xffff;
@@ -132,7 +132,7 @@
   // Copie la section (cx, sy, cz) et une bordure d'un bloc lue dans les 8 tronçons voisins.
   function fillPad(world, cx, sy, cz) {
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) near[(dz + 1) * 3 + dx + 1] = world.chunks.get(CM.ckey(cx + dx, cz + dz)) || null;
-    const oy = sy * 16 - 1;
+    const oy = MINY + sy * 16 - 1;
     let solidCount = 0;
     let p = 0;
     for (let py = 0; py < P; py++) {
@@ -140,7 +140,7 @@
       for (let pz = 0; pz < P; pz++) {
         const cz3 = PADC[pz] * 3, lz = PADL[pz];
         for (let px = 0; px < P; px++, p++) {
-          if (y < 0) {
+          if (y < MINY) {
             padId[p] = BORDER;
             padL[p] = 0;
             continue;
@@ -156,7 +156,7 @@
             padL[p] = 0xf0;
             continue;
           }
-          const i = (y << 8) | (lz << 4) | PADL[px];
+          const i = ((y - MINY) << 8) | (lz << 4) | PADL[px];
           const id = c.blocks[i];
           padId[p] = id;
           padL[p] = c.light[i];

@@ -189,6 +189,8 @@
       this.mode = ws.mode;
       this.difficulty = ws.difficulty;
       this.world = new CM.World(seed, save ? save.edits : null, ws);
+      // les modifications sont maintenant rangées avec les couches négatives : à noter dans la sauvegarde
+      ws.ymin = this.world.settings.ymin;
       this.entities = new CM.Entities(this);
       this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};

@@ -372,7 +372,7 @@
         }
       } else this.bobAmp = Math.max(0, this.bobAmp - dt * 4);
 
-      if (this.y < -30) this.damage(100, null, null, 'Le vide', true);
+      if (this.y < CM.WORLD.MINY - 30) this.damage(100, null, null, 'Le vide', true);
       if (this.invul <= 0 && this.touching((b) => b.hurts)) this.damage(1, null, null, this.touching((b) => b.id === B.MAGMA) ? 'Le magma' : 'Un cactus');
       // feu : dans les flammes on s'enflamme ; en feu, 1 point de dégât par seconde, l'eau éteint
       if (!this.creative && this.touching((b) => b.fire)) {

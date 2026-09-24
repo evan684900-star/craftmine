@@ -105,7 +105,7 @@
     // ------------------------------------------------------------ eau --
     tickWater(x, y, z) {
       const w = this.world;
-      if (y < 0 || y >= CM.WORLD.H || !w.loaded(x, z)) return;
+      if (y < CM.WORLD.MINY || y >= CM.WORLD.H || !w.loaded(x, z)) return;
       const id = w.get(x, y, z);
       if (!CM.isWater(id)) return;
       const lvl = blk(id).level;
