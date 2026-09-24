@@ -69,8 +69,9 @@
     metal: ['bandpass', 2600, 4],
   };
 
+  A.mute = 0; // > 0 : simulation d'une autre dimension (rien à entendre ici)
   A.play = function (name, opt) {
-    if (!A.ctx || A.volume <= 0) return;
+    if (!A.ctx || A.volume <= 0 || A.mute > 0) return;
     MUL = MOB_SOUNDS.has(name) ? A.cat.mob : UI_SOUNDS.has(name) ? A.cat.ui : A.cat.sfx;
     if (MUL <= 0.001) return;
     const t = A.ctx.currentTime + 0.001;

@@ -197,9 +197,11 @@
       this.dim = save && save.dim === 'nether' ? 'nether' : 'overworld';
       if (save && save.spawn) this.worlds.overworld.spawn = save.spawn;
       if (this.dim === 'nether') this.worlds.nether = this.makeNether();
-      this.world = this.worlds[this.dim];
-      this.entities = new CM.Entities(this);
-      this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
+      // contexte de la dimension du joueur (monde, créatures, blocs qui évoluent)
+      this.ctxs = {};
+      this.dimDrops = {};
+      this.useCtx(this.openCtx(this.dim));
+      this.playerDim = this.dim;
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
       this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
       this.animals = (!this.net.isClient && save && Array.isArray(save.animals) && save.animals.filter((a) => Array.isArray(a) && a.length >= 4)) || []; // élevage hors de portée
@@ -227,9 +229,6 @@
       }
       if (this.dim === 'overworld') this.world.fixSpawn();
       this.world.dirty.clear();
-      this.ticks = new CM.BlockTicks(this);
-      this.indexWorld();
-      this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
         const v = save.v || 2;
@@ -296,34 +295,111 @@
       const ws = Object.assign({}, this.settings, { type: 'nether', ymin: CM.WORLD.MINY });
       return new CM.World(this.worlds.overworld.seed, edits !== undefined ? edits : this.netherEdits, ws);
     }
-    // Repères tirés des modifications du monde courant (pousses, cultures, tables d'enchantement),
-    // et reprise des liquides et du feu.
-    indexWorld() {
-      const w = this.world;
-      this.saplings = new Set();
-      for (const id of CM.TAGS.saplings) for (const p of w.editedPositions(id)) this.saplings.add(p.join(','));
-      // cultures qui poussent encore (et tiges adultes, qui font pousser leur fruit), terre labourée
-      this.crops = new Set();
-      this.farmland = new Set();
+    // Chaque dimension simulée a son contexte : monde, créatures, blocs qui évoluent, repères.
+    // Celui du joueur de cet écran est le contexte courant (this.world, this.entities…).
+    // En multijoueur, l'hôte simule aussi l'autre dimension tant qu'un invité s'y trouve,
+    // en basculant un instant sur son contexte (withDim).
+    openCtx(dim) {
+      const w = this.worlds[dim] || (this.worlds[dim] = this.makeNether());
+      const ctx = { dim, world: w, entities: new CM.Entities(this), ticks: new CM.BlockTicks(this, w), growTimer: 1 };
+      ctx.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
+      // objets restés au sol dans cette dimension (par exemple après une mort)
+      if (!this.net.isClient && this.dimDrops[dim]) {
+        ctx.entities.drops.push(...this.dimDrops[dim]);
+        delete this.dimDrops[dim];
+      }
+      // repères tirés des modifications (pousses, cultures, terre labourée, tables d'enchantement)
+      ctx.saplings = new Set();
+      for (const id of CM.TAGS.saplings) for (const p of w.editedPositions(id)) ctx.saplings.add(p.join(','));
+      ctx.crops = new Set();
+      ctx.farmland = new Set();
       for (const p of w.editedWhere((id) => {
         const b = CM.blocks[id];
         return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
-      })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
-      // tables d'enchantement (livre flottant, runes)
-      this.enchTables = new Set(w.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      })) (CM.blocks[p[3]].farmland ? ctx.farmland : ctx.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
+      ctx.enchTables = new Set(w.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
       // liquides qui coulent et feu
-      this.ticks.reset();
+      ctx.ticks.reset();
       w.onEdit = (x, y, z, id) => {
         const k = x + ',' + y + ',' + z;
-        if (id === B.ENCHANTING_TABLE) this.enchTables.add(k);
-        else if (this.enchTables.size) this.enchTables.delete(k);
-        this.ticks.onEdit(x, y, z, id);
+        if (id === B.ENCHANTING_TABLE) ctx.enchTables.add(k);
+        else if (ctx.enchTables.size) ctx.enchTables.delete(k);
+        ctx.ticks.onEdit(x, y, z, id);
       };
+      this.ctxs[dim] = ctx;
+      if (this.net.active) this.net.attachWorld(w, dim);
+      return ctx;
     }
-    // Où réapparaître : dans le monde normal (lit ou départ) ; en multijoueur, le groupe
-    // reste ensemble, donc dans le Nether on repart du portail d'arrivée.
+    // Plus personne dans cette dimension : on la range (ses modifications restent en mémoire,
+    // les animaux d'élevage et les objets au sol seront là au retour).
+    closeCtx(dim) {
+      const ctx = this.ctxs[dim];
+      if (!ctx) return;
+      if (!this.net.isClient) {
+        if (dim === 'overworld') this.animals = ctx.entities.tameList();
+        this.dimDrops[dim] = ctx.entities.drops.filter((d) => !d.dead);
+      }
+      const w = ctx.world;
+      w.onEdit = null;
+      w.onSet = null;
+      for (const c of [...w.chunks.values()]) w.removeChunk(c);
+      w.dirty.clear();
+      delete this.ctxs[dim];
+    }
+    // Rend courant un contexte (celui du joueur, ou un autre le temps de le simuler).
+    useCtx(ctx) {
+      const cur = this.ctxs[this.dim];
+      if (cur && cur !== ctx && cur.world === this.world) cur.growTimer = this.growTimer;
+      this.dim = ctx.dim;
+      this.world = ctx.world;
+      this.entities = ctx.entities;
+      this.ticks = ctx.ticks;
+      this.saplings = ctx.saplings;
+      this.crops = ctx.crops;
+      this.farmland = ctx.farmland;
+      this.enchTables = ctx.enchTables;
+      this.growTimer = ctx.growTimer;
+    }
+    // Exécute fn dans une autre dimension (sans son ni effet pour le joueur de cet écran).
+    withDim(dim, fn) {
+      if (dim === this.dim) return fn();
+      const back = this.ctxs[this.dim];
+      this.useCtx(this.ctxs[dim] || this.openCtx(dim));
+      CM.Audio.mute++;
+      try {
+        return fn();
+      } finally {
+        CM.Audio.mute--;
+        this.useCtx(back);
+      }
+    }
+    // Hôte : simule la dimension où des invités se trouvent sans lui, range celle qui est vide.
+    updateOtherDims(dt) {
+      const net = this.net;
+      for (const dim of ['overworld', 'nether']) {
+        if (dim === this.dim) continue;
+        let busy = false;
+        for (const rp of net.remotes.values()) if (rp.dim === dim) busy = true;
+        if (!busy) {
+          if (this.ctxs[dim]) this.closeCtx(dim);
+          continue;
+        }
+        this.withDim(dim, () => {
+          const cs = net.simCenters();
+          if (cs.length) this.world.stream(cs[0][0], cs[0][1], cs[0][2], 3, cs.slice(1));
+          this.entities.update(dt);
+          this.ticks.update(dt);
+          this.growTimer -= dt;
+          if (this.growTimer <= 0) {
+            this.growTimer = 1;
+            this.growPlants();
+          }
+          this.world.dirty.clear(); // (pas affichée ici)
+        });
+      }
+    }
+    // Où réapparaître : comme dans Minecraft, dans le monde normal (lit ou point de départ).
     respawnPoint() {
-      if (this.dim === 'nether' && this.net.active && this.netherArrival) return Object.assign({ dim: 'nether' }, this.netherArrival);
       const ow = this.worlds.overworld, bed = this.player.bed;
       if (bed) return { dim: 'overworld', x: bed[0] + 0.5, y: bed[1] + 9 / 16 + 0.01, z: bed[2] + 0.5 };
       return { dim: 'overworld', x: ow.spawn.x, y: ow.spawn.y, z: ow.spawn.z };
@@ -479,9 +555,8 @@
       if (this.switching || !this.world) return;
       this.switching = true;
       const net = this.net, p = this.player;
+      const fromDim = this.playerDim;
       net.flushSets();
-      net.locks.clear();
-      net.chestKey = null;
       if (this.ui.invOpen) this.ui.closeInventory();
       if (p.sleeping) this.wake('dim');
       const from = this.world;
@@ -491,57 +566,33 @@
       $('load-text').textContent = to === 'nether' ? 'Voyage vers le Nether…' : 'Retour dans le monde normal…';
       $('load-fill').style.width = '0%';
       CM.Audio.play('travel');
-      // les animaux d'élevage restent dans le monde normal, les objets au sol dans leur monde :
-      // on les retrouve au retour (par exemple ce qu'on a perdu en mourant dans le Nether)
-      if (!net.isClient) {
-        if (this.dim === 'overworld') this.animals = this.entities.tameList();
-        this.dimDrops = this.dimDrops || {};
-        this.dimDrops[this.dim] = this.entities.drops.filter((d) => !d.dead);
+      // invité : le monde d'arrivée vient de l'hôte (à jour)
+      if (opts.edits !== undefined) {
+        this.closeCtx(to);
+        this.worlds[to] = to === 'nether' ? this.makeNether(opts.edits) : new CM.World(from.seed, opts.edits, this.settings);
       }
-      // on quitte l'ancien monde (ses modifications restent en mémoire)
-      from.onEdit = null;
-      from.onSet = null;
-      for (const c of [...from.chunks.values()]) from.removeChunk(c);
-      from.dirty.clear();
+      this.useCtx(this.ctxs[to] || this.openCtx(to));
+      this.playerDim = to;
+      // l'ancienne dimension reste simulée si des invités y sont encore, sinon on la range
+      if (!(net.isHost && [...net.remotes.values()].some((rp) => rp.dim === fromDim))) this.closeCtx(fromDim);
       this.renderer.freeAll();
-      this.dim = to;
-      if (opts.edits !== undefined) this.worlds[to] = to === 'nether' ? this.makeNether(opts.edits) : new CM.World(from.seed, opts.edits, this.settings);
-      else if (!this.worlds[to]) this.worlds[to] = this.makeNether();
-      const w = (this.world = this.worlds[to]);
-      const remote = this.entities.remote;
-      this.entities = new CM.Entities(this);
-      this.entities.remote = remote;
-      if (!net.isClient && this.dimDrops && this.dimDrops[to]) {
-        this.entities.drops.push(...this.dimDrops[to]);
-        delete this.dimDrops[to];
-      }
-      this.indexWorld();
+      const w = this.world;
       // point visé : coordonnées ÷ 8 dans le Nether, × 8 au retour
       let dest = opts.at || null;
       const k = to === 'nether' ? 1 / 8 : 8;
       const tx = dest ? Math.floor(dest.x) : Math.floor((src ? src.x : p.x) * k);
       const tz = dest ? Math.floor(dest.z) : Math.floor((src ? src.z : p.z) * k);
       const ty = dest ? Math.floor(dest.y) : Math.floor(src ? src.y : p.y);
-      net.muted = true;
       let total = 0;
       for (;;) {
-        const left = w.stream(tx, tz, this.renderer.renderDist + 1, 40);
+        const left = w.stream(tx, tz, this.renderer.renderDist + 1, 40, net.isHost ? net.simCenters() : null);
         if (!total) total = left + 1;
         $('load-fill').style.width = Math.round((1 - left / total) * 60) + '%';
         if (left <= 0) break;
         await new Promise((r) => setTimeout(r, 0));
       }
-      if (!dest) {
-        const found = this.findPortal(w, tx, tz, to === 'nether' ? 16 : 128);
-        if (found) dest = found;
-        else {
-          const axis = src && src.id === CM.PORTALS[1] ? 1 : 0;
-          dest = this.buildPortal(w, tx, ty, tz, axis);
-        }
-      }
-      net.muted = false;
+      if (!dest) dest = this.findPortal(w, tx, tz, to === 'nether' ? 16 : 128) || this.buildPortal(w, tx, ty, tz, src && src.id === CM.PORTALS[1] ? 1 : 0);
       if (to === 'nether') this.netherArrival = { x: dest.x, y: dest.y, z: dest.z };
-      else if (!this.worlds.nether) this.netherEdits = null;
       p.x = dest.x;
       p.y = dest.y;
       p.z = dest.z;
@@ -552,17 +603,8 @@
       p.target = null;
       p.mining = null;
       p.hook = null;
-      w.stream(p.x, p.z, this.renderer.renderDist + 1, 40);
-      // l'hôte emmène tout le groupe
-      if (net.isHost) {
-        net.broadcast({ t: 'dim', to, e: w.editsObject(), at: [dest.x, dest.y, dest.z] });
-        for (const rp of net.remotes.values()) {
-          rp.x = rp.rx = dest.x;
-          rp.y = rp.ry = dest.y;
-          rp.z = rp.rz = dest.z;
-        }
-      }
-      if (net.active) net.attachWorld();
+      w.stream(p.x, p.z, this.renderer.renderDist + 1, 40, net.isHost ? net.simCenters() : null);
+      if (net.isHost && !opts.quiet) net.sysAll('🌀 ' + net.name + (to === 'nether' ? ' est parti dans le Nether' : ' est revenu dans le monde normal'));
       $('load-text').textContent = 'Construction du paysage…';
       total = 0;
       for (;;) {
@@ -577,7 +619,8 @@
       this.switching = false;
       this.last = performance.now();
       if (to === 'nether') this.ui.toast('Bienvenue dans le Nether ! Attention à la lave et aux Ombres ardentes.', 'gold', 'dim');
-      else this.ui.toast('De retour dans le monde normal', 'good', 'dim');
+      else if (!opts.quiet) this.ui.toast('De retour dans le monde normal', 'good', 'dim');
+      if (net.isClient) net.sendMyState(true);
       this.save(true);
       if (opts.then) opts.then();
     }
@@ -644,7 +687,7 @@
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
         golems: this.golemHomes,
-        animals: this.entities.tameList(),
+        animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         guests: this.net.guests,
         savedAt: new Date().toISOString(),
       };
@@ -1475,7 +1518,8 @@
     checkSleep() {
       const p = this.player;
       if (this.net.isClient || !p.sleeping || this.clock - p.sleeping.t0 < 2.5) return;
-      for (const rp of this.net.remotes.values()) if (rp.seen && rp.alive && !(rp.flags & 32)) return;
+      // (comme dans Minecraft, ceux qui sont dans le Nether ne comptent pas)
+      for (const rp of this.net.remotes.values()) if (rp.seen && rp.alive && rp.dim === 'overworld' && !(rp.flags & 32)) return;
       if (this.time > 0.4) this.dayCount++;
       this.time = 0.02;
       this.ui.toast('Jour ' + (this.dayCount + 1) + ' — bien dormi !', 'good');
@@ -1601,7 +1645,7 @@
       // dégâts aux créatures et au joueur
       const hurt = (ex, ey, ez) => Math.max(0, 1 - Math.hypot(ex - x, ey - y, ez - z) / (power * 2));
       const p = this.player;
-      const hp = hurt(p.x, p.y + 0.9, p.z);
+      const hp = this.dim === this.playerDim ? hurt(p.x, p.y + 0.9, p.z) : 0;
       if (hp > 0) {
         p.damage(Math.round(hp * 22), x, z, 'Une explosion', true);
         p.vy += hp * 10;
@@ -1612,7 +1656,7 @@
       }
       // invités pris dans l'explosion
       for (const rp of this.net.remotes.values()) {
-        if (!rp.seen || !rp.alive) continue;
+        if (!rp.seen || !rp.alive || rp.dim !== this.dim) continue;
         const k = hurt(rp.x, rp.y + 0.9, rp.z);
         if (k > 0) rp.damage(Math.round(k * 22), x, z, 'Une explosion', true, k * 10);
       }
@@ -1775,6 +1819,8 @@
           this.save(true);
         }
       }
+      // hôte : l'autre dimension continue de vivre tant qu'un invité s'y trouve
+      if (net.isHost) this.updateOtherDims(dt);
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }

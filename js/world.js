@@ -1899,6 +1899,16 @@
       return cand.length - n;
     }
 
+    // Génère les tronçons manquants autour d'un point, sans rien décharger.
+    loadAround(px, pz, radius) {
+      const pcx = Math.floor(px / 16), pcz = Math.floor(pz / 16);
+      for (let dz = -radius; dz <= radius; dz++)
+        for (let dx = -radius; dx <= radius; dx++) {
+          const cx = pcx + dx, cz = pcz + dz;
+          if (Math.abs(cx) <= LIMIT && Math.abs(cz) <= LIMIT && !this.chunks.has(ckey(cx, cz))) this.addChunk(this.generateChunk(cx, cz));
+        }
+    }
+
     // ----------------------------------------------------------- lumière --
     lightChunk(c) {
       const blocks = c.blocks, L = c.light, defs = CM.blocks, top = c.top;

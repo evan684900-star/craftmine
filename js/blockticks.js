@@ -49,8 +49,9 @@
   };
 
   class BlockTicks {
-    constructor(game) {
+    constructor(game, world) {
       this.game = game;
+      this.w = world || null; // monde de cette dimension
       this.t = 0;
       this.due = new Map(); // eau : clé -> instant (dans l'ordre d'insertion = ordre des échéances)
       this.dueLava = new Map(); // lave : idem, plus lente
@@ -59,7 +60,7 @@
       this.portalChecks = new Set(); // portails dont un voisin a changé (cadre peut-être cassé)
     }
     get world() {
-      return this.game.world;
+      return this.w || this.game.world;
     }
     get active() {
       return !this.game.net.isClient;

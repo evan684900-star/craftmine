@@ -1294,7 +1294,7 @@
           else return;
         }
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
-        for (const rp of g.net.remotes.values()) if (rp.seen && rp.alive && hit(rp.x, rp.y, rp.z, rp.hw, rp.h)) return;
+        for (const rp of g.net.remotes.values()) if (rp.seen && rp.alive && rp.dim === g.playerDim && hit(rp.x, rp.y, rp.z, rp.hw, rp.h)) return;
       }
       let place = stack.id;
       // enclume : tournée selon le regard
@@ -1432,19 +1432,14 @@
 
     respawn() {
       const g = this.game, w = g.world;
-      // mort dans le Nether : retour au monde normal (en multijoueur, au portail d'arrivée)
+      // mort dans le Nether : comme dans Minecraft, retour au monde normal (lit ou départ)
       if (g.dim === 'nether') {
         const rs = g.respawnPoint();
-        if (rs.dim === 'nether') {
-          w.stream(rs.x, rs.z, 2, 0);
-          this.reset(rs);
-          this.portalLock = true;
-          g.ui.hideDeath();
-          return;
-        }
         g.ui.hideDeath();
         this.reset({ x: rs.x, y: rs.y, z: rs.z });
-        g.changeDim('overworld', { at: { x: rs.x, y: rs.y, z: rs.z }, then: () => this.respawn() });
+        // invité : l'hôte renvoie le monde normal à jour
+        if (g.net.isClient) g.net.requestRespawn(rs);
+        else g.changeDim('overworld', { at: { x: rs.x, y: rs.y, z: rs.z }, quiet: true, then: () => this.respawn() });
         return;
       }
       // lit : on y réapparaît s'il existe encore

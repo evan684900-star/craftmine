@@ -186,6 +186,7 @@
 
   let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
   const vilG = (w, p) => w.villageNear(p.x, p.z, 48);
+  const NOBODY = { x: 1e9, y: 0, z: 1e9, alive: false, hw: 0.3, h: 1.8, damage() {} };
 
   class Mob {
     constructor(type, x, y, z) {
@@ -312,7 +313,8 @@
           best = p;
         }
       }
-      return best || this.game.player;
+      // personne dans cette dimension (simulée par l'hôte) : un joueur fictif très loin
+      return best || NOBODY;
     }
 
     update(dt) {
@@ -925,7 +927,7 @@
       const nightfall = this.nightfall;
       this.nightfall = false;
       const alive = pls.filter((q) => q.alive);
-      for (const p of alive.length ? alive : [g.player]) this.spawnAround(p, w, r, nightfall);
+      for (const p of alive.length ? alive : pls.includes(g.player) ? [g.player] : []) this.spawnAround(p, w, r, nightfall);
     }
 
     // Apparitions autour d'un joueur (chaque joueur a son propre voisinage).
@@ -1145,10 +1147,10 @@
       baby.tame = true;
       baby.yaw = a.yaw;
       this.hearts(baby, 8);
-      const p = this.game.player;
+      const p = this.game.player, here = this.game.dim === this.game.playerDim;
       if (Math.hypot(p.x - a.x, p.z - a.z) < 20) CM.Audio.play(a.type === 'mouflon' ? 'baa' : 'grunt');
       this.game.stats.bred = (this.game.stats.bred || 0) + 1;
-      if (Math.hypot(p.x - a.x, p.z - a.z) < 16) p.addXp(1 + Math.floor(this.rand() * 7));
+      if (here && Math.hypot(p.x - a.x, p.z - a.z) < 16) p.addXp(1 + Math.floor(this.rand() * 7));
       if (this.game.net) this.game.net.fx({ k: 'love', x: baby.x, y: baby.y + 0.8, z: baby.z, n: 8 });
     }
     // Animal d'élevage qui sort de la zone chargée : mis de côté (et sauvegardé).
