@@ -697,6 +697,38 @@ const TIER_KEYS = ['', 'WOOD', 'STONE', 'IRON', 'CRYSTAL'];
 for (let t = 1; t <= 4; t++) for (const [type] of TOOL_TYPES) CM.I[(type + '_' + t).toUpperCase()] = CM.I[(type + '_' + TIER_KEYS[t]).toUpperCase()];
 CM.toolOf = (type, mat) => CM.I[(type + '_' + mat).toUpperCase()];
 
+// ----------------------------------------------------------- Armures ------
+// Comme dans Minecraft : points de protection par pièce, robustesse, durabilité.
+// Pour une armure, le champ « xp » de la pile compte l'usure (points de durabilité perdus) :
+// il suit ainsi l'objet partout (coffres, objets au sol, multijoueur) comme l'expérience des outils.
+CM.ARMOR_PIECES = [['HELMET', 'Casque'], ['CHESTPLATE', 'Plastron'], ['LEGGINGS', 'Jambières'], ['BOOTS', 'Bottes']];
+CM.ARMOR_MATS = [
+  { key: 'LEATHER', name: 'cuir', def: [1, 3, 2, 1], dur: 5, tough: 0, ing: 'LEATHER', color: { h: [150, 88, 50], H: [190, 124, 78], d: [104, 58, 32] } },
+  { key: 'GOLD', name: 'or', def: [2, 5, 3, 1], dur: 7, tough: 0, ing: 'GOLD_INGOT', color: { h: [236, 196, 58], H: [255, 240, 150], d: [184, 134, 28] } },
+  { key: 'IRON', name: 'fer', def: [2, 6, 5, 2], dur: 15, tough: 0, ing: 'IRON_INGOT', color: { h: [206, 206, 214], H: [244, 244, 250], d: [140, 140, 152] } },
+  { key: 'DIAMOND', name: 'diamant', def: [3, 8, 6, 3], dur: 33, tough: 2, ing: 'DIAMOND', color: { h: [84, 222, 212], H: [200, 255, 250], d: [34, 150, 144] } },
+  { key: 'NETHERITE', name: 'netherite', def: [3, 8, 6, 3], dur: 37, tough: 3, ing: null, color: { h: [96, 86, 92], H: [146, 134, 140], d: [58, 50, 56] } },
+];
+const ARMOR_BASE_DUR = [11, 16, 15, 13];
+CM.ARMOR_COST = [5, 8, 7, 4];
+{
+  let id = 1300;
+  for (const m of CM.ARMOR_MATS)
+    CM.ARMOR_PIECES.forEach(([pk, label], slot) =>
+      defItem(id++, pk + '_' + m.key, {
+        name: label + ' en ' + m.name, tex: 'armor_' + lc(pk) + '_' + lc(m.key), stack: 1, type: 'armor',
+        slot, mat: m.key, armor: m.def[slot], tough: m.tough, maxDur: ARMOR_BASE_DUR[slot] * m.dur,
+      }),
+    );
+}
+CM.armorOf = (piece, mat) => CM.I[piece + '_' + mat];
+// Objets qui portent une valeur « xp » : expérience (outils) ou usure (armures).
+CM.hasWear = (id) => {
+  const t = CM.itemInfo(id);
+  return !!t && (t.type === 'tool' || t.type === 'armor');
+};
+CM.freshExtra = (id) => (CM.hasWear(id) ? { xp: 0 } : null);
+
 // Informations unifiées pour n'importe quel identifiant (bloc ou objet).
 CM.itemInfo = function (id) {
   if (id < CM.ITEM_BASE) {
@@ -793,6 +825,14 @@ for (const m of CM.TOOL_MATS) {
     else if (m.key === 'NETHERITE') CM.recipes.push(r(out, 1, [[CM.toolOf(type, 'DIAMOND'), 1], [I.NETHERITE_INGOT, 1]], 'smithing', 'outils'));
     else CM.recipes.push(r(out, 1, [[TOOL_ING[m.key], toolCost[type]], [I.STICK, sticks]], 'table', 'outils'));
   }
+}
+// Armures : 5 / 8 / 7 / 4 matériaux à l'Établi ; netherite = pièce en diamant + lingot à la table de forgeron.
+for (const m of CM.ARMOR_MATS) {
+  CM.ARMOR_PIECES.forEach(([pk], slot) => {
+    const out = CM.armorOf(pk, m.key);
+    if (m.key === 'NETHERITE') CM.recipes.push(r(out, 1, [[CM.armorOf(pk, 'DIAMOND'), 1], [I.NETHERITE_INGOT, 1]], 'smithing', 'armures'));
+    else CM.recipes.push(r(out, 1, [[I[m.ing], CM.ARMOR_COST[slot]]], 'table', 'armures'));
+  });
 }
 CM.recipes.push(
   r(I.GRAPPLE, 1, [[I.IRON_INGOT, 3], [I.ROPE, 2]], 'table', 'outils'),

@@ -12,6 +12,7 @@
     ['🍗 La faim', "La barre de faim (à droite des cœurs) baisse quand tu cours, sautes, mines, nages ou te bats. Faim presque pleine : tes cœurs remontent tout seuls. Faim à zéro : tu perds de la vie. En dessous de 3 cuisses tu ne peux plus courir ni faire de ruée. Chaque aliment rend de la faim et de la saturation (qui retarde la prochaine fringale) : la viande grillée, le pain et la tarte à la citrouille sont les plus nourrissants. Sous l'eau, surveille tes bulles d'air."],
     ['🌾 Agriculture', "Laboure la terre avec une houe (clic droit), puis plante : graines de blé ou de betterave (herbes hautes), carottes et pommes de terre (herbes hautes, villages, coffres), graines de citrouille ou de pastèque (1 citrouille = 4 graines, 1 tranche = 1 graine). Avec de l'eau à 4 blocs ou moins, la terre devient irriguée (plus sombre) et tout pousse 2,5 fois plus vite ; laissée sèche et vide, elle redevient de la terre. Un seau (3 lingots de fer) ramasse de l'eau et la verse où tu veux (versée juste avant de toucher le sol, elle annule les dégâts de chute : le fameux MLG !). Une tige adulte fait pousser une citrouille ou une pastèque sur une case libre à côté. La poudre d'os accélère tout."],
     ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons ; carotte, pomme de terre ou betterave pour les sangliers. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
+    ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
     ['🍞 Manger', "Garde le clic droit enfoncé 1 seconde avec un aliment en main (sur téléphone, un toucher suffit : tu manges jusqu'au bout sauf si tu changes d'objet). On avance lentement pendant qu'on mange."],
     ['🪝 Grappin', "Fabrique-le avec 3 lingots de fer et 2 cordes. En main, clic droit sur un bloc jusqu'à 34 blocs : tu es tiré vers lui en gardant ton élan. Saut pendant la traction pour te décrocher avec un bond."],
     ['💨 Ruée et double saut', "La touche de ruée (F) lance un sprint éclair (tu es brièvement invulnérable et tu frappes plus fort). Tu peux la diriger pendant qu'elle dure : tourne la caméra ou change de direction, même dans l'élan en l'air. L'Amulette de plume, gardée dans l'inventaire, donne un double saut."],
@@ -74,6 +75,13 @@
     const rows = DRUM.map((row) => row.split('').map((ch, x) => (ch === 'x' || ch === '.' ? ch : kind === 'full' || (kind === 'half' && x >= 4) ? ch : 'e')).join(''));
     return pixIcon(rows, { x: '#1a0e06', m: '#b5652b', h: '#e39a55', b: '#eee4d0', e: '#3b2518' });
   }
+  // icône de protection (un plastron) : 2 points d'armure par icône, comme dans Minecraft
+  const CHEST_ICON = ['.xx...xx.', 'xhwx.xwwx', 'xwwwxwwsx', 'xwwwwwwsx', '.xwwwwsx.', '.xwwwwsx.', '.xwwwwsx.', '.xxxxxxx.'];
+  function armorIcon(kind) {
+    const rows = CHEST_ICON.map((row) => row.split('').map((ch, x) => (ch === 'x' || ch === '.' ? ch : kind === 'full' || (kind === 'half' && x < 5) ? ch : 'e')).join(''));
+    return pixIcon(rows, { x: '#16181f', h: '#ffffff', w: '#c9ced8', s: '#8b919e', e: '#2c3040' });
+  }
+  const durColor = (k) => 'hsl(' + Math.round(k * 120) + ', 85%, 48%)';
   const BUBBLE = ['..xxx..', '.xhwwx.', 'xhwwwwx', 'xwwwwwx', 'xwwwwwx', '.xwwwx.', '..xxx..'];
   const bubbleIcon = (kind) => pixIcon(kind === 'pop' ? ['.......', '..x.x..', '.x...x.', '.......', '.x...x.', '..x.x..', '.......'] : BUBBLE, { x: '#1d4a8a', h: '#ffffff', w: '#8fd0ff' });
 
@@ -182,6 +190,7 @@
       this.hearts = { full: heartIcon('full'), half: heartIcon('half'), empty: heartIcon('empty') };
       this.foods = { full: foodIcon('full'), half: foodIcon('half'), empty: foodIcon('empty') };
       this.bubbles = { full: bubbleIcon('full'), pop: bubbleIcon('pop') };
+      this.armorIcons = { full: armorIcon('full'), half: armorIcon('half'), empty: armorIcon('empty') };
       this.buildHUD();
       this.buildInventory();
       this.buildGuide();
@@ -222,6 +231,9 @@
         return out;
       };
       this.heartEls = mk('hearts', 10);
+      this.armorEls = mk('armor', 10);
+      this.lastArmor = -1;
+      this.armorSig = null;
       this.foodEls = mk('food', 10);
       this.airEls = mk('air', 10);
     }
@@ -231,7 +243,14 @@
       const icon = CM.Textures.icons[s.id];
       let h = '<div class="icon" style="background-image:url(' + icon + ')"></div>';
       if (s.count > 1) h += '<span class="count">' + s.count + '</span>';
-      if (s.xp !== undefined) {
+      const wi = s.xp !== undefined && CM.itemInfo(s.id);
+      if (wi && wi.type === 'armor') {
+        // armure : barre de durabilité (dès qu'elle est entamée), du vert au rouge
+        if (s.xp > 0) {
+          const k = Math.max(0, 1 - s.xp / wi.maxDur);
+          h += '<div class="dur"><div style="width:' + Math.round(k * 100) + '%;background:' + durColor(k) + '"></div></div>';
+        }
+      } else if (s.xp !== undefined) {
         const lvl = CM.masteryLevel(s.xp);
         h += '<span class="stars">' + '★'.repeat(lvl) + '</span>';
         if (lvl < 5) {
@@ -322,6 +341,7 @@
         }
         $('hearts').classList.toggle('low', hp <= 6 && hp > 0);
       }
+      this.updateArmorHUD(creative);
       const food = Math.ceil(p.food);
       if (food !== this.lastFood) {
         this.lastFood = food;
@@ -491,6 +511,20 @@
       };
       for (let i = 9; i < 36; i++) mk(i, main);
       for (let i = 0; i < 9; i++) mk(i, hot);
+      // cases d'armure : casque, plastron, jambières, bottes
+      const ar = $('inv-armor');
+      ar.innerHTML = '';
+      this.armorSlots = [];
+      for (let k = 0; k < 4; k++) {
+        const s = document.createElement('div');
+        s.className = 'slot armor-slot';
+        s.title = CM.ARMOR_PIECES[k][1];
+        s.addEventListener('pointerdown', (e) => this.armorClick(k, e));
+        s.addEventListener('mouseenter', (e) => this.showTip(this.game.inventory.armor[k], e));
+        s.addEventListener('mouseleave', () => this.hideTip());
+        ar.appendChild(s);
+        this.armorSlots.push(s);
+      }
       const cg = $('chest-grid');
       this.chestSlots = [];
       for (let i = 0; i < 27; i++) {
@@ -553,7 +587,7 @@
         el.className = 'slot';
         el.innerHTML = '<div class="icon" style="background-image:url(' + CM.Textures.icons[id] + ')"></div>';
         this.tapOrPress(el, (e) => this.creativeClick(id, e));
-        el.addEventListener('mouseenter', (e) => this.showTip({ id, count: 1, xp: CM.itemInfo(id).type === 'tool' ? 0 : undefined }, e));
+        el.addEventListener('mouseenter', (e) => this.showTip({ id, count: 1, xp: CM.hasWear(id) ? 0 : undefined }, e));
         el.addEventListener('mouseleave', () => this.hideTip());
         grid.appendChild(el);
         this.creativeEls.set(id, { el, cat: creativeCat(id), name: norm(CM.itemName(id)) });
@@ -592,10 +626,10 @@
       e.preventDefault();
       const info = CM.itemInfo(id);
       const stack = { id, count: e.button === 2 || this.halfMode ? 1 : info.stack };
-      if (info.type === 'tool') stack.xp = 0;
+      if (CM.hasWear(id)) stack.xp = 0;
       CM.Audio.play('click');
       if (e.shiftKey || this.quickMode) {
-        this.game.inventory.add(id, stack.count, info.type === 'tool' ? { xp: 0 } : null);
+        this.game.inventory.add(id, stack.count, CM.freshExtra(id));
         return;
       }
       if (this.cursor && this.cursor.id === id && this.cursor.count < info.stack) this.cursor.count = info.stack;
@@ -663,7 +697,7 @@
         if (!o.give.every(([id, k]) => inv.count(id) >= k)) break;
         for (const [id, k] of o.give) inv.remove(id, k);
         const [gid, gk] = o.get;
-        const extra = CM.itemInfo(gid).type === 'tool' ? { xp: 0 } : null;
+        const extra = CM.freshExtra(gid);
         const left = inv.add(gid, gk, extra);
         if (left > 0) g.dropNearPlayer(gid, left, extra);
         n++;
@@ -740,6 +774,13 @@
     renderInventory() {
       const inv = this.game.inventory;
       for (let i = 0; i < 36; i++) this.invSlots[i].innerHTML = this.slotHTML(inv.slots[i], i < 9 ? i + 1 : 0);
+      for (let k = 0; k < 4; k++) {
+        const s = inv.armor[k];
+        // case vide : silhouette de la pièce attendue
+        this.armorSlots[k].innerHTML = s ? this.slotHTML(s) : '<div class="icon ph" style="background-image:url(' + CM.Textures.icons[CM.armorOf(CM.ARMOR_PIECES[k][0], 'IRON')] + ')"></div>';
+      }
+      const pts = inv.armorPoints();
+      $('inv-prot').innerHTML = '🛡 Protection <b>' + pts + '</b>/20' + (pts ? ' · environ −' + Math.round(pts * 4) + ' % de dégâts' : ' · aucune armure portée');
       if (this.chest) for (let i = 0; i < 27; i++) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
       if (this.trade) this.renderTrade();
       const c = $('cursor-stack');
@@ -781,6 +822,15 @@
       const shift = e.shiftKey || this.quickMode;
       const button = this.halfMode && e.button === 0 ? 2 : e.button;
       if (shift && s && !this.cursor) {
+        // Maj+clic sur une armure : on l'enfile si la case est libre
+        const si = CM.itemInfo(s.id);
+        if (kind === 'inv' && !this.chest && si.type === 'armor' && !inv.armor[si.slot]) {
+          inv.armor[si.slot] = s;
+          slots[i] = null;
+          CM.Audio.play('equip', { mat: si.mat });
+          inv.changed();
+          return;
+        }
         if (kind === 'chest') this.stowInto(s, inv.slots, 0, 36);
         else if (this.chest) this.stowInto(s, this.chest, 0, 27);
         else if (i >= 9) this.stowInto(s, inv.slots, 0, 9);
@@ -827,6 +877,65 @@
       this.showTip(slots[i], e);
     }
 
+    // Clic sur une case d'armure : n'accepte que la pièce correspondante.
+    armorClick(k, e) {
+      e.preventDefault();
+      const inv = this.game.inventory, s = inv.armor[k];
+      const fits = (st) => {
+        const i = st && CM.itemInfo(st.id);
+        return !!i && i.type === 'armor' && i.slot === k;
+      };
+      CM.Audio.play('click');
+      if ((e.shiftKey || this.quickMode) && s && !this.cursor) {
+        if (inv.add(s.id, 1, { xp: s.xp || 0 }) === 0) inv.armor[k] = null;
+      } else if (this.cursor) {
+        if (!fits(this.cursor)) {
+          this.toast('Cette case est pour : ' + CM.ARMOR_PIECES[k][1].toLowerCase(), 'info', 'armorslot');
+          return;
+        }
+        inv.armor[k] = Object.assign({}, this.cursor, { count: 1 });
+        this.cursor = s || null;
+        CM.Audio.play('equip', { mat: CM.itemInfo(inv.armor[k].id).mat });
+      } else if (s) {
+        this.cursor = s;
+        inv.armor[k] = null;
+      }
+      inv.changed();
+      this.showTip(inv.armor[k], e);
+    }
+
+    // Icônes de protection au-dessus des cœurs et panneau des pièces portées (en bas à droite).
+    updateArmorHUD(creative) {
+      const inv = this.game.inventory;
+      const pts = inv.armorPoints();
+      $('armor').classList.toggle('hidden', creative || pts <= 0);
+      if (pts !== this.lastArmor) {
+        this.lastArmor = pts;
+        for (let i = 0; i < 10; i++) {
+          const v = pts - i * 2;
+          this.armorEls[i].style.backgroundImage = 'url(' + (v >= 2 ? this.armorIcons.full : v === 1 ? this.armorIcons.half : this.armorIcons.empty) + ')';
+        }
+      }
+      const sig = inv.armor.map((s) => (s ? s.id + ':' + (s.xp || 0) : '-')).join(',');
+      if (sig === this.armorSig) return;
+      this.armorSig = sig;
+      const worn = inv.armor.filter(Boolean);
+      $('armor-panel').classList.toggle('hidden', !worn.length);
+      $('hud').classList.toggle('has-armor', worn.length > 0);
+      $('armor-panel').innerHTML =
+        '<div class="ap-head">🛡 Armure portée · <b>' + pts + '</b>/20</div>' +
+        worn
+          .map((s) => {
+            const info = CM.itemInfo(s.id), left = Math.max(0, info.maxDur - (s.xp || 0)), k = left / info.maxDur;
+            return (
+              '<div class="ap-row' + (k <= 0.1 ? ' low' : '') + '"><i style="background-image:url(' + CM.Textures.icons[s.id] + ')"></i>' +
+              '<div class="ap-mid"><span class="ap-name">' + esc(info.name) + '</span><span class="ap-bar"><b style="width:' + Math.round(k * 100) + '%;background:' + durColor(k) + '"></b></span></div>' +
+              '<span class="ap-num">' + left + '<small>/' + info.maxDur + '</small></span></div>'
+            );
+          })
+          .join('');
+    }
+
     showTip(s, e) {
       const tt = $('tooltip');
       if (!s || this.cursor || (e && e.pointerType === 'touch') || (this.game.touch && this.game.touch.enabled && !(e && e.pointerType === 'mouse'))) {
@@ -865,6 +974,11 @@
         h += '<div class="tt-sub">Clic droit : s’accrocher à un bloc (34 blocs). Saut : se décrocher.</div>';
       } else if (info.type === 'seeds') {
         h += '<div class="tt-sub">Clic droit sur de la terre labourée pour planter.</div>';
+      } else if (info.type === 'armor') {
+        const used = (s && s.xp) || 0, left = info.maxDur - used;
+        h += '<div class="tt-gold">🛡 Protection +' + info.armor + (info.tough ? ' · Robustesse +' + info.tough : '') + '</div>';
+        h += '<div class="tt-sub">Durabilité <span style="color:' + durColor(left / info.maxDur) + '">' + left + '/' + info.maxDur + '</span> · s’use à chaque coup reçu</div>';
+        h += '<div class="tt-sub">Clic droit avec en main, ou Maj+clic dans l’inventaire, pour l’enfiler.</div>';
       } else if (info.type === 'bucket') {
         h += '<div class="tt-sub">' + info.desc + '</div>';
       } else if (info.type === 'bonemeal') {
@@ -930,7 +1044,7 @@
           e.preventDefault();
           this.craft(r, e.shiftKey || this.quickMode);
         });
-        el.addEventListener('mouseenter', (e) => this.showTip({ id: r.out, count: r.n, xp: CM.itemInfo(r.out).type === 'tool' ? 0 : undefined }, e));
+        el.addEventListener('mouseenter', (e) => this.showTip({ id: r.out, count: r.n, xp: CM.hasWear(r.out) ? 0 : undefined }, e));
         el.addEventListener('mouseleave', () => this.hideTip());
       });
     }
@@ -939,7 +1053,7 @@
       const g = this.game, inv = g.inventory;
       if (g.mode === 'creative') {
         const info = CM.itemInfo(r.out);
-        inv.add(r.out, many ? info.stack : r.n, info.type === 'tool' ? { xp: 0 } : null);
+        inv.add(r.out, many ? info.stack : r.n, CM.freshExtra(r.out));
         CM.Audio.play('craft');
         return;
       }

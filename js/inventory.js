@@ -4,8 +4,30 @@
   class Inventory {
     constructor() {
       this.slots = new Array(36).fill(null);
+      this.armor = [null, null, null, null]; // casque, plastron, jambières, bottes
       this.selected = 0;
       this.onChange = null;
+    }
+    // Protection totale (points d'armure, comme dans Minecraft : 20 au maximum) et robustesse.
+    armorPoints() {
+      let n = 0;
+      for (const s of this.armor) if (s) n += CM.itemInfo(s.id).armor;
+      return n;
+    }
+    armorToughness() {
+      let n = 0;
+      for (const s of this.armor) if (s) n += CM.itemInfo(s.id).tough;
+      return n;
+    }
+    // Pièce tenue en main -> portée (échange avec celle déjà portée). Renvoie true si c'est fait.
+    equipHeld() {
+      const s = this.slots[this.selected];
+      const info = s && CM.itemInfo(s.id);
+      if (!info || info.type !== 'armor') return false;
+      this.slots[this.selected] = this.armor[info.slot];
+      this.armor[info.slot] = s;
+      this.changed();
+      return true;
     }
     changed() {
       if (this.onChange) this.onChange();
@@ -30,7 +52,7 @@
         if (!this.slots[i]) {
           const n = Math.min(max, count);
           this.slots[i] = Object.assign({ id, count: n }, extra || {});
-          if (CM.itemInfo(id).type === 'tool' && this.slots[i].xp === undefined) this.slots[i].xp = 0;
+          if (CM.hasWear(id) && this.slots[i].xp === undefined) this.slots[i].xp = 0;
           count -= n;
         }
       }
@@ -98,7 +120,8 @@
     }
 
     serialize() {
-      return { slots: this.slots.map((s) => (s ? Object.assign({}, s) : null)), selected: this.selected };
+      const copy = (s) => (s ? Object.assign({}, s) : null);
+      return { slots: this.slots.map(copy), selected: this.selected, armor: this.armor.map(copy) };
     }
     load(data, v) {
       if (!data || !Array.isArray(data.slots)) return;
@@ -108,6 +131,11 @@
         return CM.itemInfo(id) ? Object.assign({}, s, { id }) : null;
       });
       while (this.slots.length < 36) this.slots.push(null);
+      this.armor = [0, 1, 2, 3].map((k) => {
+        const s = Array.isArray(data.armor) && data.armor[k];
+        const info = s && CM.itemInfo(s.id);
+        return info && info.type === 'armor' && info.slot === k ? Object.assign({ xp: 0 }, s, { count: 1 }) : null;
+      });
       this.selected = data.selected || 0;
       this.changed();
     }

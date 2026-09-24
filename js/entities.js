@@ -150,6 +150,8 @@
     ['Forgeron', 'wool_gray', [
       [[['COAL', 12]], ['EMERALD', 1]], [[['IRON_INGOT', 4]], ['EMERALD', 1]], [[['EMERALD', 3]], ['AXE_IRON', 1]],
       [[['EMERALD', 4]], ['PICKAXE_IRON', 1]], [[['EMERALD', 5]], ['SWORD_IRON', 1]], [[['EMERALD', 12], ['DIAMOND', 2]], ['PICKAXE_DIAMOND', 1]],
+      [[['EMERALD', 4]], ['HELMET_IRON', 1]], [[['EMERALD', 7]], ['CHESTPLATE_IRON', 1]], [[['EMERALD', 6]], ['LEGGINGS_IRON', 1]],
+      [[['EMERALD', 3]], ['BOOTS_IRON', 1]], [[['EMERALD', 14], ['DIAMOND', 3]], ['CHESTPLATE_DIAMOND', 1]],
     ]],
     ['Bibliothécaire', 'wool', [
       [[['PAPER', 24]], ['EMERALD', 1]], [[['EMERALD', 1]], ['BOOK', 2]], [[['EMERALD', 1]], ['GLASS', 6]],
@@ -161,7 +163,7 @@
     ]],
     ['Boucher', 'wool_red', [
       [[['RAW_MEAT', 10]], ['EMERALD', 1]], [[['LEATHER', 6]], ['EMERALD', 1]], [[['EMERALD', 1]], ['COOKED_MEAT', 5]],
-      [[['EMERALD', 1]], ['MUSHROOM_STEW', 2]],
+      [[['EMERALD', 1]], ['MUSHROOM_STEW', 2]], [[['EMERALD', 2]], ['CHESTPLATE_LEATHER', 1]], [[['EMERALD', 1]], ['BOOTS_LEATHER', 1]],
     ]],
     ['Prêtre', 'wool_purple', [
       [[['SHADOW_ESSENCE', 4]], ['EMERALD', 1]], [[['EMERALD', 1]], ['REDSTONE', 4]], [[['EMERALD', 2]], ['GLOWSTONE_DUST', 4]],

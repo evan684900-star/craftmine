@@ -151,6 +151,15 @@
         if (opt.open) tone(t, 0.18, 'sawtooth', 190, 120, 0.05, 0.02);
         noise(t + (opt.open ? 0.1 : 0), 0.08, 'lowpass', 600, 1, 0.25);
         break;
+      case 'equip':
+        // armure enfilée : cuir étouffé, métal qui cliquette
+        if (opt.mat === 'LEATHER') noise(t, 0.12, 'lowpass', 900, 0.8, 0.3);
+        else {
+          tone(t, 0.08, 'triangle', 1600, 1200, 0.08);
+          tone(t + 0.07, 0.1, 'triangle', 2100, 1700, 0.06);
+          noise(t, 0.08, 'bandpass', 3000, 3, 0.15);
+        }
+        break;
       case 'golem':
         tone(t, 0.25, 'square', 70, 40, 0.12);
         noise(t, 0.12, 'bandpass', 900, 2, 0.2);

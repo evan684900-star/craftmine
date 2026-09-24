@@ -136,6 +136,7 @@
       this.h = 1.8;
       this.flags = 0;
       this.held = 0;
+      this.armor = 0; // matériaux portés (casque, plastron, jambières, bottes), codés en base 6
       this.alive = true;
       this.seen = false;
       this.walk = 0;
@@ -155,6 +156,7 @@
       this.pitch = num(a[4]);
       this.flags = a[5] | 0;
       this.held = a[6] | 0;
+      this.armor = a[7] | 0;
       this.alive = !!(this.flags & 4);
       if (this.flags & 8) this.swingT = 0.3;
       if (!this.seen || Math.hypot(this.x - this.rx, this.y - this.ry, this.z - this.rz) > 12) {
@@ -522,7 +524,11 @@
       const g = this.game;
       const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0);
       const held = g.inventory.held();
-      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0];
+      let armor = 0;
+      g.inventory.armor.forEach((s, k) => {
+        if (s) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
+      });
+      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor];
     }
     sendMyState(withInv) {
       const g = this.game;
@@ -630,7 +636,7 @@
       const all = [[0, ...this.stateOf(g.player)]];
       for (const e of this.links.values()) {
         const rp = e.rp;
-        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held]);
+        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor]);
       }
       for (const e of this.links.values()) e.link.send({ t: 'ps', p: all.filter((a) => a[0] !== e.pid) });
     }
@@ -1237,6 +1243,22 @@
           ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl);
           ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], L.skin, l, fl);
         }
+        // armure portée : coques un peu plus grandes que chaque partie du corps
+        const am = (k) => {
+          const i = Math.floor(rp.armor / 6 ** k) % 6;
+          return i ? L['armor_skin_' + CM.ARMOR_MATS[i - 1].key.toLowerCase()] : null;
+        };
+        const helm = am(0), chest = am(1), legs = am(2), boots = am(3);
+        if (helm) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.25, 0.28, -0.25, 0.25, 0.48, 0.25], helm, l, fl);
+        if (chest) {
+          ents.part(batch, M, 0, 0.7, 0, -lean, [-0.27, 0.06, -0.15, 0.27, 0.67, 0.15], chest, l, fl);
+          for (const [ax, rot] of arms) ents.part(batch, M, ax, sy, sz, rot, [-0.13, -0.27, -0.13, 0.13, 0.06, 0.13], chest, l, fl);
+        }
+        for (const [lx, rot] of [[-0.12, sw * 0.7], [0.12, -sw * 0.7]]) {
+          if (legs) ents.part(batch, M, lx, 0.7, 0, rot, [-0.135, -0.48, -0.135, 0.135, 0.02, 0.135], legs, l, fl);
+          if (boots) ents.part(batch, M, lx, 0.7, 0, rot, [-0.14, -0.71, -0.14, 0.14, -0.5, 0.14], boots, l, fl);
+        }
+        if (legs) ents.part(batch, M, 0, 0.7, 0, -lean, [-0.265, -0.02, -0.145, 0.265, 0.1, 0.145], legs, l, fl);
         // objet tenu, dans la main droite
         const info = rp.held ? CM.itemInfo(rp.held) : null;
         if (info) {

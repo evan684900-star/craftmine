@@ -990,6 +990,14 @@
         if (input.pressed.mouse2) this.useBucket(stack, info);
         return;
       }
+      // armure en main : on l'enfile (échange avec la pièce portée)
+      if (info.type === 'armor') {
+        if (input.pressed.mouse2 && g.inventory.equipHeld()) {
+          CM.Audio.play('equip', { mat: info.mat });
+          this.swing = 1;
+        }
+        return;
+      }
       if (info.type === 'grapple') {
         if (input.pressed.mouse2) this.fireHook();
         return;
@@ -1145,6 +1153,8 @@
         // difficulté : dégâts des créatures
         n *= g.difficulty === 'easy' ? 0.6 : g.difficulty === 'hard' ? 1.4 : 1;
         n = Math.max(1, Math.round(n));
+        // créatures, explosions, autres joueurs : l'armure encaisse (pas la chute, la faim ou la noyade)
+        n = this.armorAbsorb(n);
       }
       this.health -= n;
       this.invul = 0.55;
@@ -1164,6 +1174,32 @@
       }
     }
 
+    // Armure portée : réduit les dégâts (formule de Minecraft, 80 % au plus) et s'use à chaque coup.
+    armorAbsorb(n) {
+      const g = this.game, inv = g.inventory;
+      const pts = inv.armorPoints();
+      if (pts <= 0) return n;
+      const tough = inv.armorToughness();
+      const f = Math.min(20, Math.max(pts / 5, pts - n / (2 + tough / 4)));
+      const wear = Math.max(1, Math.floor(n / 4));
+      inv.armor.forEach((s, k) => {
+        if (!s) return;
+        const info = CM.itemInfo(s.id);
+        s.xp = (s.xp || 0) + wear;
+        const left = info.maxDur - s.xp;
+        const warnAt = Math.max(5, Math.floor(info.maxDur * 0.1));
+        const plural = k >= 2, nm = info.name.charAt(0).toLowerCase() + info.name.slice(1); // jambières, bottes
+        if (left <= 0) {
+          inv.armor[k] = null;
+          g.ui.toast(plural ? 'Tes ' + nm + ' se sont cassées !' : 'Ton ' + nm + ' s’est cassé !', 'warn');
+          CM.Audio.play('break', { mat: info.mat === 'LEATHER' ? 'wool' : 'metal' });
+          g.entities.burst(CM.Textures.layer[info.tex], this.x, this.y + 1.2 - k * 0.35, this.z, 12, { speed: 3, size: 0.08 });
+        } else if (left <= warnAt && left + wear > warnAt) g.ui.toast((plural ? 'Tes ' + nm + ' sont presque usées' : 'Ton ' + nm + ' est presque usé') + ' (' + left + '/' + info.maxDur + ')', 'warn');
+      });
+      inv.changed();
+      return Math.round(n * (1 - f / 25) * 2) / 2;
+    }
+
     die(cause) {
       const g = this.game;
       this.alive = false;
@@ -1178,6 +1214,10 @@
           g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra);
           inv.slots[i] = null;
         }
+        inv.armor.forEach((s, k) => {
+          if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, { xp: s.xp || 0 });
+          inv.armor[k] = null;
+        });
         inv.changed();
       }
       g.stats.deaths = (g.stats.deaths || 0) + 1;

@@ -44,11 +44,13 @@
     <input id="chat-input" type="text" class="hidden" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Message aux autres joueurs (Entrée pour envoyer, Échap pour fermer)" />
     <div id="toasts"></div>
     <div id="pickups"></div>
+    <div id="armor-panel" class="hidden"></div>
     <div id="debug" class="hidden"></div>
     <div id="bottom">
       <div id="item-name"></div>
       <div id="status">
         <div class="stat-left">
+          <div id="armor" class="hidden"></div>
           <div id="hearts"></div>
         </div>
         <div id="abilities">
@@ -118,6 +120,7 @@
             <button id="inv-close" title="Fermer">✕</button>
           </div>
         </div>
+        <div class="inv-armor"><div id="inv-armor" class="grid"></div><div id="inv-prot"></div></div>
         <div id="inv-main" class="grid"></div>
         <div class="sep"></div>
         <div id="inv-hot" class="grid"></div>
@@ -146,6 +149,7 @@
           <div class="filters">
             <button data-f="tout" class="active">Tout</button>
             <button data-f="outils">Outils</button>
+            <button data-f="armures">Armures</button>
             <button data-f="blocs">Blocs</button>
             <button data-f="deco">Déco</button>
             <button data-f="objets">Objets</button>
@@ -165,7 +169,7 @@
               <option value="nature">Nature</option>
               <option value="ores">Minerais et métaux</option>
               <option value="deco">Utilitaires et lumières</option>
-              <option value="items">Objets et outils</option>
+              <option value="items">Objets, outils et armures</option>
             </select>
             <input id="creative-search" type="search" placeholder="Rechercher un bloc ou un objet…" />
           </div>

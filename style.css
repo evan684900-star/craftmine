@@ -56,8 +56,8 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 #status { display: flex; align-items: flex-end; justify-content: space-between; width: 100%; margin-bottom: 6px; gap: 10px; }
 .stat-left, .stat-right { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
 .stat-right { align-items: flex-end; }
-#hearts, #food, #air { display: flex; gap: 1px; }
-#hearts i, #food i, #air i { width: 18px; height: 18px; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; display: block; }
+#hearts, #food, #air, #armor { display: flex; gap: 1px; }
+#hearts i, #food i, #air i, #armor i { width: 18px; height: 18px; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; display: block; }
 #hearts.low i { animation: shake 0.5s infinite; }
 #food.shake i { animation: shake 0.35s infinite; }
 @keyframes shake { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
@@ -122,7 +122,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .toast.good { border-color: var(--green); color: #d6ffcc; }
 .toast.fade { opacity: 0; }
 @keyframes toastIn { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
-#pickups { position: absolute; right: 14px; bottom: 120px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+#pickups { position: absolute; right: 14px; bottom: 120px; transition: bottom 0.2s; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .pickup { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: rgba(10, 12, 20, 0.7); font-size: 13px; font-weight: 600; transition: opacity 0.5s; }
 .pickup i { width: 20px; height: 20px; background-size: contain; image-rendering: pixelated; display: block; }
 .pickup.fade { opacity: 0; }
@@ -418,3 +418,36 @@ body.net .net-only { display: inline-block; }
 body.touch #chat { bottom: calc(170px * var(--gui, 1)); width: min(360px, 45vw); }
 body.touch #chat-input { top: 60px; bottom: auto; }
 body.touch #netinfo { top: 110px; }
+
+/* ---- armure ---- */
+.slot .dur { position: absolute; left: 5px; right: 5px; bottom: 3px; height: 3px; background: rgba(0, 0, 0, 0.7); border-radius: 2px; }
+.slot .dur div { height: 100%; border-radius: 2px; }
+.inv-armor { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+#inv-armor { display: flex; gap: 3px; }
+.armor-slot { background: rgba(120, 140, 190, 0.12); }
+.armor-slot .icon.ph { opacity: 0.16; filter: grayscale(1); }
+#inv-prot { font-size: 12px; color: var(--muted); }
+#inv-prot b { color: var(--text, #fff); }
+#hud.has-armor #pickups { bottom: calc(160px * var(--gui, 1)); }
+#armor-panel {
+  position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: 12px; min-width: 220px; padding: 6px 9px 7px;
+  background: rgba(10, 12, 20, 0.6); border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+  transform: scale(var(--gui, 1)); transform-origin: bottom right;
+}
+#armor-panel .ap-head { font-size: 11px; font-weight: 800; color: var(--muted); margin-bottom: 3px; letter-spacing: 0.02em; }
+#armor-panel .ap-head b { color: #fff; }
+#armor-panel .ap-row { display: flex; align-items: center; gap: 7px; height: 25px; }
+#armor-panel .ap-row i { width: 22px; height: 22px; flex: none; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; }
+#armor-panel .ap-mid { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#armor-panel .ap-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
+#armor-panel .ap-bar { height: 4px; background: rgba(0, 0, 0, 0.6); border-radius: 2px; overflow: hidden; }
+#armor-panel .ap-bar b { display: block; height: 100%; border-radius: 2px; }
+#armor-panel .ap-num { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }
+#armor-panel .ap-num small { font-weight: 600; color: var(--muted); }
+#armor-panel .ap-row.low .ap-num { color: #ff6b6b; animation: shake 0.6s infinite; }
+/* téléphone : plus compact, sous les boutons de droite */
+body.touch #armor-panel { min-width: 170px; padding: 4px 7px; font-size: 10px; bottom: 6px; }
+body.touch #armor-panel .ap-head { display: none; }
+body.touch #armor-panel .ap-row { height: 20px; gap: 5px; }
+body.touch #armor-panel .ap-row i { width: 17px; height: 17px; }
+body.touch #armor-panel .ap-num { min-width: 40px; }

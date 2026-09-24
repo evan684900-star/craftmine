@@ -885,6 +885,20 @@
     }
   }
 
+  // armures : icônes (contour sombre, couleur du matériau) et « peau » unie pour les joueurs qui la portent
+  const ARMOR_ART = {"HELMET": ["", "", "", "....oooooooo....", "...oHHhhhhhhdo..", "..oHhhhhhhhhhdo.", "..ohhhhhhhhhhdo.", "..ohhoooooohhdo.", "..ohho....ohhdo.", "..oddo....oddo..", "..oooo....oooo.."], "CHESTPLATE": ["", "..oooo....oooo..", ".oHhho....ohhdo.", ".ohhhoooooohhdo.", ".ohhhhhhhhhhhdo.", ".oooohhhhhhdooo.", "....oHhhhhhdo...", "....ohhhhhhdo...", "....ohhhhhhdo...", "....ohhhhhhdo...", "....oddddddddo..", "....oooooooooo.."], "LEGGINGS": ["", "", "...ooooooooooo..", "...oHhhhhhhhdo..", "...ohhhhhhhhdo..", "...ohhhoohhhdo..", "...ohhho.ohhdo..", "...ohhho.ohhdo..", "...ohhho.ohhdo..", "...ohhho.ohhdo..", "...odddo.oddo...", "...ooooo.oooo..."], "BOOTS": ["", "", "", "", "", "..oooo....oooo..", "..oHho....oHho..", "..ohho....ohho..", "..ohho....ohho..", ".oohhoo..oohhoo.", ".ohhhdo..ohhhdo.", ".odddddo.odddddo", ".oooooooooooooo."]};
+  for (const m of CM.ARMOR_MATS) {
+    const pal = Object.assign({ o: m.color.d.map((v) => v * 0.42) }, m.color);
+    for (const [pk] of CM.ARMOR_PIECES) make('armor_' + pk.toLowerCase() + '_' + m.key.toLowerCase(), (d) => {
+      clear(d);
+      art(d, ARMOR_ART[pk], pal);
+    });
+    make('armor_skin_' + m.key.toLowerCase(), (d, r) => {
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(y < 2 || x === 0 ? m.color.H : y > 13 || x === 15 ? m.color.d : m.color.h, r, 6));
+      for (let x = 2; x < 14; x += 4) put(d, x, 3, m.color.H);
+    });
+  }
+
   // ======================================================= variété (v3) ===
   const INGOT_ROWS = [
     '................',
