@@ -86,7 +86,14 @@
     }
     addFire(x, y, z) {
       const k = x + ',' + y + ',' + z;
-      if (!this.fires.has(k)) this.fires.set(k, { age: 0, due: this.t + 1 + Math.random() });
+      // un feu né d'un autre garde à peu près son âge (sinon l'incendie ne s'arrêterait jamais)
+      if (!this.fires.has(k)) this.fires.set(k, { age: this.spawnAge || 0, due: this.t + 1.5 + Math.random() * 0.5 });
+    }
+    // Pose un feu issu du feu d'âge « age » (comme dans Minecraft : il vieillit parfois d'un cran).
+    spreadFire(X, Y, Z, age) {
+      this.spawnAge = Math.min(15, age + (Math.random() < 0.2 ? 1 : 0));
+      this.world.setBlock(X, Y, Z, B.FIRE);
+      this.spawnAge = 0;
     }
     // Un bloc a changé : les liquides voisins réagissent, un nouveau feu commence à vivre.
     onEdit(x, y, z, id) {
@@ -294,8 +301,9 @@
         this.fires.delete(k);
         return;
       }
-      f.age++;
-      f.due = this.t + 1.5 + Math.random();
+      // comme dans Minecraft : un tick toutes les 1,5 à 2 s, l'âge (0 à 15) monte d'un cran une fois sur trois
+      if (f.age < 15 && Math.random() < 1 / 3) f.age++;
+      f.due = this.t + 1.5 + Math.random() * 0.5;
       const below = w.get(x, y - 1, z), bb = blk(below);
       const eternal = below === B.NETHERRACK || below === B.MAGMA;
       let wet = false, flamNear = false;
@@ -306,9 +314,9 @@
       }
       if (wet) return this.extinguish(x, y, z, k);
       if (!eternal) {
-        if (!flamNear && !bb.solid) return this.extinguish(x, y, z, k);
-        if (!flamNear && f.age > 3 && Math.random() < 0.25) return this.extinguish(x, y, z, k);
-        if (f.age > 15 && Math.random() < 0.25 && !bb.flam) return this.extinguish(x, y, z, k);
+        // rien à brûler autour : il s'éteint vite ; sinon il ne meurt qu'une fois vieux (âge 15)
+        if (!flamNear && (!bb.solid || f.age > 3)) return this.extinguish(x, y, z, k);
+        if (f.age >= 15 && Math.random() < 0.25 && !bb.flam) return this.extinguish(x, y, z, k);
       }
       if (!g.options.fireSpread || this.fires.size > MAX_FIRES) return;
       // les blocs inflammables autour brûlent (et prennent feu à leur tour)
@@ -319,8 +327,13 @@
           g.primeTnt(X, Y, Z);
           continue;
         }
-        w.setBlock(X, Y, Z, Math.random() < 0.6 && f.age < 10 ? B.FIRE : 0);
+        // le bloc brûlé devient du feu (surtout si le feu est jeune) ou disparaît
+        if (Math.random() * (f.age + 10) < 5) this.spreadFire(X, Y, Z, f.age);
+        else w.setBlock(X, Y, Z, 0);
       }
+      // difficulté : le feu se propage plus facilement (comme dans Minecraft)
+      const dif = { peaceful: 0, easy: 1, normal: 2, hard: 3 }[g.difficulty];
+      const boost = (dif === undefined ? 2 : dif) * 7;
       // et le feu saute dans l'air voisin des blocs inflammables (plus facilement vers le haut)
       for (let dy = -1; dy <= 4; dy++)
         for (let dz = -1; dz <= 1; dz++)
@@ -335,7 +348,8 @@
             }
             if (!enc) continue;
             const odds = 100 + (dy > 1 ? (dy - 1) * 100 : 0);
-            if (Math.random() * odds < (enc + 40) / (f.age + 30)) w.setBlock(X, Y, Z, B.FIRE);
+            const l = Math.floor((enc + 40 + boost) / (f.age + 30));
+            if (l > 0 && Math.floor(Math.random() * odds) <= l) this.spreadFire(X, Y, Z, f.age);
           }
     }
     extinguish(x, y, z, k) {
