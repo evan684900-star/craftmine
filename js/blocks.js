@@ -576,6 +576,12 @@ cropSet('pumpkin', 'PUMPKIN_STEM', 'Tige de citrouille', 'Tige de citrouille adu
 cropSet('melon', 'MELON_STEM', 'Tige de pastèque', 'Tige de pastèque adulte', { fruit: CM.B.MELON, wave: false });
 CM.CROPS.wheat = [0, 1, 2, 3].map((s) => CM.B['WHEAT_' + s]);
 for (const id of CM.CROPS.wheat) Object.assign(CM.blocks[id], { cropSet: CM.CROPS.wheat, cropKind: 'wheat' });
+// Table d'enchantement (3/4 de bloc, comme dans Minecraft) : les bibliothèques autour augmentent la puissance.
+nb('ENCHANTING_TABLE', {
+  name: "Table d'enchantement", render: 'slab', height: 12 / 16,
+  tex: { top: tx('ench_top', { type: 'enchtable', part: 0 }), bottom: CM.blocks[CM.B.OBSIDIAN].tex.top, side: tx('ench_side', { type: 'enchtable', part: 1 }) },
+  opaque: true, hardness: 5, tool: 'pickaxe', tier: 1, light: 7, enchanter: true,
+});
 CM.BLOCK_COUNT = NEXT;
 
 // Les blocs qui laissent passer la lumière sans atténuation.
@@ -728,6 +734,115 @@ CM.hasWear = (id) => {
   return !!t && (t.type === 'tool' || t.type === 'armor');
 };
 CM.freshExtra = (id) => (CM.hasWear(id) ? { xp: 0 } : null);
+
+// ------------------------------------------------------ Enchantements -----
+// Les plus importants de Minecraft, sur les mêmes objets. Niveau d'enchantement « modifié » minimal
+// pour obtenir le niveau l : a + b × (l − 1) ; w : poids (rareté). Les outils ne s'usent jamais dans
+// CraftMine, donc Solidité ne concerne que les armures ; sans enclume, Tranchant va aussi sur la hache.
+const TOOLS4 = ['pickaxe', 'axe', 'shovel', 'hoe'];
+const ARMOR4 = ['HELMET', 'CHESTPLATE', 'LEGGINGS', 'BOOTS'];
+CM.ENCHANTS = {
+  efficiency: { name: 'Efficacité', max: 5, a: 1, b: 10, w: 10, on: TOOLS4, desc: 'mine plus vite' },
+  fortune: { name: 'Fortune', max: 3, a: 15, b: 9, w: 2, on: TOOLS4, excl: ['silk'], desc: 'plus de minerais' },
+  silk: { name: 'Toucher de soie', max: 1, a: 15, b: 0, w: 1, on: TOOLS4, excl: ['fortune'], desc: 'le bloc tombe tel quel' },
+  sharpness: { name: 'Tranchant', max: 5, a: 1, b: 11, w: 10, on: ['sword', 'axe'], desc: 'plus de dégâts' },
+  knockback: { name: 'Recul', max: 2, a: 5, b: 20, w: 5, on: ['sword'], desc: 'repousse plus loin' },
+  fire: { name: 'Aura de feu', max: 2, a: 10, b: 20, w: 2, on: ['sword'], desc: 'enflamme (viande cuite)' },
+  looting: { name: 'Butin', max: 3, a: 15, b: 9, w: 2, on: ['sword'], desc: 'plus de butin' },
+  protection: { name: 'Protection', max: 4, a: 1, b: 11, w: 10, on: ARMOR4, desc: '−4 % de dégâts par niveau' },
+  unbreaking: { name: 'Solidité', max: 3, a: 5, b: 8, w: 5, on: ARMOR4, desc: 's’use moins' },
+  thorns: { name: 'Épines', max: 3, a: 10, b: 20, w: 1, on: ['CHESTPLATE'], desc: 'blesse qui te frappe' },
+  feather: { name: 'Chute amortie', max: 4, a: 5, b: 6, w: 5, on: ['BOOTS'], desc: 'moins de dégâts de chute' },
+  respiration: { name: 'Apnée', max: 3, a: 10, b: 10, w: 2, on: ['HELMET'], desc: 'respire plus longtemps sous l’eau' },
+};
+CM.ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+CM.enchName = (k, l) => CM.ENCHANTS[k].name + (CM.ENCHANTS[k].max > 1 ? ' ' + CM.ROMAN[l] : '');
+// Facilité à enchanter (enchantability) de chaque matériau, comme dans Minecraft.
+const ENCHANTABILITY = {
+  tool: { WOOD: 15, STONE: 5, IRON: 14, CRYSTAL: 12, GOLD: 22, DIAMOND: 10, NETHERITE: 15 },
+  armor: { LEATHER: 15, GOLD: 25, IRON: 9, DIAMOND: 10, NETHERITE: 15 },
+};
+// Genre d'objet pour les enchantements : type d'outil, ou pièce d'armure.
+CM.enchantKind = (id) => {
+  const i = CM.itemInfo(id);
+  if (!i) return null;
+  if (i.type === 'tool') return i.toolType;
+  if (i.type === 'armor') return CM.ARMOR_PIECES[i.slot][0];
+  return null;
+};
+CM.enchantsFor = (id) => {
+  const kind = CM.enchantKind(id);
+  return kind ? Object.keys(CM.ENCHANTS).filter((k) => CM.ENCHANTS[k].on.includes(kind)) : [];
+};
+CM.enchLevel = (stack, k) => (stack && stack.ench && stack.ench[k]) | 0;
+// Tirage d'enchantements pour un objet et un coût (niveaux), façon Minecraft.
+CM.rollEnchants = function (id, cost, rand) {
+  const info = CM.itemInfo(id);
+  const e = (ENCHANTABILITY[info.type] || {})[info.mat] || 10;
+  let L = cost + 1 + Math.floor(rand() * (Math.floor(e / 4) + 1)) + Math.floor(rand() * (Math.floor(e / 4) + 1));
+  L = Math.max(1, Math.round(L * (1 + (rand() + rand() - 1) * 0.15)));
+  let pool = [];
+  for (const k of CM.enchantsFor(id)) {
+    const d = CM.ENCHANTS[k];
+    for (let l = d.max; l >= 1; l--) {
+      if (L >= d.a + d.b * (l - 1)) {
+        pool.push([k, l]);
+        break;
+      }
+    }
+  }
+  const out = {};
+  const pick = () => {
+    let t = rand() * pool.reduce((n, [k]) => n + CM.ENCHANTS[k].w, 0);
+    for (const q of pool) if ((t -= CM.ENCHANTS[q[0]].w) < 0) return q;
+    return pool[pool.length - 1];
+  };
+  const clash = (a, b) => (CM.ENCHANTS[a].excl || []).includes(b) || (CM.ENCHANTS[b].excl || []).includes(a);
+  for (let first = true; pool.length && (first || rand() < (L + 1) / 50); first = false) {
+    const [k, l] = pick();
+    out[k] = l;
+    pool = pool.filter(([q]) => !out[q] && !Object.keys(out).some((o) => clash(o, q)));
+    if (!first) L = Math.floor(L / 2);
+  }
+  return out;
+};
+// Les trois offres de la table (coût en niveaux, lapis, enchantements) : fixées par la graine du joueur.
+CM.enchantOffers = function (id, shelves, seed) {
+  const b = Math.min(15, shelves);
+  const r = CM.rng((seed ^ Math.imul(id, 2654435761)) >>> 0);
+  const base = 1 + Math.floor(r() * 8) + Math.floor(b / 2) + Math.floor(r() * (b + 1));
+  const costs = [Math.max(Math.floor(base / 3), 1), Math.floor((base * 2) / 3) + 1, Math.max(base, b * 2)];
+  return costs.map((cost, i) => ({ cost, lapis: i + 1, ench: CM.rollEnchants(id, cost, CM.rng((seed + (i + 1) * 7919 + Math.imul(id, 31)) >>> 0)) }));
+};
+// Expérience gagnée en minant un minerai (comme dans Minecraft ; fer, cuivre et or : à la forge).
+CM.oreXp = function (id, rand) {
+  const k = CM.blocks[id].key;
+  const between = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  if (/COAL/.test(k)) return between(0, 2);
+  if (/DIAMOND|EMERALD|RUBY|SKY/.test(k)) return between(3, 7);
+  if (/LAPIS|QUARTZ|CRYSTAL/.test(k)) return between(2, 5);
+  if (/REDSTONE/.test(k)) return between(1, 5);
+  if (/NETHER_GOLD/.test(k)) return between(0, 1);
+  return 0;
+};
+// Données propres à une pile (expérience ou usure, enchantements) à recopier quand elle change de place.
+CM.stackExtra = (s) => {
+  if (!s) return null;
+  const e = {};
+  if (s.xp !== undefined) e.xp = s.xp;
+  if (s.ench) e.ench = Object.assign({}, s.ench);
+  return e.xp !== undefined || e.ench ? e : null;
+};
+// Enchantements venus du réseau : seulement des noms connus, niveaux bornés.
+CM.cleanEnch = (o) => {
+  if (!o || typeof o !== 'object') return undefined;
+  const out = {};
+  for (const k of Object.keys(CM.ENCHANTS)) {
+    const v = o[k] | 0;
+    if (v > 0) out[k] = Math.min(v, CM.ENCHANTS[k].max);
+  }
+  return Object.keys(out).length ? out : undefined;
+};
 
 // Informations unifiées pour n'importe quel identifiant (bloc ou objet).
 CM.itemInfo = function (id) {
@@ -995,6 +1110,7 @@ CM.recipes.push(r(27, 1, [[I.FIBER, 4]], 'table', 'deco'));
 // Portes (6 planches -> 3 portes) et lit
 for (const [wk, planks] of [['OAK', 'PLANKS'], ['SPRUCE', 'SPRUCE_PLANKS'], ['BIRCH', 'BIRCH_PLANKS'], ['ACACIA', 'ACACIA_PLANKS']]) CM.recipes.push(r(CM.DOORS[wk][0], 3, [[B[planks], 6]], 'table', 'deco'));
 CM.recipes.push(r(B.BED, 1, [[B.WOOL, 3], ['planks', 3]], 'table', 'deco'));
+CM.recipes.push(r(B.ENCHANTING_TABLE, 1, [[I.BOOK, 1], [I.DIAMOND, 2], [B.OBSIDIAN, 4]], 'table', 'deco'));
 // Agriculture
 CM.recipes.push(
   r(I.PUMPKIN_SEEDS, 4, [[B.PUMPKIN, 1]], null, 'objets'),

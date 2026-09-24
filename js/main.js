@@ -227,6 +227,13 @@
         const b = CM.blocks[id];
         return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
       })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
+      // tables d'enchantement (livre flottant, runes)
+      this.enchTables = new Set(this.world.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      this.world.onEdit = (x, y, z, id) => {
+        const k = x + ',' + y + ',' + z;
+        if (id === B.ENCHANTING_TABLE) this.enchTables.add(k);
+        else if (this.enchTables.size) this.enchTables.delete(k);
+      };
       this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
@@ -240,6 +247,8 @@
           flying: !!p.flying,
         });
         this.player.bed = Array.isArray(p.bed) ? p.bed : null;
+        this.player.xpTotal = Math.max(0, p.xp | 0);
+        if (Number.isFinite(p.enchSeed)) this.player.enchSeed = p.enchSeed >>> 0;
         this.player.fallStart = this.player.y;
         this.inventory.load(save.inv, v);
         this.time = save.time || 0.03;
@@ -334,6 +343,7 @@
         player: {
           x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z,
           yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
+          xp: p.xpTotal, enchSeed: p.enchSeed,
         },
         inv: this.inventory.serialize(),
         time: this.time,
@@ -852,7 +862,7 @@
     dropNearPlayer(id, count, extra) {
       const p = this.player;
       const f = [-Math.sin(p.yaw), -Math.cos(p.yaw)];
-      const ex = extra && extra.xp !== undefined ? { xp: extra.xp } : null;
+      const ex = CM.stackExtra(extra);
       this.entities.addDrop(id, count, p.x + f[0] * 0.4, p.y + 1.3, p.z + f[1] * 0.4, ex, [f[0] * 4, 2.5, f[1] * 4]);
     }
     dropHeld(all) {
@@ -921,6 +931,12 @@
       ];
       const items = [];
       for (const [id, p, a, b] of table) if (r() < p) items.push(worn({ id, count: a + Math.floor(r() * (b - a + 1)) }));
+      // parfois un objet déjà enchanté
+      if (r() < 0.2) {
+        const pool = [I.SWORD_IRON, I.PICKAXE_IRON, I.AXE_IRON, I.SWORD_GOLD, I.HELMET_IRON, I.BOOTS_IRON, I.CHESTPLATE_GOLD];
+        const id = pool[Math.floor(r() * pool.length)];
+        items.push(worn({ id, count: 1, xp: 0, ench: CM.rollEnchants(id, 5 + Math.floor(r() * 16), r) }));
+      }
       const saplings = CM.TAGS.saplings;
       if (r() < 0.4) items.push({ id: saplings[Math.floor(r() * saplings.length)], count: 1 + Math.floor(r() * 3) });
       const free = [...Array(27).keys()];
@@ -932,7 +948,7 @@
       const c = this.chests.get(k);
       if (!c) return;
       this.net.chestGone(k);
-      for (const s of c) if (s) this.entities.addDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.xp !== undefined ? { xp: s.xp } : null);
+      for (const s of c) if (s) this.entities.addDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, CM.stackExtra(s));
       this.chests.delete(k);
     }
     // Pousses d'arbre et cultures (croissance lente, lumière nécessaire).
@@ -1131,6 +1147,51 @@
       this.time = 0.02;
       this.ui.toast('Jour ' + (this.dayCount + 1) + ' — bien dormi !', 'good');
       if (this.net.isHost) this.net.broadcast({ t: 'time', ti: this.time, d: this.dayCount, l: this.dayLen });
+    }
+
+    // ------------------------------------------------ enchantement ------
+    // Bibliothèques autour d'une table : à 2 blocs (même hauteur ou un au-dessus), de l'air entre les deux.
+    shelves(x, y, z) {
+      const w = this.world, out = [];
+      for (let dy = 0; dy <= 1; dy++)
+        for (let dz = -2; dz <= 2; dz++)
+          for (let dx = -2; dx <= 2; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== 2 || w.get(x + dx, y + dy, z + dz) !== B.BOOKSHELF) continue;
+            if (CM.blocks[w.get(x + Math.trunc(dx / 2), y + dy, z + Math.trunc(dz / 2))].solid) continue;
+            out.push([x + dx, y + dy, z + dz]);
+          }
+      return out;
+    }
+    countShelves(x, y, z) {
+      return Math.min(15, this.shelves(x, y, z).length);
+    }
+    // Livre qui flotte au-dessus des tables proches et s'ouvre quand on s'approche ; runes venues des bibliothèques.
+    renderEnchantTables(dt) {
+      const p = this.player, ents = this.entities, L = CM.Textures.layer;
+      for (const k of this.enchTables) {
+        const [x, y, z] = k.split(',').map(Number);
+        if (Math.abs(x + 0.5 - p.x) > 24 || Math.abs(z + 0.5 - p.z) > 24 || Math.abs(y - p.y) > 16) continue;
+        if (this.world.get(x, y, z) !== B.ENCHANTING_TABLE) continue;
+        const cx = x + 0.5, cz = z + 0.5, near = Math.hypot(p.x - cx, p.z - cz);
+        const cy = y + 1.1 + Math.sin(this.clock * 1.8 + x) * 0.05;
+        const open = Math.max(0, Math.min(1, (4 - near) / 2));
+        const l = ents.lightAt(cx, y + 1, cz);
+        const M = this.bookM || (this.bookM = CM.mat4.create());
+        CM.mat4.compose(M, cx, cy, cz, Math.atan2(-(p.x - cx), -(p.z - cz)) + Math.PI / 2, 0.35 * open, 0, 1);
+        const a = 0.12 + open * 1.05;
+        ents.part(this.batch, M, 0, 0, 0, 0, [0, -0.012, -0.17, 0.25, 0.012, 0.17], L.ench_cover, l, 0, null, 0, -a);
+        ents.part(this.batch, M, 0, 0, 0, 0, [-0.25, -0.012, -0.17, 0, 0.012, 0.17], L.ench_cover, l, 0, null, 0, a);
+        ents.part(this.batch, M, 0, 0, 0, 0, [0, 0.012, -0.15, 0.22, 0.04, 0.15], L.ench_pages, l, 0, null, 0, -a * 0.96);
+        ents.part(this.batch, M, 0, 0, 0, 0, [-0.22, 0.012, -0.15, 0, 0.04, 0.15], L.ench_pages, l, 0, null, 0, a * 0.96);
+        // runes : des bibliothèques vers le livre, quand un joueur est près
+        if (near < 7 && Math.random() < dt * 5) {
+          const sh = this.shelves(x, y, z);
+          if (sh.length) {
+            const [bx, by, bz] = sh[Math.floor(Math.random() * sh.length)];
+            ents.particles.push({ x: bx + 0.5, y: by + 1, z: bz + 0.5, vx: (cx - bx - 0.5) * 0.7, vy: 0.3, vz: (cz - bz - 0.5) * 0.7, life: 1.4, layer: L.ench_glyph, u0: 0, v0: 0, size: 0.07, grav: 0.4, flags: 1, full: true });
+          }
+        }
+      }
     }
 
     // ---------------------------------------------------------- golems ---
@@ -1377,6 +1438,11 @@
       this.hand.reset();
       this.translucent.reset(cam);
       this.entities.render(this.batch, { right, up }, this.clock);
+      if (this.enchTables.size) {
+        const rdt = Math.min(0.1, this.clock - (this.lastRenderClock || this.clock));
+        this.renderEnchantTables(rdt);
+      }
+      this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // corde du grappin
       if (p.hook) {

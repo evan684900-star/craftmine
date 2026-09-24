@@ -390,6 +390,7 @@
         if (!!(fl & 4) !== m.baby > 0) this.setBaby(m, fl & 4 ? 1 : 0);
         m.love = fl & 8 ? 1 : 0;
         m.loveCd = fl & 16 ? 1 : 0;
+        m.fire = fl & 32 ? 1 : 0;
         this.mobs.push(m);
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
@@ -441,6 +442,7 @@
         m.hurt = Math.max(0, m.hurt - dt);
         const dist = Math.hypot(p.x - m.x, p.z - m.z);
         if (m.love > 0 && dist < 40 && r() < dt * 3) this.hearts(m, 1);
+        if (m.fire > 0 && dist < 40 && r() < dt * 14) this.flames(m);
         if (MOBS[m.type].passive) {
           if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
         } else {
@@ -478,6 +480,18 @@
       if (m.baby > 0) {
         m.baby -= dt;
         if (m.baby <= 0) this.setBaby(m, 0);
+      }
+      // en feu (Aura de feu) : 1 point de dégât par seconde, l'eau l'éteint
+      if (m.fire > 0) {
+        m.fire -= dt;
+        m.fireT = (m.fireT || 0) - dt;
+        if (w.get(Math.floor(m.x), Math.floor(m.y + 0.4), Math.floor(m.z)) === B.WATER) m.fire = 0;
+        else if (m.fireT <= 0) {
+          m.fireT = 1;
+          this.hurtMob(m, 1, null, false, m.fireBy);
+          if (m.dead) return;
+        }
+        if (distL < 40 && r() < dt * 14) this.flames(m);
       }
       m.hurt = Math.max(0, m.hurt - dt);
       m.knock = Math.max(0, m.knock - dt);
@@ -520,7 +534,7 @@
           if (td < 2.5 && Math.abs(tgt.y - m.y) < 2.6 && m.ai.attackCd <= 0) {
             m.ai.attackCd = 1.3;
             m.ai.swing = 0.5;
-            if (tgt.damage) tgt.damage(7, m.x, m.z, 'Un golem de fer');
+            if (tgt.damage) this.hitPlayer(tgt, 7, m, 'Un golem de fer');
             else {
               this.hurtMob(tgt, 22, [m.x, m.z]);
               tgt.vy = 9;
@@ -557,7 +571,7 @@
         tvz = -Math.cos(dir) * 4.3;
         if (p.alive && distP < 1.3 && Math.abs(dyp) < 1.5 && m.ai.attackCd <= 0) {
           m.ai.attackCd = 1;
-          p.damage(2, m.x, m.z, 'Un sanglier');
+          this.hitPlayer(p, 2, m, 'Un sanglier');
         }
       } else if (def.passive) {
         let speed = def.speed;
@@ -650,7 +664,7 @@
         const midSolid = w.solidAt(Math.floor((m.x + p.x) / 2), Math.floor(Math.max(m.y, p.y) + 1.2), Math.floor((m.z + p.z) / 2));
         if (p.alive && distP < 1.25 && dyp > -1.5 && dyp < 1.8 && m.ai.attackCd <= 0 && !midSolid) {
           m.ai.attackCd = 1.1;
-          p.damage(3, m.x, m.z, 'Une Ombre');
+          this.hitPlayer(p, 3, m, 'Une Ombre');
         }
         if (distL < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
         // la nuit, de petites étincelles violettes trahissent leur présence
@@ -688,7 +702,8 @@
     }
 
     // by : joueur à l'origine du coup (autre joueur en multijoueur).
-    hurtMob(m, dmg, src, silent, by) {
+    // opts (enchantements de l'arme) : kb = Recul, fire = Aura de feu, loot = Butin.
+    hurtMob(m, dmg, src, silent, by, opts) {
       const g = this.game;
       if (this.remote) {
         // invité : l'hôte applique le coup, on montre seulement l'impact tout de suite
@@ -697,16 +712,23 @@
           m.localHit = g.clock;
           CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
         }
-        g.net.hitMob(m, dmg);
+        g.net.hitMob(m, dmg, opts);
         return;
       }
       m.hp -= dmg;
+      if (opts) {
+        if (opts.fire) {
+          m.fire = Math.max(m.fire || 0, 4 * opts.fire);
+          m.fireBy = by || null;
+        }
+        if (opts.loot) m.looting = opts.loot;
+      }
       if (!silent) {
         m.hurt = 0.35;
         if (src) {
           const dx = m.x - src[0], dz = m.z - src[1];
           const l = Math.hypot(dx, dz) || 1;
-          const kb = m.type === 'golem' ? 1.2 : 7;
+          const kb = (m.type === 'golem' ? 1.2 : 7) * (1 + 0.6 * ((opts && opts.kb) || 0));
           m.vx = (dx / l) * kb;
           m.vz = (dz / l) * kb;
           m.vy = m.type === 'golem' ? 1 : 5;
@@ -738,17 +760,27 @@
       m.dead = true;
       const r = this.rand;
       const g = this.game;
-      if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type });
-      else g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
-      if (m.type === 'mouflon') {
-        this.addDrop(I.RAW_MEAT, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
-        if (r() < 0.7) this.addDrop(B.WOOL, 1, m.x, m.y + 0.5, m.z);
-        if (r() < 0.35) this.addDrop(I.LEATHER, 1, m.x, m.y + 0.5, m.z);
+      // expérience pour le joueur qui l'a tué (Ombre 5, animal 1 à 3)
+      const xp = m.type === 'ombre' ? 5 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
+      if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type, xp });
+      else {
+        g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
+        if (by === g.player) g.player.addXp(xp);
+      }
+      // Butin : jusqu'à « niveau » objets de plus par sorte ; tué en feu (Aura de feu) : viande cuite
+      const lo = m.looting || 0, more = () => (lo ? Math.floor(r() * (lo + 1)) : 0);
+      const meat = m.fire > 0 ? I.COOKED_MEAT : I.RAW_MEAT;
+      if (m.baby > 0) {
+        // un petit ne donne rien
+      } else if (m.type === 'mouflon') {
+        this.addDrop(meat, 1 + (r() < 0.5 ? 1 : 0) + more(), m.x, m.y + 0.5, m.z);
+        if (r() < 0.7) this.addDrop(B.WOOL, 1 + more(), m.x, m.y + 0.5, m.z);
+        if (r() < 0.35 + lo * 0.15) this.addDrop(I.LEATHER, 1, m.x, m.y + 0.5, m.z);
       } else if (m.type === 'boar') {
-        this.addDrop(I.RAW_MEAT, 1 + Math.floor(r() * 3), m.x, m.y + 0.5, m.z);
-        if (r() < 0.7) this.addDrop(I.LEATHER, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.5, m.z);
+        this.addDrop(meat, 1 + Math.floor(r() * 3) + more(), m.x, m.y + 0.5, m.z);
+        if (r() < 0.7) this.addDrop(I.LEATHER, 1 + (r() < 0.3 ? 1 : 0) + more(), m.x, m.y + 0.5, m.z);
       } else if (m.type === 'penguin') {
-        this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0), m.x, m.y + 0.5, m.z);
+        this.addDrop(I.FEATHER, 1 + (r() < 0.5 ? 1 : 0) + more(), m.x, m.y + 0.5, m.z);
       } else if (m.type === 'villager') {
         // rien : on ne gagne rien à s'en prendre aux villageois
       } else if (m.type === 'golem') {
@@ -757,7 +789,7 @@
         // golem construit : il ne reviendra pas
         if (m.built && g.golemHomes) g.golemHomes = g.golemHomes.filter((h) => h[0] !== m.home[0] || h[2] !== m.home[1]);
       } else {
-        this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0), m.x, m.y + 0.8, m.z);
+        this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0) + more(), m.x, m.y + 0.8, m.z);
       }
       this.killFx(m.type, m.x, m.y, m.z);
       if (g.net) g.net.fx({ k: 'kill', ty: m.type, x: m.x, y: m.y, z: m.z });
@@ -973,10 +1005,20 @@
       }
     }
 
+    flames(m) {
+      const s = m.baby > 0 ? BABY_SCALE : 1;
+      this.burst(CM.Textures.layer.flame, m.x + (this.rand() - 0.5) * m.hw * 2, m.y + this.rand() * m.h * s, m.z + (this.rand() - 0.5) * m.hw * 2, 1, { speed: 0.4, grav: -2.5, life: 0.5, size: 0.1, emissive: true });
+    }
+    // Une créature frappe un joueur (local ou invité) ; elle est transmise pour les Épines.
+    hitPlayer(p, n, m, cause) {
+      if (p === this.game.player) p.damage(n, m.x, m.z, cause, false, m);
+      else p.damage(n, m.x, m.z, cause, false, 0, m);
+    }
+
     // ------------------------------------------------------- élevage --
     hearts(m, n) {
       const s = m.baby > 0 ? BABY_SCALE : 1;
-      this.burst(CM.Textures.layer.heart, m.x, m.y + m.h + 0.2 * s, m.z, n, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true });
+      this.burst(CM.Textures.layer.heart, m.x, m.y + m.h + 0.2 * s, m.z, n, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
     }
     setBaby(m, t) {
       const def = MOBS[m.type];
@@ -1035,6 +1077,7 @@
       const p = this.game.player;
       if (Math.hypot(p.x - a.x, p.z - a.z) < 20) CM.Audio.play(a.type === 'mouflon' ? 'baa' : 'grunt');
       this.game.stats.bred = (this.game.stats.bred || 0) + 1;
+      if (Math.hypot(p.x - a.x, p.z - a.z) < 16) p.addXp(1 + Math.floor(this.rand() * 7));
       if (this.game.net) this.game.net.fx({ k: 'love', x: baby.x, y: baby.y + 0.8, z: baby.z, n: 8 });
     }
     // Animal d'élevage qui sort de la zone chargée : mis de côté (et sauvegardé).

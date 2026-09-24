@@ -1532,6 +1532,22 @@
         for (let y = 10; y < 16; y++) for (let x = 3; x < 13; x++) put(d, x, y, [0, 0, 0, 0]);
       }
     },
+    // table d'enchantement : dessus (tapis rouge, bord d'obsidienne, diamants aux coins), côté (visible des lignes 4 à 15)
+    enchtable(d, r, s) {
+      const obs = [24, 20, 36], obs2 = [44, 30, 68], red = [150, 26, 40], red2 = [110, 16, 30], dia = [90, 230, 222];
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(r() < 0.18 ? obs2 : obs, r, 5));
+      if (s.part === 0) {
+        for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) put(d, x, y, vary((x + y) % 4 === 0 ? red2 : red, r, 8));
+        for (let x = 4; x < 12; x++) { put(d, x, 4, [196, 60, 70]); put(d, x, 11, red2); }
+        for (const [cx, cy] of [[2, 2], [12, 2], [2, 12], [12, 12]]) {
+          put(d, cx, cy, dia); put(d, cx + 1, cy, [190, 255, 250]); put(d, cx, cy + 1, [40, 160, 156]); put(d, cx + 1, cy + 1, dia);
+        }
+      } else {
+        for (let y = 4; y < 8; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(y === 7 ? red2 : red, r, 8));
+        for (let x = 1; x < 16; x += 3) put(d, x, 8, red2);
+        for (const x of [2, 7, 12]) { put(d, x, 5, dia); put(d, x + 1, 5, [190, 255, 250]); }
+      }
+    },
     // cultures : kind (carrot, potato, beetroot, pumpkin, melon), stage 0..3
     crop(d, r, s) {
       clear(d);
@@ -2339,6 +2355,23 @@
       put(d, x, y, vary(y < 8 ? [196, 130, 60] : [216, 160, 84], r, 6));
     }
     for (const x of [5, 8, 11]) put(d, x, 7, [150, 96, 40]);
+  });
+  // livre flottant de la table d'enchantement et runes qui volent vers lui
+  make('flame', (d, r) => {
+    clear(d);
+    disc(d, 7.5, 9, 5.5, (x, y, dist) => put(d, x, y, dist < 2.5 ? [255, 240, 150] : dist < 4.2 ? [255, 170, 40] : [230, 80, 20]));
+  });
+  make('ench_cover', (d, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary(x === 0 || y === 0 || x === 15 || y === 15 ? [70, 36, 20] : [120, 64, 34], r, 8));
+    for (let x = 4; x < 12; x++) put(d, x, 7, [214, 176, 60]);
+  });
+  make('ench_pages', (d, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary([236, 230, 206], r, 4));
+    for (let y = 3; y < 14; y += 2) for (let x = 2; x < 14; x++) if (r() < 0.55) put(d, x, y, [120, 110, 150]);
+  });
+  make('ench_glyph', (d, r) => {
+    clear(d);
+    art(d, ['', '', '', '', '....w..w', '....wwww', '.....w', '....w.w', '....w..w', '', '', ''], { w: [226, 204, 255] });
   });
   make('heart', (d) => {
     clear(d);

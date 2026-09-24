@@ -13,6 +13,8 @@
     ['🌾 Agriculture', "Laboure la terre avec une houe (clic droit), puis plante : graines de blé ou de betterave (herbes hautes), carottes et pommes de terre (herbes hautes, villages, coffres), graines de citrouille ou de pastèque (1 citrouille = 4 graines, 1 tranche = 1 graine). Avec de l'eau à 4 blocs ou moins, la terre devient irriguée (plus sombre) et tout pousse 2,5 fois plus vite ; laissée sèche et vide, elle redevient de la terre. Un seau (3 lingots de fer) ramasse de l'eau et la verse où tu veux (versée juste avant de toucher le sol, elle annule les dégâts de chute : le fameux MLG !). Une tige adulte fait pousser une citrouille ou une pastèque sur une case libre à côté. La poudre d'os accélère tout."],
     ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons ; carotte, pomme de terre ou betterave pour les sangliers. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
     ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
+    ['✨ Expérience', "La barre verte au-dessus de la barre d'objets montre ton niveau. On gagne de l'expérience en minant du charbon, des diamants, des émeraudes, du lapis, de la redstone, du quartz, du cristal ou des rubis, en tuant des Ombres (5) et des animaux, en échangeant avec les villageois, en faisant naître des petits et en fondant à la forge. À la mort, elle est perdue (sauf si l'inventaire est conservé)."],
+    ['📚 Enchantements', "Fabrique une table d'enchantement (1 livre, 2 diamants, 4 obsidiennes, à l'Établi) et fais clic droit dessus. Pose un outil, une épée ou une pièce d'armure dans la case : 3 offres apparaissent, chacune avec son niveau requis ; elle coûte 1, 2 ou 3 lapis-lazuli et autant de niveaux. Jusqu'à 15 bibliothèques autour de la table (à 2 blocs, avec de l'air entre) débloquent les offres de niveau 30. Outils : Efficacité, Fortune, Toucher de soie. Épée : Tranchant, Recul, Aura de feu, Butin (hache : Tranchant aussi). Armure : Protection, Solidité, Épines (plastron), Chute amortie (bottes), Apnée (casque). Un objet ne s'enchante qu'une fois ; une pièce en diamant garde ses enchantements quand on l'améliore en netherite."],
     ['🍞 Manger', "Garde le clic droit enfoncé 1 seconde avec un aliment en main (sur téléphone, un toucher suffit : tu manges jusqu'au bout sauf si tu changes d'objet). On avance lentement pendant qu'on mange."],
     ['🪝 Grappin', "Fabrique-le avec 3 lingots de fer et 2 cordes. En main, clic droit sur un bloc jusqu'à 34 blocs : tu es tiré vers lui en gardant ton élan. Saut pendant la traction pour te décrocher avec un bond."],
     ['💨 Ruée et double saut', "La touche de ruée (F) lance un sprint éclair (tu es brièvement invulnérable et tu frappes plus fort). Tu peux la diriger pendant qu'elle dure : tourne la caméra ou change de direction, même dans l'élan en l'air. L'Amulette de plume, gardée dans l'inventaire, donne un double saut."],
@@ -242,6 +244,7 @@
       if (!s) return keyNum ? '<span class="key">' + keyNum + '</span>' : '';
       const icon = CM.Textures.icons[s.id];
       let h = '<div class="icon" style="background-image:url(' + icon + ')"></div>';
+      if (s.ench) h += '<div class="glint" style="-webkit-mask-image:url(' + icon + ');mask-image:url(' + icon + ')"></div>';
       if (s.count > 1) h += '<span class="count">' + s.count + '</span>';
       const wi = s.xp !== undefined && CM.itemInfo(s.id);
       if (wi && wi.type === 'armor') {
@@ -342,6 +345,15 @@
         $('hearts').classList.toggle('low', hp <= 6 && hp > 0);
       }
       this.updateArmorHUD(creative);
+      // expérience : barre verte et niveau au-dessus de la barre d'objets (comme dans Minecraft)
+      const li = p.levelInfo();
+      $('xpbar').classList.toggle('hidden', creative);
+      if (li.level !== this.lastLvl || li.left !== this.lastXpLeft) {
+        this.lastLvl = li.level;
+        this.lastXpLeft = li.left;
+        $('xp-fill').style.width = (li.frac * 100).toFixed(1) + '%';
+        $('xp-level').textContent = li.level > 0 ? li.level : '';
+      }
       const food = Math.ceil(p.food);
       if (food !== this.lastFood) {
         this.lastFood = food;
@@ -511,6 +523,9 @@
       };
       for (let i = 9; i < 36; i++) mk(i, main);
       for (let i = 0; i < 9; i++) mk(i, hot);
+      $('ench-slot').addEventListener('pointerdown', (e) => this.enchClick(e));
+      $('ench-slot').addEventListener('mouseenter', (e) => this.ench && this.showTip(this.ench.item, e));
+      $('ench-slot').addEventListener('mouseleave', () => this.hideTip());
       // cases d'armure : casque, plastron, jambières, bottes
       const ar = $('inv-armor');
       ar.innerHTML = '';
@@ -705,6 +720,7 @@
       if (n) {
         CM.Audio.play('pop');
         CM.Audio.play('hmm');
+        g.player.addXp(n * (3 + Math.floor(Math.random() * 4)));
         inv.changed();
       }
     }
@@ -719,10 +735,12 @@
       if (!withChest) {
         this.chest = null;
         this.trade = null;
+        this.ench = null;
       }
       document.querySelector('.side-panel').classList.toggle('chest-mode', !!this.chest);
-      document.querySelector('.side-panel').classList.toggle('trade-mode', !!this.trade);
+      document.querySelector('.side-panel').classList.toggle('trade-mode', !!this.trade || !!this.ench);
       $('trade-panel').classList.toggle('hidden', !this.trade);
+      $('ench-panel').classList.toggle('hidden', !this.ench);
       $('chest-panel').classList.toggle('hidden', !this.chest);
       if (this.chest) CM.Audio.play('place', { mat: 'wood' });
       this.invOpen = true;
@@ -738,10 +756,16 @@
       if (!this.invOpen) return;
       this.invOpen = false;
       if (this.cursor) {
-        const left = this.game.inventory.add(this.cursor.id, this.cursor.count, this.cursor.xp !== undefined ? { xp: this.cursor.xp } : null);
+        const left = this.game.inventory.add(this.cursor.id, this.cursor.count, CM.stackExtra(this.cursor));
         if (left > 0 && this.game.mode !== 'creative') this.game.dropNearPlayer(this.cursor.id, left, this.cursor);
         this.cursor = null;
       }
+      if (this.ench && this.ench.item) {
+        const it = this.ench.item;
+        const left = this.game.inventory.add(it.id, 1, CM.stackExtra(it));
+        if (left > 0) this.game.dropNearPlayer(it.id, 1, it);
+      }
+      this.ench = null;
       this.game.net.chestClosed();
       this.chest = null;
       this.trade = null;
@@ -758,7 +782,7 @@
         return;
       }
       $('inv-vitals').innerHTML =
-        '❤ <b>' + Math.ceil(p.health) + '</b>/' + p.maxHealth + ' · 🍗 Faim <b>' + p.food + '</b>/20 · Saturation <b>' + p.sat.toFixed(1) + '</b>' +
+        '❤ <b>' + Math.ceil(p.health) + '</b>/' + p.maxHealth + ' · 🍗 Faim <b>' + p.food + '</b>/20 · Saturation <b>' + p.sat.toFixed(1) + '</b> · ✨ Niveau <b>' + p.level + '</b>' +
         (p.food <= 6 ? ' · <span class="warn">trop faim pour courir</span>' : p.food >= 18 && p.health < p.maxHealth ? ' · <span class="good">régénération</span>' : '');
     }
 
@@ -783,6 +807,7 @@
       $('inv-prot').innerHTML = '🛡 Protection <b>' + pts + '</b>/20' + (pts ? ' · environ −' + Math.round(pts * 4) + ' % de dégâts' : ' · aucune armure portée');
       if (this.chest) for (let i = 0; i < 27; i++) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
       if (this.trade) this.renderTrade();
+      if (this.ench) this.renderEnchant();
       const c = $('cursor-stack');
       if (this.cursor) {
         c.innerHTML = this.slotHTML(this.cursor);
@@ -822,8 +847,15 @@
       const shift = e.shiftKey || this.quickMode;
       const button = this.halfMode && e.button === 0 ? 2 : e.button;
       if (shift && s && !this.cursor) {
-        // Maj+clic sur une armure : on l'enfile si la case est libre
         const si = CM.itemInfo(s.id);
+        // table d'enchantement ouverte : Maj+clic pose l'objet dans sa case
+        if (kind === 'inv' && this.ench && !this.ench.item && CM.enchantKind(s.id)) {
+          this.ench.item = s;
+          slots[i] = null;
+          inv.changed();
+          return;
+        }
+        // Maj+clic sur une armure : on l'enfile si la case est libre
         if (kind === 'inv' && !this.chest && si.type === 'armor' && !inv.armor[si.slot]) {
           inv.armor[si.slot] = s;
           slots[i] = null;
@@ -877,6 +909,87 @@
       this.showTip(slots[i], e);
     }
 
+    // ------------------------------------------ table d'enchantement --
+    openEnchant(x, y, z) {
+      if (this.invOpen || !this.game.player.alive) return;
+      this.trade = null;
+      this.chest = null;
+      this.ench = { x, y, z, item: null, shelves: this.game.countShelves(x, y, z) };
+      CM.Audio.play('enchant');
+      this.openInventory(true);
+    }
+    renderEnchant() {
+      const e = this.ench, g = this.game, p = g.player, inv = g.inventory, I = CM.I;
+      const creative = g.mode === 'creative';
+      $('ench-slot').innerHTML = e.item ? this.slotHTML(e.item) : '<div class="icon ph" style="background-image:url(' + CM.Textures.icons[I.BOOK] + ')"></div>';
+      const lapis = inv.count(I.LAPIS), lvl = p.level;
+      $('ench-info').innerHTML = '📚 Bibliothèques <b>' + e.shelves + '</b>/15<br>✨ Niveau <b>' + lvl + '</b> · 🔷 Lapis <b>' + lapis + '</b>';
+      const box = $('ench-offers');
+      box.innerHTML = '';
+      if (!e.item) {
+        box.innerHTML = '<div class="ench-empty">Pose ici un outil, une épée ou une pièce d’armure.</div>';
+        return;
+      }
+      if (e.item.ench) {
+        box.innerHTML = '<div class="ench-empty">Cet objet est déjà enchanté.</div>';
+        return;
+      }
+      CM.enchantOffers(e.item.id, e.shelves, p.enchSeed).forEach((o, i) => {
+        const keys = Object.keys(o.ench);
+        const hint = CM.enchName(keys[0], o.ench[keys[0]]) + (keys.length > 1 ? ' …?' : '');
+        const need = creative ? '' : lvl < o.cost ? 'Il faut le niveau ' + o.cost : lapis < o.lapis ? 'Il faut ' + o.lapis + ' lapis-lazuli' : '';
+        const row = document.createElement('div');
+        row.className = 'ench-offer' + (need ? ' off' : '');
+        row.innerHTML = '<span class="ench-cost">' + o.cost + '</span><div class="ench-mid"><div class="ench-hint">' + esc(hint) + '</div>' +
+          '<div class="ench-sub' + (need ? ' warn' : '') + '">' + (need || '−' + o.lapis + ' niveau' + (o.lapis > 1 ? 'x' : '') + ' · ' + o.lapis + ' lapis') + '</div></div>';
+        const b = document.createElement('button');
+        b.textContent = 'Enchanter';
+        b.disabled = !!need;
+        this.tapOrPress(b, () => this.doEnchant(i));
+        row.appendChild(b);
+        box.appendChild(row);
+      });
+    }
+    doEnchant(i) {
+      const e = this.ench, g = this.game, p = g.player, inv = g.inventory, I = CM.I;
+      if (!e || !e.item || e.item.ench) return;
+      const o = CM.enchantOffers(e.item.id, e.shelves, p.enchSeed)[i];
+      const creative = g.mode === 'creative';
+      if (!creative && (p.level < o.cost || inv.count(I.LAPIS) < o.lapis)) return;
+      e.item.ench = Object.assign({}, o.ench);
+      if (!creative) {
+        p.spendLevels(o.lapis);
+        inv.remove(I.LAPIS, o.lapis);
+      }
+      p.enchSeed = (Math.random() * 4294967296) >>> 0; // nouvelles offres pour la suite
+      g.stats.enchanted = (g.stats.enchanted || 0) + 1;
+      CM.Audio.play('enchant');
+      g.entities.burst(CM.Textures.layer.ench_glyph, e.x + 0.5, e.y + 1.2, e.z + 0.5, 24, { speed: 2.2, grav: -0.6, life: 1.3, size: 0.1, emissive: true, full: true, spread: 1 });
+      this.toast('✨ ' + Object.entries(o.ench).map(([k, l]) => CM.enchName(k, l)).join(', '), 'gold');
+      inv.changed();
+    }
+    enchClick(ev) {
+      ev.preventDefault();
+      const e = this.ench;
+      if (!e) return;
+      CM.Audio.play('click');
+      if ((ev.shiftKey || this.quickMode) && e.item && !this.cursor) {
+        if (this.game.inventory.add(e.item.id, 1, CM.stackExtra(e.item)) === 0) e.item = null;
+      } else if (this.cursor) {
+        if (!CM.enchantKind(this.cursor.id)) {
+          this.toast('On n’enchante que les outils, les épées et les armures', 'info', 'enchonly');
+          return;
+        }
+        const prev = e.item;
+        e.item = Object.assign({}, this.cursor, { count: 1 });
+        this.cursor = this.cursor.count > 1 ? Object.assign({}, this.cursor, { count: this.cursor.count - 1 }) : prev || null;
+      } else if (e.item) {
+        this.cursor = e.item;
+        e.item = null;
+      }
+      this.game.inventory.changed();
+    }
+
     // Clic sur une case d'armure : n'accepte que la pièce correspondante.
     armorClick(k, e) {
       e.preventDefault();
@@ -887,7 +1000,7 @@
       };
       CM.Audio.play('click');
       if ((e.shiftKey || this.quickMode) && s && !this.cursor) {
-        if (inv.add(s.id, 1, { xp: s.xp || 0 }) === 0) inv.armor[k] = null;
+        if (inv.add(s.id, 1, CM.stackExtra(s) || { xp: 0 }) === 0) inv.armor[k] = null;
       } else if (this.cursor) {
         if (!fits(this.cursor)) {
           this.toast('Cette case est pour : ' + CM.ARMOR_PIECES[k][1].toLowerCase(), 'info', 'armorslot');
@@ -954,7 +1067,9 @@
     }
     tipHTML(id, s) {
       const info = CM.itemInfo(id);
-      let h = '<b>' + esc(info.name) + '</b>';
+      let h = '<b' + (s && s.ench ? ' class="tt-ench"' : '') + '>' + esc(info.name) + '</b>';
+      if (s && s.ench) for (const [k, l] of Object.entries(s.ench)) if (CM.ENCHANTS[k]) h += '<div class="tt-ench">✨ ' + CM.enchName(k, l) + ' <span class="tt-sub">(' + CM.ENCHANTS[k].desc + ')</span></div>';
+      else if (CM.enchantKind(id)) h += '<div class="tt-sub">Enchantable (table d’enchantement)</div>';
       if (info.type === 'tool') {
         const lvl = CM.masteryLevel((s && s.xp) || 0);
         const spd = info.toolType === 'sword' ? 'Dégâts ' + (info.damage + Math.floor((lvl - 1) / 2)) : info.toolType === 'hoe' ? 'Laboure la terre (clic droit)' : 'Vitesse ×' + (info.speed * (1 + 0.12 * (lvl - 1))).toFixed(1) + ' · dégâts ' + info.damage;
@@ -1063,12 +1178,23 @@
         return;
       }
       const times = many ? inv.maxCrafts(r) : 1;
+      let done = 0;
       for (let k = 0; k < times; k++) {
+        // amélioration en netherite : la pièce garde ses enchantements
+        const src = r.station === 'smithing' && CM.hasWear(r.ing[0][0]) ? inv.slots.find((s) => s && s.id === r.ing[0][0] && s.ench) : null;
+        const ench = src && Object.assign({}, src.ench);
         const left = inv.craft(r);
-        if (left > 0) g.dropNearPlayer(r.out, left);
+        if (left > 0) g.dropNearPlayer(r.out, left, ench ? { xp: 0, ench } : null);
+        else if (ench) {
+          const o = inv.slots.find((s) => s && s.id === r.out && !s.ench);
+          if (o) o.ench = ench;
+        }
         g.stats.crafted[r.out] = (g.stats.crafted[r.out] || 0) + r.n;
+        done++;
         if (CM.itemInfo(r.out).stack === 1) break;
       }
+      // la forge rapporte un peu d'expérience (comme le four de Minecraft)
+      if (r.station === 'forge') g.player.addXp(done * Math.max(1, Math.round(r.n * 0.35)));
       CM.Audio.play('craft');
       this.updateObjective();
     }

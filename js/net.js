@@ -20,6 +20,14 @@
   const cleanName = (s) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
   const cleanText = (s) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200);
   const num = (v) => (Number.isFinite(+v) ? +v : 0);
+  // Données d'une pile reçues du réseau (usure/expérience, enchantements), vérifiées.
+  const netExtra = (m) => {
+    const e = {};
+    if (m.xp !== undefined) e.xp = num(m.xp);
+    const en = CM.cleanEnch(m.en);
+    if (en) e.ench = en;
+    return e.xp !== undefined || e.ench ? e : null;
+  };
 
   function randomCode() {
     const a = new Uint32Array(5);
@@ -171,8 +179,8 @@
       return this.free || this.accept.includes(id);
     }
     // Dégâts infligés par l'hôte (créature, explosion, autre joueur) : envoyés à l'invité.
-    damage(n, sx, sz, cause, bypass, vy) {
-      this.net.hurtRemote(this, n, sx, sz, cause, bypass, vy);
+    damage(n, sx, sz, cause, bypass, vy, attacker) {
+      this.net.hurtRemote(this, n, sx, sz, cause, bypass, vy, attacker);
     }
   }
 
@@ -552,6 +560,7 @@
           player: {
             x: p.alive ? p.x : sp.x, y: p.alive ? p.y : sp.y, z: p.alive ? p.z : sp.z,
             yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
+            xp: p.xpTotal, enchSeed: p.enchSeed,
           },
           inv: g.inventory.serialize(),
           stats: g.stats,
@@ -650,7 +659,7 @@
         const m = [], d = [], tn = [];
         for (const o of ents.mobs) {
           if (o.dead || !near(o)) continue;
-          const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0);
+          const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0);
           m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
         }
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z)]);
@@ -757,13 +766,14 @@
           const id = m.id | 0, n = Math.min(4096, m.n | 0);
           if (!CM.itemInfo(id) || n <= 0) break;
           const v = Array.isArray(m.v) ? m.v.map(num) : null;
-          g.entities.addDrop(id, n, num(m.x), num(m.y), num(m.z), m.xp !== undefined ? { xp: num(m.xp) } : null, v);
+          g.entities.addDrop(id, n, num(m.x), num(m.y), num(m.z), netExtra(m), v);
           break;
         }
         case 'hit': {
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
           if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 8) break;
-          g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
+          const lv = (v, max) => Math.min(max, Math.max(0, v | 0));
+          g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp, { kb: lv(m.kb, 2), fire: lv(m.fi, 2), loot: lv(m.lo, 3) });
           break;
         }
         case 'feed': {
@@ -868,6 +878,8 @@
         else {
           arr[i] = { id, count: Math.min(it.count | 0, 999) };
           if (it.xp !== undefined) arr[i].xp = num(it.xp);
+          const en = CM.cleanEnch(it.ench);
+          if (en) arr[i].ench = en;
         }
       }
     }
@@ -886,7 +898,7 @@
     }
 
     // Dégâts à un invité (depuis l'hôte).
-    hurtRemote(rp, n, sx, sz, cause, bypass, vy) {
+    hurtRemote(rp, n, sx, sz, cause, bypass, vy, attacker) {
       if (!this.isHost) return;
       const m = { t: 'hurt', n, c: cause || '' };
       if (sx !== null && sx !== undefined) {
@@ -895,12 +907,14 @@
       }
       if (bypass) m.b = 1;
       if (vy) m.vy = r2(vy);
+      if (attacker && attacker.uid) m.u = attacker.uid;
       this.sendTo(rp.pid, m);
     }
     // Hôte : un objet au sol ramassé par un invité.
     give(rp, d) {
       const m = { t: 'give', id: d.id, n: d.count };
       if (d.extra && d.extra.xp !== undefined) m.xp = d.extra.xp;
+      if (d.extra && d.extra.ench) m.en = d.extra.ench;
       this.sendTo(rp.pid, m);
     }
 
@@ -945,18 +959,18 @@
         case 'give': {
           const id = m.id | 0, n = m.n | 0;
           if (!CM.itemInfo(id) || n <= 0) break;
-          const extra = m.xp !== undefined ? { xp: m.xp } : null;
+          const extra = netExtra(m);
           const left = g.inventory.add(id, n, extra);
           if (left < n) {
             CM.Audio.play('pop');
             g.onPickup(id, n - left);
           }
-          if (left > 0) this.send({ t: 'drop', id, n: left, x: r2(p.x), y: r2(p.y + 0.6), z: r2(p.z), xp: m.xp, v: [0, 2, 0] });
+          if (left > 0) this.send({ t: 'drop', id, n: left, x: r2(p.x), y: r2(p.y + 0.6), z: r2(p.z), xp: m.xp, en: m.en, v: [0, 2, 0] });
           break;
         }
         case 'hurt':
           if (!p) break;
-          p.damage(num(m.n), m.sx === undefined ? null : m.sx, m.sz, m.c, !!m.b);
+          p.damage(num(m.n), m.sx === undefined ? null : m.sx, m.sz, m.c, !!m.b, m.u ? g.entities.mobs.find((o) => o.uid === m.u) : null);
           if (m.vy && p.alive) p.vy += m.vy;
           break;
         case 'fx':
@@ -1009,6 +1023,7 @@
         }
         case 'kill':
           g.stats.kills[m.ty] = (g.stats.kills[m.ty] || 0) + 1;
+          if (p) p.addXp(Math.min(20, m.xp | 0));
           break;
         case 'chat':
           this.addChat(m.n, m.s);
@@ -1042,13 +1057,19 @@
       } else if (m.k === 'kill') {
         if (d < 48) e.killFx(m.ty, m.x, m.y, m.z);
       } else if (m.k === 'love') {
-        if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true });
+        if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }
     }
 
     // Actions de l'invité transmises à l'hôte.
-    hitMob(mob, dmg) {
-      this.send({ t: 'hit', id: mob.uid, d: r2(dmg) });
+    hitMob(mob, dmg, opts) {
+      const m = { t: 'hit', id: mob.uid, d: r2(dmg) };
+      if (opts) {
+        if (opts.kb) m.kb = opts.kb;
+        if (opts.fire) m.fi = opts.fire;
+        if (opts.loot) m.lo = opts.loot;
+      }
+      this.send(m);
     }
     feedMob(mob) {
       this.send({ t: 'feed', id: mob.uid });
@@ -1056,6 +1077,7 @@
     requestDrop(id, count, x, y, z, extra, vel) {
       const m = { t: 'drop', id, n: count, x: r2(x), y: r2(y), z: r2(z) };
       if (extra && extra.xp !== undefined) m.xp = extra.xp;
+      if (extra && extra.ench) m.en = extra.ench;
       if (vel) m.v = vel.map(r2);
       this.send(m);
     }

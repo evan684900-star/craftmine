@@ -1803,6 +1803,7 @@
       this.propagate(BLK);
       this.trackDirty = false;
       if (this.onSet) this.onSet(x, y, z, id);
+      if (this.onEdit) this.onEdit(x, y, z, id);
       return true;
     }
 
@@ -1816,6 +1817,7 @@
       let e = this.edits.get(k);
       if (!e) this.edits.set(k, (e = new Map()));
       e.set(lidx(x & 15, y, z & 15), id);
+      if (this.onEdit) this.onEdit(x, y, z, id);
       return true;
     }
 

@@ -451,3 +451,30 @@ body.touch #armor-panel .ap-head { display: none; }
 body.touch #armor-panel .ap-row { height: 20px; gap: 5px; }
 body.touch #armor-panel .ap-row i { width: 17px; height: 17px; }
 body.touch #armor-panel .ap-num { min-width: 40px; }
+
+/* ---- expérience ---- */
+#xpbar { position: relative; width: calc(100% - 8px); height: 7px; margin: 0 0 5px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(0, 0, 0, 0.8); border-radius: 3px; }
+#xp-fill { height: 100%; width: 0; background: linear-gradient(#b6ff6a, #5fd12a); border-radius: 2px; box-shadow: 0 0 6px rgba(140, 255, 80, 0.45); }
+#xp-level { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-weight: 900; font-size: 13px; color: #8cff3a; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; line-height: 1; }
+
+/* ---- enchantements ---- */
+.ench-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+#ench-slot { width: 52px; height: 52px; cursor: pointer; background: rgba(150, 90, 255, 0.12); border-color: rgba(170, 120, 255, 0.5); }
+#ench-slot .icon.ph { opacity: 0.18; filter: grayscale(1); }
+#ench-info { font-size: 12px; color: var(--muted); line-height: 1.6; }
+#ench-info b { color: #fff; }
+#ench-offers { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; min-width: 330px; }
+.ench-empty { font-size: 12px; color: var(--muted); padding: 14px 4px; text-align: center; }
+.ench-offer { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 8px; background: rgba(130, 80, 220, 0.12); border: 1px solid rgba(170, 120, 255, 0.35); }
+.ench-offer.off { opacity: 0.5; }
+.ench-cost { min-width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #8cff3a; background: rgba(0, 0, 0, 0.45); text-shadow: 1px 1px 0 #000; }
+.ench-mid { flex: 1; min-width: 0; }
+.ench-hint { font-weight: 800; color: #d9c2ff; font-size: 13px; }
+.ench-sub { font-size: 11px; color: var(--muted); }
+.ench-sub.warn { color: #ff8a8a; }
+/* reflet des objets enchantés */
+.slot .glint { position: absolute; inset: 5px; pointer-events: none; background: linear-gradient(115deg, rgba(160, 90, 255, 0) 30%, rgba(200, 150, 255, 0.85) 45%, rgba(160, 90, 255, 0) 60%) 0 0 / 300% 100%;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  mix-blend-mode: screen; animation: glint 2.6s linear infinite; }
+@keyframes glint { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+.tt-ench { color: #c9a8ff; font-weight: 700; }

@@ -4,7 +4,7 @@
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
   const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem']);
-  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note']);
+  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
 
   A.init = function () {
     if (A.ctx) {
@@ -160,6 +160,17 @@
           noise(t, 0.08, 'bandpass', 3000, 3, 0.15);
         }
         break;
+      case 'xp':
+        // petit tintement d'expérience
+        tone(t, 0.12, 'sine', 1400 + Math.random() * 500, 0, 0.06);
+        break;
+      case 'enchant': {
+        // arpège scintillant
+        const base = 520 + Math.random() * 80;
+        [0, 4, 7, 12, 16, 19].forEach((k, i) => tone(t + i * 0.06, 0.5, 'triangle', base * Math.pow(2, k / 12), 0, 0.07));
+        noise(t, 0.6, 'highpass', 5000, 0.5, 0.05);
+        break;
+      }
       case 'golem':
         tone(t, 0.25, 'square', 70, 40, 0.12);
         noise(t, 0.12, 'bandpass', 900, 2, 0.2);

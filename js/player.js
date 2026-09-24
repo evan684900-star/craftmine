@@ -13,9 +13,15 @@
   // Faim (comme dans Minecraft) : 20 points, saturation, épuisement.
   const EXH = { sprint: 0.1, swim: 0.012, jump: 0.05, sprintJump: 0.2, mine: 0.005, attack: 0.1, hurt: 0.1, heal: 6, dash: 1.2, double: 0.6, grapple: 0.4 };
 
+  // Expérience (comme dans Minecraft) : points à gagner pour passer du niveau L au suivant.
+  const xpNeed = (L) => (L <= 15 ? 2 * L + 7 : L <= 30 ? 5 * L - 38 : 9 * L - 158);
+  CM.xpNeed = xpNeed;
+
   class Player {
     constructor(game) {
       this.game = game;
+      this.xpTotal = 0; // points d'expérience cumulés (perdus à la mort)
+      this.enchSeed = (Math.random() * 4294967296) >>> 0; // fixe les offres de la table d'enchantement
       this.hw = 0.3;
       this.h = 1.8;
       this.eyeH = 1.62;
@@ -392,7 +398,8 @@
         return;
       }
       if (this.headInWater) {
-        this.air = Math.max(0, this.air - dt);
+        // Apnée (casque) : le souffle dure plus longtemps
+        this.air = Math.max(0, this.air - dt / (1 + CM.enchLevel(g.inventory.armor[0], 'respiration')));
         if (this.air <= 0) {
           this.drownT += dt;
           if (this.drownT > 1) {
@@ -530,6 +537,8 @@
       let harvest = b.tier === 0;
       if (info && info.type === 'tool' && b.tool && info.toolType === b.tool) {
         speed = info.speed * (1 + 0.12 * (this.masteryOf(stack) - 1));
+        const eff = CM.enchLevel(stack, 'efficiency');
+        if (eff) speed += eff * eff + 1; // Efficacité (comme dans Minecraft)
         harvest = info.tier >= b.tier;
       }
       let time = (b.hardness * 1.5) / speed;
@@ -734,6 +743,35 @@
     }
 
     // Dégâts du coup porté avec l'objet en main.
+    // ------------------------------------------------------ expérience --
+    levelInfo() {
+      let L = 0, left = this.xpTotal;
+      while (left >= xpNeed(L)) left -= xpNeed(L++);
+      return { level: L, frac: left / xpNeed(L), left };
+    }
+    get level() {
+      return this.levelInfo().level;
+    }
+    addXp(n) {
+      n = Math.round(n);
+      if (n <= 0 || this.creative || !this.alive) return;
+      const before = this.level;
+      this.xpTotal += n;
+      const after = this.level;
+      if (after > before) {
+        CM.Audio.play('level');
+        if (after % 5 === 0) this.game.ui.toast('Niveau ' + after + ' !', 'gold');
+      } else CM.Audio.play('xp');
+    }
+    // Dépense des niveaux (table d'enchantement) en gardant la progression du niveau en cours.
+    spendLevels(k) {
+      const { level, frac } = this.levelInfo();
+      const L = Math.max(0, level - k);
+      let total = 0;
+      for (let i = 0; i < L; i++) total += xpNeed(i);
+      this.xpTotal = total + Math.floor(frac * xpNeed(L));
+    }
+
     hitDamage() {
       const stack = this.game.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
@@ -741,6 +779,8 @@
       if (info && info.type === 'tool') {
         dmg = info.damage;
         if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
+        const sh = CM.enchLevel(stack, 'sharpness');
+        if (sh) dmg += 0.5 * sh + 0.5;
       }
       if (!this.onGround && this.vy < -1) dmg *= 1.5;
       if (this.dashTime > 0) dmg += 2;
@@ -761,6 +801,8 @@
       if (info && info.type === 'tool') {
         dmg = info.damage;
         if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
+        const sh = CM.enchLevel(stack, 'sharpness');
+        if (sh) dmg += 0.5 * sh + 0.5; // Tranchant
       }
       let crit = false;
       if (!this.onGround && this.vy < -1) {
@@ -775,7 +817,9 @@
       this.attackCd = 0.38;
       this.swing = 1;
       this.exhaust(EXH.attack);
-      g.entities.hurtMob(mob, dmg, [this.x, this.z], false, this);
+      // Recul, Aura de feu, Butin
+      const opts = stack && info.type === 'tool' ? { kb: CM.enchLevel(stack, 'knockback'), fire: CM.enchLevel(stack, 'fire'), loot: CM.enchLevel(stack, 'looting') } : null;
+      g.entities.hurtMob(mob, dmg, [this.x, this.z], false, this, opts);
       if (crit) g.entities.burst(CM.Textures.layer.white, mob.x, mob.y + mob.h * 0.7, mob.z, 10, { speed: 4, grav: 4, life: 0.5, size: 0.05, emissive: true });
       if (info && info.toolType === 'sword') this.gainXp(stack, mob.dead ? 4 : 1);
     }
@@ -819,7 +863,10 @@
       }
       if (this.creative) return;
       if (!primary) {
-        if (harvest) for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n, x + 0.5, y + 0.4, z + 0.5);
+        if (harvest) {
+          for (const [did, n] of this.harvestDrops(id, b)) g.entities.addDrop(did, n, x + 0.5, y + 0.4, z + 0.5);
+          if (b.ore && !this.silkHeld()) this.addXp(CM.oreXp(id, Math.random));
+        }
         return;
       }
       // combo de minage
@@ -836,7 +883,8 @@
         g.ui.toast('Double butin !', 'gold');
       }
       if (harvest) {
-        for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n * mult, x + 0.5, y + 0.4, z + 0.5);
+        for (const [did, n] of this.harvestDrops(id, b)) g.entities.addDrop(did, n * mult, x + 0.5, y + 0.4, z + 0.5);
+        if (b.ore && !this.silkHeld()) this.addXp(CM.oreXp(id, Math.random));
       } else if (b.tier > 0) {
         g.ui.toast('Il faut une pioche en ' + CM.TIER_NAMES[b.tier] + ' (ou mieux) pour récolter : ' + b.name, 'warn', 'tool' + id);
       }
@@ -852,6 +900,22 @@
         const wood = CM.woodOf(id);
         if (info.toolType === 'axe' && info.tier >= 3 && wood && id === wood.log) this.fellTree(x, y, z, wood);
       }
+    }
+
+    // Outil en main enchanté ? (Toucher de soie, Fortune)
+    silkHeld() {
+      const s = this.game.inventory.held();
+      return !!s && CM.itemInfo(s.id).type === 'tool' && CM.enchLevel(s, 'silk') > 0;
+    }
+    // Butin d'un bloc cassé : Toucher de soie (le bloc lui-même), Fortune (plus d'objets des minerais).
+    harvestDrops(id, b) {
+      const s = this.game.inventory.held();
+      const tool = s && CM.itemInfo(s.id).type === 'tool' ? s : null;
+      if (CM.enchLevel(tool, 'silk') && !b.plant && !b.hidden && !b.door && !b.container && !b.bed && b.crop === undefined && !b.farmland) return [[id, 1]];
+      const drops = CM.blockDrops(id, Math.random);
+      const f = CM.enchLevel(tool, 'fortune');
+      if (f && b.ore) for (const d of drops) if (d[0] >= CM.ITEM_BASE) d[1] *= 1 + Math.max(0, Math.floor(Math.random() * (f + 2)) - 1);
+      return drops;
     }
 
     fellTree(x, y, z, wood) {
@@ -940,6 +1004,10 @@
       if (input.pressed.mouse2 && t && !(info && info.isBlock && sneak)) {
         if (tb.station) {
           g.ui.openInventory();
+          return;
+        }
+        if (tb.enchanter) {
+          g.ui.openEnchant(t.x, t.y, t.z);
           return;
         }
         if (tb.door) {
@@ -1143,7 +1211,8 @@
       this.consume(1);
     }
 
-    damage(n, sx, sz, cause, bypass) {
+    // attacker : créature qui frappe (pour les Épines).
+    damage(n, sx, sz, cause, bypass, attacker) {
       const g = this.game;
       if (!this.alive || n <= 0) return;
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
@@ -1156,6 +1225,8 @@
         // créatures, explosions, autres joueurs : l'armure encaisse (pas la chute, la faim ou la noyade)
         n = this.armorAbsorb(n);
       }
+      n = this.enchantProtect(n, cause);
+      if (attacker && !attacker.dead) this.thorns(attacker);
       this.health -= n;
       this.invul = 0.55;
       this.hurtFlash = 0.45;
@@ -1185,6 +1256,9 @@
       inv.armor.forEach((s, k) => {
         if (!s) return;
         const info = CM.itemInfo(s.id);
+        // Solidité : chance de ne pas s'user (armure : 60 % + 40 % / (niveau + 1))
+        const u = CM.enchLevel(s, 'unbreaking');
+        if (u && Math.random() >= 0.6 + 0.4 / (u + 1)) return;
         s.xp = (s.xp || 0) + wear;
         const left = info.maxDur - s.xp;
         const warnAt = Math.max(5, Math.floor(info.maxDur * 0.1));
@@ -1200,6 +1274,27 @@
       return Math.round(n * (1 - f / 25) * 2) / 2;
     }
 
+    // Protection (toutes les pièces) et Chute amortie (bottes) : −4 % par point, 80 % au plus.
+    enchantProtect(n, cause) {
+      if (cause === 'Le vide' || cause === 'La faim' || cause === 'La noyade') return n;
+      const inv = this.game.inventory;
+      let epf = 0;
+      for (const s of inv.armor) epf += CM.enchLevel(s, 'protection');
+      if (cause === 'La gravité') epf += 3 * CM.enchLevel(inv.armor[3], 'feather');
+      if (!epf) return n;
+      return Math.round(n * (1 - Math.min(20, epf) / 25) * 2) / 2;
+    }
+    // Épines (plastron) : blesse la créature qui frappe (et use un peu plus le plastron).
+    thorns(m) {
+      const s = this.game.inventory.armor[1];
+      const t = CM.enchLevel(s, 'thorns');
+      if (!t || Math.random() >= 0.15 * t) return;
+      this.game.entities.hurtMob(m, 1 + Math.floor(Math.random() * 4), [this.x, this.z], false, this);
+      s.xp = (s.xp || 0) + 2;
+      if (s.xp >= CM.itemInfo(s.id).maxDur) this.game.inventory.armor[1] = null;
+      this.game.inventory.changed();
+    }
+
     die(cause) {
       const g = this.game;
       this.alive = false;
@@ -1210,16 +1305,17 @@
         for (let i = 0; i < 36; i++) {
           const s = inv.slots[i];
           if (!s) continue;
-          const extra = s.xp !== undefined ? { xp: s.xp } : null;
+          const extra = CM.stackExtra(s);
           g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra);
           inv.slots[i] = null;
         }
         inv.armor.forEach((s, k) => {
-          if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, { xp: s.xp || 0 });
+          if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, CM.stackExtra(s) || { xp: 0 });
           inv.armor[k] = null;
         });
         inv.changed();
       }
+      if (!g.keepInventory()) this.xpTotal = 0;
       g.stats.deaths = (g.stats.deaths || 0) + 1;
       g.net.died(cause);
       g.ui.showDeath(cause);
