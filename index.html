@@ -140,6 +140,13 @@
           <div id="ench-offers"></div>
           <div class="hint">Pose un outil, une épée ou une pièce d'armure dans la case (clic, ou Maj+clic depuis l'inventaire). Chaque enchantement coûte du lapis-lazuli et 1 à 3 niveaux d'expérience (il faut au moins le niveau affiché). Jusqu'à 15 bibliothèques autour de la table, à 2 blocs avec de l'air entre les deux, donnent de meilleurs enchantements.</div>
         </div>
+        <div id="anvil-panel" class="hidden">
+          <h2>Enclume</h2>
+          <div class="anvil-row"><div id="anvil-a" class="slot"></div><span class="anvil-op">+</span><div id="anvil-b" class="slot"></div><span class="anvil-op">→</span><div id="anvil-out" class="slot"></div></div>
+          <div id="anvil-info"></div>
+          <button id="anvil-go" class="big">Forger</button>
+          <div class="hint">À gauche, l'armure abîmée (ou l'objet à améliorer). À droite, son matériau pour la réparer (cuir, lingots d'or ou de fer, diamants, lingots de netherite : 25 % de durabilité par unité), ou un deuxième objet identique pour additionner les durabilités et réunir les enchantements (deux niveaux égaux donnent le niveau au-dessus). Coûte des niveaux d'expérience. Maj+clic depuis l'inventaire pour y poser un objet.</div>
+        </div>
         <div id="chest-panel" class="hidden">
           <h2 id="chest-title">Coffre</h2>
           <div id="chest-grid" class="grid"></div>
@@ -391,6 +398,7 @@
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
   <script src="js/world.js"></script>
+  <script src="js/blockticks.js"></script>
   <script src="js/mesher.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/audio.js"></script>

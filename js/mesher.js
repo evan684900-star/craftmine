@@ -212,8 +212,16 @@
     const count = fillPad(world, cx, sy, cz);
     if (count === 0) return { opaque: null, water: null };
     const defs = CM.blocks;
-    const WATER = CM.B.WATER;
+    const WATERY = CM.WATERY;
     const waving = opts.waving;
+    // hauteur de la surface d'une case d'eau (en 1/16) : pleine sous de l'eau ou de la glace,
+    // 14 pour une source ou une chute, de plus en plus basse en s'éloignant de la source
+    const wTop = (pp) => {
+      const ab = padId[pp + PP];
+      if (ab !== BORDER && (WATERY[ab] || (defs[ab] && defs[ab].render === 'tglass'))) return 16;
+      const l = defs[padId[pp]].level;
+      return l === 0 || l === 8 ? 14 : Math.max(2, 14 - Math.round(l * 1.6));
+    };
     for (let ly = 0; ly < 16; ly++)
       for (let lz = 0; lz < 16; lz++)
         for (let lx = 0; lx < 16; lx++) {
@@ -261,21 +269,25 @@
               const nid = padId[p + f.nOff];
               if (nid === id || OPQ[nid]) continue;
               // pas de face contre l'eau sous la glace (évite les faces superposées)
-              if (nid === WATER && fi === 3) continue;
+              if (WATERY[nid] && fi === 3) continue;
               faceLighting(p, f, false, false);
               setVerts(f, bx, by, bz, FACE_SHADE[fi], 16, false);
               emitQuad(waterBuf, layers[fi], false, 0);
             }
           } else if (r === 'water') {
-            const above = padId[p + PP];
-            // sous la glace, la surface monte jusqu'en haut du bloc (pas de fente)
-            const underT = above !== BORDER && defs[above] && defs[above].render === 'tglass';
-            const topH = above === WATER || underT ? 16 : 14;
+            const topH = wTop(p);
             const layer = LAYERS[id][2];
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
-              if (nid === WATER || OPQ[nid]) continue;
+              if (OPQ[nid]) continue;
+              // contre une eau plus basse : seule la partie qui dépasse est visible
+              let baseH = 0;
+              if (nid !== BORDER && WATERY[nid]) {
+                if (fi === 2 || fi === 3) continue;
+                baseH = wTop(p + f.nOff);
+                if (baseH >= topH) continue;
+              }
               // contre la glace : seule la surface reste visible
               if (fi !== 2 && nid !== BORDER && defs[nid] && defs[nid].render === 'tglass') continue;
               if (fi === 3 && nid !== 0) continue;
@@ -284,7 +296,7 @@
                 const v = f.v[k];
                 const t = vs[k];
                 t[0] = bx + v[0] * 16;
-                t[1] = by + (v[1] ? topH : 0);
+                t[1] = by + (v[1] ? topH : baseH);
                 t[2] = bz + v[2] * 16;
                 t[3] = v[3];
                 t[4] = v[4];
@@ -313,6 +325,22 @@
             crossQuad(bx + c, bz + a, bx + a, bz + c, by, layer, pf);
           } else if (r === 'door') {
             solidBox(opaqueBuf, LAYERS[id], bx, by, bz, b.box, p);
+          } else if (r === 'boxes') {
+            for (const q of b.boxes) solidBox(opaqueBuf, LAYERS[id], bx, by, bz, q, p);
+          } else if (r === 'fire') {
+            // flammes : deux plans en croix et quatre plans près des bords, toujours lumineux
+            for (let k = 0; k < 4; k++) {
+              sky4[k] = 255;
+              blk4[k] = 255;
+              sh4[k] = 255;
+            }
+            const layer = LAYERS[id][0], ff = waving ? 5 : 0;
+            crossQuad(bx + 2, bz + 2, bx + 14, bz + 14, by, layer, ff);
+            crossQuad(bx + 14, bz + 2, bx + 2, bz + 14, by, layer, ff);
+            crossQuad(bx + 1, bz, bx + 1, bz + 16, by, layer, ff);
+            crossQuad(bx + 15, bz, bx + 15, bz + 16, by, layer, ff);
+            crossQuad(bx, bz + 1, bx + 16, bz + 1, by, layer, ff);
+            crossQuad(bx, bz + 15, bx + 16, bz + 15, by, layer, ff);
           } else if (r === 'torch') {
             for (let k = 0; k < 4; k++) {
               sky4[k] = 255;

@@ -15,6 +15,8 @@
     ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
     ['✨ Expérience', "La barre verte au-dessus de la barre d'objets montre ton niveau. On gagne de l'expérience en minant du charbon, des diamants, des émeraudes, du lapis, de la redstone, du quartz, du cristal ou des rubis, en tuant des Ombres (5) et des animaux, en échangeant avec les villageois, en faisant naître des petits et en fondant à la forge. À la mort, elle est perdue (sauf si l'inventaire est conservé)."],
     ['📚 Enchantements', "Fabrique une table d'enchantement (1 livre, 2 diamants, 4 obsidiennes, à l'Établi) et fais clic droit dessus. Pose un outil, une épée ou une pièce d'armure dans la case : 3 offres apparaissent, chacune avec son niveau requis ; elle coûte 1, 2 ou 3 lapis-lazuli et autant de niveaux. Jusqu'à 15 bibliothèques autour de la table (à 2 blocs, avec de l'air entre) débloquent les offres de niveau 30. Outils : Efficacité, Fortune, Toucher de soie. Épée : Tranchant, Recul, Aura de feu, Butin (hache : Tranchant aussi). Armure : Protection, Solidité, Épines (plastron), Chute amortie (bottes), Apnée (casque). Un objet ne s'enchante qu'une fois ; une pièce en diamant garde ses enchantements quand on l'améliore en netherite."],
+    ['🔨 Enclume', "3 blocs de fer + 4 lingots de fer, à l'Établi. Clic droit dessus : à gauche l'armure abîmée, à droite son matériau (cuir, lingot d'or ou de fer, diamant, lingot de netherite) : chaque unité rend 25 % de la durabilité. Ou mets deux objets identiques : leurs durabilités s'additionnent (+12 %) et leurs enchantements se réunissent (deux niveaux égaux donnent le niveau au-dessus, par exemple Tranchant III + Tranchant III = Tranchant IV). Coûte des niveaux d'expérience (40 ou plus : trop cher)."],
+    ['💧 Eau et 🔥 feu', "L'eau coule comme dans Minecraft : jusqu'à 7 blocs à plat, sans limite vers le bas, vers le trou le plus proche ; deux sources côte à côte en créent une troisième. Le courant entraîne joueurs, créatures et objets. Au seau, on ne ramasse qu'une source. Le briquet (lingot de fer + silex) allume un feu sur le bloc visé et amorce la TNT. Le feu brûle le bois, les feuilles, la laine et les herbes et se propage (désactivable dans Options > Jeu) ; il enflamme joueurs et créatures (l'eau les éteint) et détruit les objets au sol. Frappe les flammes pour les éteindre."],
     ['🍞 Manger', "Garde le clic droit enfoncé 1 seconde avec un aliment en main (sur téléphone, un toucher suffit : tu manges jusqu'au bout sauf si tu changes d'objet). On avance lentement pendant qu'on mange."],
     ['🪝 Grappin', "Fabrique-le avec 3 lingots de fer et 2 cordes. En main, clic droit sur un bloc jusqu'à 34 blocs : tu es tiré vers lui en gardant ton élan. Saut pendant la traction pour te décrocher avec un bond."],
     ['💨 Ruée et double saut', "La touche de ruée (F) lance un sprint éclair (tu es brièvement invulnérable et tu frappes plus fort). Tu peux la diriger pendant qu'elle dure : tourne la caméra ou change de direction, même dans l'élan en l'air. L'Amulette de plume, gardée dans l'inventaire, donne un double saut."],
@@ -130,6 +132,7 @@
       { t: 'world' },
       { k: 'dayLength', t: 'select', label: "Durée d'une journée", opts: [[5, '5 minutes'], [10, '10 minutes'], [20, '20 minutes'], [40, '40 minutes']] },
       { k: 'keepInventory', t: 'check', label: "Garder l'inventaire à la mort" },
+      { k: 'fireSpread', t: 'check', label: 'Le feu se propage (bois, feuilles, laine, herbes…)', note: 'Désactivé : le feu reste là où on l’allume et brûle sans rien détruire.' },
       { k: 'showQuests', t: 'check', label: 'Afficher les objectifs à l’écran' },
       { k: 'autosave', t: 'select', label: 'Sauvegarde automatique', opts: [[30, 'Toutes les 30 s'], [45, 'Toutes les 45 s'], [120, 'Toutes les 2 min'], [300, 'Toutes les 5 min']] },
     ]],
@@ -392,6 +395,7 @@
       this.lastCombo = p.combo;
       // effets
       $('vignette').style.opacity = Math.min(1, p.hurtFlash * 2 + (p.health <= 4 && p.alive && !creative ? 0.35 + Math.sin(g.clock * 5) * 0.15 : 0));
+      $('hud').classList.toggle('burning', p.burning > 0);
       $('water-overlay').style.opacity = p.headInWater ? 1 : 0;
       // horloge, biome, coordonnées
       this.clockT = (this.clockT || 0) - dt;
@@ -524,6 +528,17 @@
       for (let i = 9; i < 36; i++) mk(i, main);
       for (let i = 0; i < 9; i++) mk(i, hot);
       $('ench-slot').addEventListener('pointerdown', (e) => this.enchClick(e));
+      for (const k of ['a', 'b']) {
+        $('anvil-' + k).addEventListener('pointerdown', (e) => this.anvilClick(k, e));
+        $('anvil-' + k).addEventListener('mouseenter', (e) => this.anvil && this.showTip(this.anvil[k], e));
+        $('anvil-' + k).addEventListener('mouseleave', () => this.hideTip());
+      }
+      $('anvil-out').addEventListener('mouseenter', (e) => {
+        const r = this.anvil && CM.anvilResult(this.anvil.a, this.anvil.b);
+        if (r && r.out) this.showTip(r.out, e);
+      });
+      $('anvil-out').addEventListener('mouseleave', () => this.hideTip());
+      this.tapOrPress($('anvil-go'), () => this.doAnvil());
       $('ench-slot').addEventListener('mouseenter', (e) => this.ench && this.showTip(this.ench.item, e));
       $('ench-slot').addEventListener('mouseleave', () => this.hideTip());
       // cases d'armure : casque, plastron, jambières, bottes
@@ -736,9 +751,11 @@
         this.chest = null;
         this.trade = null;
         this.ench = null;
+        this.anvil = null;
       }
       document.querySelector('.side-panel').classList.toggle('chest-mode', !!this.chest);
-      document.querySelector('.side-panel').classList.toggle('trade-mode', !!this.trade || !!this.ench);
+      document.querySelector('.side-panel').classList.toggle('trade-mode', !!this.trade || !!this.ench || !!this.anvil);
+      $('anvil-panel').classList.toggle('hidden', !this.anvil);
       $('trade-panel').classList.toggle('hidden', !this.trade);
       $('ench-panel').classList.toggle('hidden', !this.ench);
       $('chest-panel').classList.toggle('hidden', !this.chest);
@@ -766,6 +783,15 @@
         if (left > 0) this.game.dropNearPlayer(it.id, 1, it);
       }
       this.ench = null;
+      // l'enclume rend ses objets
+      if (this.anvil) {
+        for (const it of [this.anvil.a, this.anvil.b]) {
+          if (!it) continue;
+          const left = this.game.inventory.add(it.id, it.count, CM.stackExtra(it));
+          if (left > 0) this.game.dropNearPlayer(it.id, left, it);
+        }
+      }
+      this.anvil = null;
       this.game.net.chestClosed();
       this.chest = null;
       this.trade = null;
@@ -808,6 +834,7 @@
       if (this.chest) for (let i = 0; i < 27; i++) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
       if (this.trade) this.renderTrade();
       if (this.ench) this.renderEnchant();
+      if (this.anvil) this.renderAnvil();
       const c = $('cursor-stack');
       if (this.cursor) {
         c.innerHTML = this.slotHTML(this.cursor);
@@ -848,6 +875,13 @@
       const button = this.halfMode && e.button === 0 ? 2 : e.button;
       if (shift && s && !this.cursor) {
         const si = CM.itemInfo(s.id);
+        // enclume ouverte : Maj+clic pose l'objet dans la première case libre
+        if (kind === 'inv' && this.anvil && (!this.anvil.a || !this.anvil.b)) {
+          this.anvil[this.anvil.a ? 'b' : 'a'] = s;
+          slots[i] = null;
+          inv.changed();
+          return;
+        }
         // table d'enchantement ouverte : Maj+clic pose l'objet dans sa case
         if (kind === 'inv' && this.ench && !this.ench.item && CM.enchantKind(s.id)) {
           this.ench.item = s;
@@ -986,6 +1020,80 @@
       } else if (e.item) {
         this.cursor = e.item;
         e.item = null;
+      }
+      this.game.inventory.changed();
+    }
+
+    // ---------------------------------------------------------- enclume --
+    openAnvil(x, y, z) {
+      if (this.invOpen || !this.game.player.alive) return;
+      this.trade = null;
+      this.chest = null;
+      this.ench = null;
+      this.anvil = { x, y, z, a: null, b: null };
+      CM.Audio.play('place', { mat: 'metal' });
+      this.openInventory(true);
+    }
+    renderAnvil() {
+      const an = this.anvil, g = this.game, p = g.player;
+      const ph = (id) => '<div class="icon ph" style="background-image:url(' + CM.Textures.icons[id] + ')"></div>';
+      $('anvil-a').innerHTML = an.a ? this.slotHTML(an.a) : ph(CM.I.CHESTPLATE_IRON);
+      $('anvil-b').innerHTML = an.b ? this.slotHTML(an.b) : ph(CM.I.IRON_INGOT);
+      const res = CM.anvilResult(an.a, an.b);
+      $('anvil-out').innerHTML = res && res.out ? this.slotHTML(res.out) : '';
+      const creative = g.mode === 'creative';
+      let info = '', ok = false;
+      if (!an.a || !an.b) info = 'Pose l’objet à gauche et le matériau (ou un deuxième objet identique) à droite.';
+      else if (res.error) info = '<span class="warn">' + esc(res.error) + '</span>';
+      else if (!creative && res.cost > CM.ANVIL_MAX) info = esc(res.text) + '<br><span class="warn">Trop cher ! (' + res.cost + ' niveaux)</span>';
+      else if (!creative && p.level < res.cost) info = esc(res.text) + '<br><span class="warn">Il faut ' + res.cost + ' niveau' + (res.cost > 1 ? 'x' : '') + ' (tu en as ' + p.level + ')</span>';
+      else {
+        info = esc(res.text) + '<br>Coût : <span class="cost">' + (creative ? 'gratuit (créatif)' : res.cost + ' niveau' + (res.cost > 1 ? 'x' : '')) + '</span>';
+        ok = true;
+      }
+      $('anvil-info').innerHTML = info;
+      $('anvil-go').disabled = !ok;
+    }
+    doAnvil() {
+      const an = this.anvil, g = this.game, p = g.player;
+      if (!an) return;
+      const res = CM.anvilResult(an.a, an.b);
+      if (!res || !res.out) return;
+      const creative = g.mode === 'creative';
+      if (!creative && (res.cost > CM.ANVIL_MAX || p.level < res.cost)) return;
+      if (!creative) p.spendLevels(res.cost);
+      an.a = res.out;
+      an.b.count -= res.useB;
+      if (an.b.count <= 0) an.b = null;
+      g.stats.anvil = (g.stats.anvil || 0) + 1;
+      CM.Audio.play('anvil');
+      g.entities.burst(CM.Textures.layer.white, an.x + 0.5, an.y + 1.05, an.z + 0.5, 14, { speed: 3, grav: 6, life: 0.5, size: 0.05, emissive: true });
+      this.toast('🔨 ' + CM.itemName(res.out.id) + ' : ' + res.text.replace(/^[^:]*: /, ''), 'good');
+      g.inventory.changed();
+    }
+    anvilClick(k, ev) {
+      ev.preventDefault();
+      const an = this.anvil;
+      if (!an) return;
+      CM.Audio.play('click');
+      const s = an[k];
+      if ((ev.shiftKey || this.quickMode) && s && !this.cursor) {
+        const left = this.game.inventory.add(s.id, s.count, CM.stackExtra(s));
+        if (left <= 0) an[k] = null;
+        else s.count = left;
+      } else if (this.cursor) {
+        if (s && s.id === this.cursor.id && CM.itemInfo(s.id).stack > 1) {
+          const n = Math.min(CM.itemInfo(s.id).stack - s.count, this.cursor.count);
+          s.count += n;
+          this.cursor.count -= n;
+          if (this.cursor.count <= 0) this.cursor = null;
+        } else {
+          an[k] = this.cursor;
+          this.cursor = s || null;
+        }
+      } else if (s) {
+        this.cursor = s;
+        an[k] = null;
       }
       this.game.inventory.changed();
     }

@@ -160,6 +160,16 @@
           noise(t, 0.08, 'bandpass', 3000, 3, 0.15);
         }
         break;
+      case 'ignite':
+        // briquet : raclement et étincelle
+        noise(t, 0.12, 'bandpass', 3200, 2, 0.25);
+        noise(t + 0.08, 0.3, 'lowpass', 900, 0.8, 0.12);
+        break;
+      case 'anvil':
+        tone(t, 0.5, 'square', 880, 860, 0.06);
+        tone(t, 0.6, 'triangle', 1320, 1300, 0.08);
+        noise(t, 0.1, 'bandpass', 2500, 3, 0.3);
+        break;
       case 'xp':
         // petit tintement d'expérience
         tone(t, 0.12, 'sine', 1400 + Math.random() * 500, 0, 0.06);

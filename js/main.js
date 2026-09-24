@@ -19,7 +19,7 @@
     // contrôles
     sens: 1, invertY: false, toggleSprint: false, autoJump: false, binds: null,
     // jeu
-    showQuests: true, keepInventory: false, dayLength: 10, autosave: 45, toasts: 2,
+    showQuests: true, keepInventory: false, fireSpread: true, dayLength: 10, autosave: 45, toasts: 2,
     // audio
     volume: 50, sfxVolume: 100, mobVolume: 100, uiVolume: 100,
     // interface
@@ -229,10 +229,14 @@
       })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
       // tables d'enchantement (livre flottant, runes)
       this.enchTables = new Set(this.world.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      // eau qui coule et feu
+      this.ticks = new CM.BlockTicks(this);
+      this.ticks.reset();
       this.world.onEdit = (x, y, z, id) => {
         const k = x + ',' + y + ',' + z;
         if (id === B.ENCHANTING_TABLE) this.enchTables.add(k);
         else if (this.enchTables.size) this.enchTables.delete(k);
+        this.ticks.onEdit(x, y, z, id);
       };
       this.growTimer = 1;
       this.player = new CM.Player(this);
@@ -1005,7 +1009,7 @@
     // De l'eau à 4 blocs ou moins (au même niveau ou juste au-dessus) ?
     waterNear(x, y, z) {
       const w = this.world;
-      for (let dy = 0; dy <= 1; dy++) for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) if (w.get(x + dx, y + dy, z + dz) === B.WATER) return true;
+      for (let dy = 0; dy <= 1; dy++) for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) if (CM.isWater(w.get(x + dx, y + dy, z + dz))) return true;
       return false;
     }
     // Labourer (houe) : terre labourée, déjà irriguée s'il y a de l'eau à côté.
@@ -1020,7 +1024,7 @@
       if (dirs.some(([dx, dz]) => w.get(x + dx, y, z + dz) === fruit)) return false;
       const [dx, dz] = dirs[Math.floor(Math.random() * 4)];
       const X = x + dx, Z = z + dz, cur = w.get(X, y, Z), under = CM.blocks[w.get(X, y - 1, Z)];
-      if ((cur !== 0 && !CM.blocks[cur].replaceable) || cur === B.WATER || !(under.soil || under.farmland || under.id === B.DIRT)) return false;
+      if ((cur !== 0 && !CM.blocks[cur].replaceable) || CM.isWater(cur) || !(under.soil || under.farmland || under.id === B.DIRT)) return false;
       w.setBlock(X, y, Z, fruit);
       this.entities.burst(CM.Textures.layer.leaves, X + 0.5, y + 0.5, Z + 0.5, 8, { speed: 2, size: 0.06 });
       return true;
@@ -1244,7 +1248,7 @@
             if (d > power + (CM.hash3(x + dx, y + dy, z + dz, 7) - 0.5)) continue;
             const X = Math.floor(x) + dx, Y = Math.floor(y) + dy, Z = Math.floor(z) + dz;
             const id = w.get(X, Y, Z);
-            if (!id || id === B.WATER) continue;
+            if (!id || CM.isWater(id)) continue;
             const b = CM.blocks[id];
             if (b.unbreakable || b.hardness >= 10) continue;
             if (b.tnt) {
@@ -1335,7 +1339,7 @@
       let fogColor = mix([0.02, 0.02, 0.03], horizon, 0.25 + 0.75 * cave);
       const rd = this.renderer.renderDist * 16;
       let fog = [rd * 0.55, rd - 6];
-      const underwater = w.get(Math.floor(cam[0]), Math.floor(cam[1] + 0.05), Math.floor(cam[2])) === B.WATER;
+      const underwater = CM.isWater(w.get(Math.floor(cam[0]), Math.floor(cam[1] + 0.05), Math.floor(cam[2])));
       if (underwater) {
         fogColor = mix([0.02, 0.05, 0.12], [0.1, 0.28, 0.55], day);
         fog = [0, 22];
@@ -1409,6 +1413,7 @@
       this.player.update(dt, active ? this.input : this.noInput);
       this.entities.update(dt);
       if (!net.isClient) {
+        this.ticks.update(dt);
         this.growTimer -= dt;
         if (this.growTimer <= 0) {
           this.growTimer = 1;

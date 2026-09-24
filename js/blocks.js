@@ -582,7 +582,36 @@ nb('ENCHANTING_TABLE', {
   tex: { top: tx('ench_top', { type: 'enchtable', part: 0 }), bottom: CM.blocks[CM.B.OBSIDIAN].tex.top, side: tx('ench_side', { type: 'enchtable', part: 1 }) },
   opaque: true, hardness: 5, tool: 'pickaxe', tier: 1, light: 7, enchanter: true,
 });
+// Eau qui coule (comme dans Minecraft) : level 0 = source (WATER), 1 à 7 = de plus en plus loin
+// de la source (et de plus en plus basse), 8 = eau qui tombe.
+CM.blocks[CM.B.WATER].water = true;
+CM.blocks[CM.B.WATER].level = 0;
+CM.WATER_IDS = [CM.B.WATER];
+for (let l = 1; l <= 8; l++) {
+  CM.WATER_IDS[l] = nb(l === 8 ? 'WATER_FALL' : 'WATER_FLOW_' + l, {
+    name: 'Eau', render: 'water', tex: 'water', solid: false, opaque: false, atten: 2, hardness: -1, drop: 0, replaceable: true, hidden: true, water: true, level: l,
+  }).id;
+}
+// Feu : allumé au briquet, brûle ce qui est inflammable et se propage (option), l'eau l'éteint.
+nb('FIRE', { name: 'Feu', render: 'fire', tex: tx('fire', { type: 'fire' }), solid: false, opaque: false, light: 15, hardness: 0, drop: 0, replaceable: true, hidden: true, fire: true, sound: 'grass' });
+// Enclume : répare les armures avec leur matériau et fusionne deux objets (enchantements compris).
+// Deux orientations ; boîtes en 1/16 de bloc (socle, taille, cou, table).
+const anvilBoxes = (ax) => {
+  const bx = [[2, 0, 2, 14, 4, 14], [4, 4, 3, 12, 5, 13], [6, 5, 4, 10, 10, 12], [3, 10, 0, 13, 16, 16]];
+  return ax ? bx.map(([a, b, c, d, e, f]) => [c, b, a, f, e, d]) : bx;
+};
+CM.ANVILS = [0, 1].map((ax) =>
+  nb(ax ? 'ANVIL_1' : 'ANVIL', {
+    name: 'Enclume', render: 'boxes', boxes: anvilBoxes(ax), tex: { top: tx('anvil_top', { type: 'anvil', part: 0 }), bottom: tx('anvil_side', { type: 'anvil', part: 1 }), side: 'anvil_side' },
+    opaque: false, hardness: 5, tool: 'pickaxe', tier: 1, sound: 'metal', anvil: true, hidden: ax === 1, iconTex: 'anvil_item',
+  }).id,
+);
+CM.blocks[CM.ANVILS[1]].drop = CM.ANVILS[0];
 CM.BLOCK_COUNT = NEXT;
+// Recherche rapide : est-ce de l'eau ? (source, courant ou chute)
+CM.WATERY = new Uint8Array(CM.BLOCK_COUNT);
+for (const id of CM.WATER_IDS) CM.WATERY[id] = 1;
+CM.isWater = (id) => CM.WATERY[id] === 1;
 
 // Les blocs qui laissent passer la lumière sans atténuation.
 for (const b of CM.blocks) if (b) b.lightPass = !b.lightOpaque;
@@ -775,6 +804,68 @@ CM.enchantsFor = (id) => {
   return kind ? Object.keys(CM.ENCHANTS).filter((k) => CM.ENCHANTS[k].on.includes(kind)) : [];
 };
 CM.enchLevel = (stack, k) => (stack && stack.ench && stack.ench[k]) | 0;
+CM.enchClash = (a, b) => (CM.ENCHANTS[a].excl || []).includes(b) || (CM.ENCHANTS[b].excl || []).includes(a);
+
+// ------------------------------------------------------------- Enclume ----
+// Comme dans Minecraft : on répare une armure avec son matériau (25 % de la durabilité par unité),
+// ou on fusionne deux objets identiques (durabilités additionnées + 12 %, enchantements réunis :
+// deux niveaux égaux donnent le niveau au-dessus). Coût en niveaux d'expérience ; 40 et plus : trop cher.
+CM.ANVIL_MAX = 39;
+CM.repairMaterial = (id) => {
+  const i = CM.itemInfo(id);
+  if (!i || i.type !== 'armor') return 0;
+  return i.mat === 'NETHERITE' ? CM.I.NETHERITE_INGOT : CM.I[CM.ARMOR_MATS.find((m) => m.key === i.mat).ing];
+};
+CM.anvilResult = function (a, b) {
+  if (!a || !b) return null;
+  const ia = CM.itemInfo(a.id);
+  if (ia.type !== 'armor' && ia.type !== 'tool') return { error: 'On ne répare que les armures, et on ne fusionne que les outils et les armures.' };
+  const copy = () => {
+    const o = Object.assign({}, a, { count: 1 });
+    if (a.ench) o.ench = Object.assign({}, a.ench);
+    return o;
+  };
+  // réparation avec le matériau
+  if (b.id === CM.repairMaterial(a.id)) {
+    const used = a.xp || 0;
+    if (used <= 0) return { error: 'Cette pièce est déjà en parfait état.' };
+    const per = Math.ceil(ia.maxDur / 4);
+    const units = Math.min(b.count, Math.ceil(used / per));
+    const out = copy();
+    out.xp = Math.max(0, used - units * per);
+    return { out, cost: units, useB: units, text: 'Réparation avec ' + units + ' × ' + CM.itemName(b.id) + ' : ' + (ia.maxDur - used) + ' → ' + (ia.maxDur - out.xp) + '/' + ia.maxDur };
+  }
+  if (b.id !== a.id) return { error: ia.type === 'armor' ? 'Pour réparer : ' + CM.itemName(CM.repairMaterial(a.id)) + ', ou une autre pièce identique.' : 'Pose un autre objet identique pour réunir leurs enchantements.' };
+  // fusion de deux objets identiques
+  const out = copy();
+  let cost = 0;
+  const bits = [];
+  if (ia.type === 'armor') {
+    const left = ia.maxDur - (a.xp || 0) + (ia.maxDur - (b.xp || 0)) + Math.floor(ia.maxDur * 0.12);
+    const nx = Math.max(0, ia.maxDur - left);
+    if (nx < (a.xp || 0)) {
+      out.xp = nx;
+      cost += 2;
+      bits.push('durabilité ' + (ia.maxDur - (a.xp || 0)) + ' → ' + (ia.maxDur - nx));
+    }
+  } else out.xp = Math.max(a.xp || 0, b.xp || 0); // outil : on garde la meilleure maîtrise
+  const allowed = CM.enchantsFor(a.id);
+  for (const [k, lb] of Object.entries(b.ench || {})) {
+    if (!allowed.includes(k)) continue;
+    const cur = (out.ench && out.ench[k]) || 0;
+    if (!cur && Object.keys(out.ench || {}).some((o) => CM.enchClash(o, k))) continue;
+    const nl = cur === lb ? Math.min(CM.ENCHANTS[k].max, cur + 1) : Math.max(cur, lb);
+    if (nl === cur) continue;
+    out.ench = out.ench || {};
+    out.ench[k] = nl;
+    // plus un enchantement est rare, plus il coûte (comme dans Minecraft)
+    const w = CM.ENCHANTS[k].w;
+    cost += nl * (w >= 10 ? 1 : w >= 5 ? 2 : w >= 2 ? 4 : 8);
+    bits.push(CM.enchName(k, nl));
+  }
+  if (!bits.length) return { error: 'Rien à améliorer en les fusionnant.' };
+  return { out, cost: Math.max(1, cost), useB: 1, text: 'Fusion : ' + bits.join(', ') };
+};
 // Tirage d'enchantements pour un objet et un coût (niveaux), façon Minecraft.
 CM.rollEnchants = function (id, cost, rand) {
   const info = CM.itemInfo(id);
@@ -797,7 +888,7 @@ CM.rollEnchants = function (id, cost, rand) {
     for (const q of pool) if ((t -= CM.ENCHANTS[q[0]].w) < 0) return q;
     return pool[pool.length - 1];
   };
-  const clash = (a, b) => (CM.ENCHANTS[a].excl || []).includes(b) || (CM.ENCHANTS[b].excl || []).includes(a);
+  const clash = CM.enchClash;
   for (let first = true; pool.length && (first || rand() < (L + 1) / 50); first = false) {
     const [k, l] = pick();
     out[k] = l;
@@ -1111,6 +1202,7 @@ CM.recipes.push(r(27, 1, [[I.FIBER, 4]], 'table', 'deco'));
 for (const [wk, planks] of [['OAK', 'PLANKS'], ['SPRUCE', 'SPRUCE_PLANKS'], ['BIRCH', 'BIRCH_PLANKS'], ['ACACIA', 'ACACIA_PLANKS']]) CM.recipes.push(r(CM.DOORS[wk][0], 3, [[B[planks], 6]], 'table', 'deco'));
 CM.recipes.push(r(B.BED, 1, [[B.WOOL, 3], ['planks', 3]], 'table', 'deco'));
 CM.recipes.push(r(B.ENCHANTING_TABLE, 1, [[I.BOOK, 1], [I.DIAMOND, 2], [B.OBSIDIAN, 4]], 'table', 'deco'));
+CM.recipes.push(r(B.ANVIL, 1, [[B.IRON_BLOCK, 3], [I.IRON_INGOT, 4]], 'table', 'deco'));
 // Agriculture
 CM.recipes.push(
   r(I.PUMPKIN_SEEDS, 4, [[B.PUMPKIN, 1]], null, 'objets'),
@@ -1278,11 +1370,27 @@ for (const b of CM.blocks) {
   let sel = CM.FULL_BOX;
   if (b.render === 'none') sel = null; // l'eau garde une boîte pleine (pour le seau), jamais solide
   else if (b.box) sel = b.box.map((v) => v / 16);
+  else if (b.boxes) sel = [0, 1, 2].map((a) => Math.min(...b.boxes.map((q) => q[a]))).concat([3, 4, 5].map((a) => Math.max(...b.boxes.map((q) => q[a])))).map((v) => v / 16);
   else if (b.render === 'slab' || b.render === 'carpet') sel = [0, 0, 0, 1, b.height, 1];
   else if (b.render === 'torch') sel = b.wall ? CM.wallTorchBox(b.wall[0], b.wall[1]) : [6 / 16, 0, 6 / 16, 10 / 16, 10 / 16, 10 / 16];
   else if (b.render === 'cross') sel = [2 / 16, 0, 2 / 16, 14 / 16, 13 / 16, 14 / 16];
   b.sel = sel;
   // une porte ouverte garde son battant solide (on passe à côté, pas à travers)
   b.col = b.solid || b.door ? sel : null;
+}
+// Inflammabilité (comme dans Minecraft) : [propagation vers ce bloc, chance qu'il brûle].
+for (const b of CM.blocks) {
+  if (!b) continue;
+  const k = b.key;
+  let f = null;
+  if (/LEAVES/.test(k) || (b.sound === 'wool' && b.render === 'cube')) f = [30, 60];
+  else if (b.render === 'carpet' && /CARPET/.test(k)) f = [60, 20];
+  else if (b.plant && b.crop === undefined && !/CORAL/.test(k)) f = [60, 100];
+  else if (k === 'BOOKSHELF') f = [30, 20];
+  else if (k === 'HAY_BLOCK') f = [60, 20];
+  else if (b.tnt) f = [15, 100];
+  else if (b.sound === 'wood' && (b.render === 'cube' || b.render === 'slab') && !b.station && !b.container && !b.note && !b.enchanter && !/CRIMSON|WARPED|MELON|PUMPKIN|LANTERN|MUSHROOM/.test(k))
+    f = /LOG|WOOD|STEM/.test(k) ? [5, 5] : [5, 20];
+  if (f) b.flam = f;
 }
 })();

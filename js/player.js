@@ -59,6 +59,7 @@
       this.combo = 0; this.comboTimer = 0; this.lastBreak = -10;
       this.attackCd = 0; this.useCd = 0; this.breakCd = 0;
       this.eating = null; // { id, slot, t } : en train de manger
+      this.burning = 0; // en feu (secondes restantes)
       this.swing = 0;
       this.bob = 0; this.bobAmp = 0;
       this.stepDist = 0;
@@ -140,9 +141,9 @@
 
       const k = input.keys;
       const fx = Math.floor(this.x), fz = Math.floor(this.z);
-      this.inWater = w.get(fx, Math.floor(this.y + 0.4), fz) === B.WATER;
+      this.inWater = CM.isWater(w.get(fx, Math.floor(this.y + 0.4), fz));
       const wasHeadIn = this.headInWater;
-      this.headInWater = w.get(fx, Math.floor(this.y + this.eyeH), fz) === B.WATER;
+      this.headInWater = CM.isWater(w.get(fx, Math.floor(this.y + this.eyeH), fz));
       if (this.inWater && !this.wasInWater && this.vy < -6) CM.Audio.play('splash');
       this.wasInWater = this.inWater;
 
@@ -257,6 +258,16 @@
         }
       }
 
+      // ----- courant : l'eau qui coule entraîne le joueur
+      if (this.inWater && !this.flying) {
+        const fv = CM.flowVector(w, fx, Math.floor(this.y + 0.4), fz);
+        if (fv) {
+          this.vx += fv[0] * 9 * dt;
+          this.vz += fv[1] * 9 * dt;
+          if (fv[2] < 0) this.vy -= 6 * dt;
+        }
+      }
+
       // ----- saut / nage / double saut / vol
       const standBlock = w.get(fx, Math.floor(this.y - 0.05), fz);
       if (this.flying) {
@@ -334,7 +345,7 @@
           this.onGround = false;
           CM.Audio.play('bounce');
           g.entities.burst(CM.blockLayers[under2][2], this.x, this.y, this.z, 8, { speed: 3 });
-        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK && w.get(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) !== B.WATER) {
+        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK && !CM.isWater(w.get(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)))) {
           // (atterrir dans l'eau, même versée au dernier moment avec un seau, annule la chute)
           this.damage(Math.floor(fall - 3), null, null, 'La gravité');
         }
@@ -363,6 +374,21 @@
 
       if (this.y < -30) this.damage(100, null, null, 'Le vide', true);
       if (this.invul <= 0 && this.touching((b) => b.hurts)) this.damage(1, null, null, this.touching((b) => b.id === B.MAGMA) ? 'Le magma' : 'Un cactus');
+      // feu : dans les flammes on s'enflamme ; en feu, 1 point de dégât par seconde, l'eau éteint
+      if (!this.creative && this.touching((b) => b.fire)) {
+        this.burning = Math.max(this.burning || 0, 8);
+        if (this.invul <= 0) this.damage(1, null, null, 'Le feu');
+      }
+      if (this.burning > 0) {
+        this.burning -= dt;
+        if (this.inWater || this.creative) this.burning = 0;
+        this.burnT = (this.burnT || 0) - dt;
+        if (this.burnT <= 0 && this.burning > 0) {
+          this.burnT = 1;
+          this.damage(1, null, null, 'Le feu', true);
+        }
+        if (Math.random() < dt * 20) g.entities.burst(CM.Textures.layer.flame, this.x + (Math.random() - 0.5) * 0.6, this.y + Math.random() * 1.6, this.z + (Math.random() - 0.5) * 0.6, 1, { speed: 0.4, grav: -2.5, life: 0.5, size: 0.1, emissive: true });
+      }
 
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
@@ -459,7 +485,7 @@
 
     updateTarget() {
       const e = this.eye(), d = this.aim();
-      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => id !== B.WATER);
+      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => !CM.isWater(id));
     }
 
     // ------------------------------------------------------------ grappin --
@@ -640,6 +666,7 @@
         }
       };
       if (!info.water) {
+        // seule une source se ramasse (l'eau qui coule, non)
         const h = w.raycast(e[0], e[1], e[2], d[0], d[1], d[2], reach, (id) => id === B.WATER || CM.blocks[id].solid);
         if (!h || h.id !== B.WATER) return;
         w.setBlock(h.x, h.y, h.z, 0);
@@ -652,10 +679,11 @@
       if (!t) return;
       const tb = CM.blocks[t.id];
       let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-      if (tb.replaceable && t.id !== B.WATER) {
+      if (tb.replaceable && !CM.isWater(t.id)) {
         px = t.x; py = t.y; pz = t.z;
       }
       const cur = w.get(px, py, pz);
+      // on peut verser dans de l'eau qui coule (elle devient une source), pas sur une source
       if (!w.inside(px, py, pz) || (cur !== 0 && !CM.blocks[cur].replaceable) || cur === B.WATER) return;
       w.setBlock(px, py, pz, B.WATER);
       swap(I.BUCKET);
@@ -727,7 +755,7 @@
       // variantes (porte ouverte, torche murale, culture…) : l'objet correspondant
       if (CM.blocks[id] && CM.blocks[id].hidden) id = CM.blocks[id].drop;
       const drop = CM.blocks[id];
-      if (!id || !drop || id === B.WATER) return;
+      if (!id || !drop || CM.isWater(id)) return;
       for (let i = 0; i < 9; i++) {
         if (inv.slots[i] && inv.slots[i].id === id) {
           inv.selected = i;
@@ -1010,6 +1038,10 @@
           g.ui.openEnchant(t.x, t.y, t.z);
           return;
         }
+        if (tb.anvil) {
+          g.ui.openAnvil(t.x, t.y, t.z);
+          return;
+        }
         if (tb.door) {
           g.toggleDoor(t.x, t.y, t.z);
           this.swing = 1;
@@ -1108,7 +1140,23 @@
         }
         return;
       }
-      if (info.type === 'igniter') return;
+      // briquet : allume un feu sur la face visée (la TNT, elle, s'amorce plus haut)
+      if (info.type === 'igniter') {
+        if (!input.pressed.mouse2) return;
+        let fx2 = t.x + t.nx, fy2 = t.y + t.ny, fz2 = t.z + t.nz;
+        if (tb.replaceable && !CM.isWater(t.id) && !tb.fire) {
+          fx2 = t.x; fy2 = t.y; fz2 = t.z;
+        }
+        const cur = w.get(fx2, fy2, fz2);
+        if (!w.inside(fx2, fy2, fz2) || CM.isWater(cur) || (cur !== 0 && !CM.blocks[cur].replaceable)) return;
+        const under = CM.blocks[w.get(fx2, fy2 - 1, fz2)];
+        const flamNear = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => CM.blocks[w.get(fx2 + dx, fy2 + dy, fz2 + dz)].flam);
+        if (!under.solid && !flamNear) return;
+        w.setBlock(fx2, fy2, fz2, B.FIRE);
+        CM.Audio.play('ignite');
+        this.swing = 1;
+        return;
+      }
       if (!info.isBlock || !t) return;
       const b = info.block;
       // dalle posée sur une dalle identique : bloc plein
@@ -1119,7 +1167,7 @@
       }
       // position de pose
       let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-      if (tb.replaceable && t.id !== B.WATER) {
+      if (tb.replaceable && !CM.isWater(t.id)) {
         px = t.x; py = t.y; pz = t.z;
       }
       if (!w.inside(px, py, pz)) return;
@@ -1148,7 +1196,7 @@
       }
       // torche : posée sur le dessus d'un bloc plein, ou accrochée au mur visé
       if (b.render === 'torch') {
-        if (cur === B.WATER) return;
+        if (CM.isWater(cur)) return;
         const full = (x, y, z) => w.colBox(x, y, z) === CM.FULL_BOX;
         let tid = 0;
         if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) tid = CM.wallTorch(stack.id, t.nx, t.nz);
@@ -1191,8 +1239,10 @@
         for (const rp of g.net.remotes.values()) if (rp.seen && rp.alive && hit(rp.x, rp.y, rp.z, rp.hw, rp.h)) return;
       }
       let place = stack.id;
+      // enclume : tournée selon le regard
+      if (b.anvil) place = CM.ANVILS[Math.abs(Math.cos(this.yaw)) >= Math.abs(Math.sin(this.yaw)) ? 0 : 1];
       // poudre de béton au contact de l'eau : béton
-      if (b.becomes && [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => w.get(px + dx, py + dy, pz + dz) === B.WATER)) place = b.becomes;
+      if (b.becomes && [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => CM.isWater(w.get(px + dx, py + dy, pz + dz)))) place = b.becomes;
       w.setBlock(px, py, pz, place);
       this.afterPlace(b, stack.id, px, py, pz);
     }

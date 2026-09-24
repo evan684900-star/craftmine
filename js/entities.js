@@ -485,7 +485,7 @@
       if (m.fire > 0) {
         m.fire -= dt;
         m.fireT = (m.fireT || 0) - dt;
-        if (w.get(Math.floor(m.x), Math.floor(m.y + 0.4), Math.floor(m.z)) === B.WATER) m.fire = 0;
+        if (CM.isWater(w.get(Math.floor(m.x), Math.floor(m.y + 0.4), Math.floor(m.z)))) m.fire = 0;
         else if (m.fireT <= 0) {
           m.fireT = 1;
           this.hurtMob(m, 1, null, false, m.fireBy);
@@ -497,7 +497,9 @@
       m.knock = Math.max(0, m.knock - dt);
       m.ai.attackCd = Math.max(0, m.ai.attackCd - dt);
       const fx = Math.floor(m.x), fz = Math.floor(m.z);
-      const inWater = w.get(fx, Math.floor(m.y + 0.4), fz) === B.WATER;
+      const inWater = CM.isWater(w.get(fx, Math.floor(m.y + 0.4), fz));
+      // dans les flammes : la créature prend feu
+      if (w.get(fx, Math.floor(m.y + 0.2), fz) === B.FIRE && !(m.fire > 0)) m.fire = 8;
       let tvx = 0, tvz = 0, jump = false;
       const def = MOBS[m.type];
       const dxp = p.x - m.x, dzp = p.z - m.z, dyp = p.y - m.y;
@@ -678,6 +680,11 @@
         m.vz += (tvz - m.vz) * Math.min(1, acc * dt);
       }
       if (inWater) {
+        const fv = CM.flowVector(w, fx, Math.floor(m.y + 0.4), fz);
+        if (fv) {
+          m.vx += fv[0] * 6 * dt;
+          m.vz += fv[1] * 6 * dt;
+        }
         m.vy += 22 * dt;
         m.vy = Math.min(m.vy, 2.5);
         m.vy -= 14 * dt;
@@ -813,9 +820,22 @@
       d.age += dt;
       d.pickDelay -= dt;
       if (d.age > 600) d.dead = true;
-      const inWater = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z)) === B.WATER;
+      const cell = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z));
+      const inWater = CM.isWater(cell);
+      // un objet tombé dans le feu brûle
+      if (cell === B.FIRE && d.age > 0.5) {
+        d.dead = true;
+        this.burst(CM.Textures.layer.smoke, d.x, d.y + 0.2, d.z, 4, { speed: 0.6, grav: -2, life: 0.8, size: 0.15 });
+        return;
+      }
       if (inWater) {
         d.vy += (2 - d.vy) * Math.min(1, dt * 3);
+        // le courant emporte les objets (pratique pour les ramasser en bout de champ)
+        const fv = CM.flowVector(w, Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z));
+        if (fv) {
+          d.vx += (fv[0] * 2.2 - d.vx) * Math.min(1, dt * 3);
+          d.vz += (fv[1] * 2.2 - d.vz) * Math.min(1, dt * 3);
+        }
       } else d.vy -= 18 * dt;
       // le joueur le plus proche l'attire (un invité seulement s'il a de la place)
       let p = null, dist = 3;
@@ -966,7 +986,7 @@
         for (let y = Math.min(H - 3, Math.floor(p.y) + 8); y > Math.max(2, Math.floor(p.y) - 16); y--) cands.push(y);
         for (const y of cands) {
           if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
-          if (w.get(x, y, z) === B.WATER || w.get(x, y - 1, z) === B.WATER) continue;
+          if (CM.isWater(w.get(x, y, z)) || CM.isWater(w.get(x, y - 1, z))) continue;
           const bl = w.blockLightAt(x, y, z);
           const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
           if (bl < 4 && sky < 4) {

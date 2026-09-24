@@ -1532,6 +1532,29 @@
         for (let y = 10; y < 16; y++) for (let x = 3; x < 13; x++) put(d, x, y, [0, 0, 0, 0]);
       }
     },
+    // flammes : langues verticales, jaune au cœur, rouge sur les bords, fond transparent
+    fire(d, r) {
+      clear(d);
+      for (let x = 0; x < 16; x++) {
+        const h = 6 + Math.floor(r() * 9) + (x % 4 === 1 ? 2 : 0);
+        for (let y = 15; y > 15 - h && y >= 0; y--) {
+          const t = (15 - y) / h, edge = t > 0.8;
+          const c = edge ? [220, 60, 20] : t > 0.5 ? [250, 140, 30] : t > 0.25 ? [255, 200, 60] : [255, 240, 150];
+          put(d, x, y, vary(c, r, 10), edge ? 200 : 255);
+        }
+      }
+    },
+    // enclume : fer sombre, dessus plus clair avec un rebord
+    anvil(d, r, s) {
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary([62, 62, 66], r, 5));
+      if (s.part === 0) {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (x < 2 || x > 13 || y < 1 || y > 14) put(d, x, y, vary([48, 48, 52], r, 4));
+        for (let y = 3; y < 13; y++) for (let x = 4; x < 12; x++) put(d, x, y, vary([84, 84, 90], r, 5));
+      } else {
+        for (let x = 0; x < 16; x++) { put(d, x, 0, [96, 96, 102]); put(d, x, 15, [40, 40, 44]); }
+        for (let y = 5; y < 11; y++) put(d, 2 + ((y * 7) % 11), y, [80, 80, 86]);
+      }
+    },
     // table d'enchantement : dessus (tapis rouge, bord d'obsidienne, diamants aux coins), côté (visible des lignes 4 à 15)
     enchtable(d, r, s) {
       const obs = [24, 20, 36], obs2 = [44, 30, 68], red = [150, 26, 40], red2 = [110, 16, 30], dia = [90, 230, 222];
@@ -2357,6 +2380,10 @@
     for (const x of [5, 8, 11]) put(d, x, 7, [150, 96, 40]);
   });
   // livre flottant de la table d'enchantement et runes qui volent vers lui
+  make('anvil_item', (d) => {
+    clear(d);
+    art(d, ['', '', '', '.oooooooooooooo', '.oHHHHHHHHHHHHo', '.ohhhhhhhhhhhho', '..oooohhhhdoooo', '.....ohhhdo', '.....ohhhdo', '....ohhhhhdo', '...ohhhhhhhdo', '...oddddddddo', '...oooooooooo'], { o: [24, 24, 28], H: [120, 120, 128], h: [78, 78, 84], d: [52, 52, 58] });
+  });
   make('flame', (d, r) => {
     clear(d);
     disc(d, 7.5, 9, 5.5, (x, y, dist) => put(d, x, y, dist < 2.5 ? [255, 240, 150] : dist < 4.2 ? [255, 170, 40] : [230, 80, 20]));

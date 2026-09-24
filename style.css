@@ -478,3 +478,20 @@ body.touch #armor-panel .ap-num { min-width: 40px; }
   mix-blend-mode: screen; animation: glint 2.6s linear infinite; }
 @keyframes glint { from { background-position: 100% 0; } to { background-position: -50% 0; } }
 .tt-ench { color: #c9a8ff; font-weight: 700; }
+
+/* ---- en feu ---- */
+#hud::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s; background: radial-gradient(ellipse at 50% 120%, rgba(255, 120, 20, 0.55), rgba(255, 60, 0, 0.18) 45%, transparent 70%); }
+#hud.burning::after { opacity: 1; animation: burnflick 0.35s infinite alternate; }
+@keyframes burnflick { from { filter: brightness(1); } to { filter: brightness(1.35); } }
+
+/* ---- enclume ---- */
+.anvil-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
+.anvil-row .slot { width: 52px; height: 52px; cursor: pointer; }
+#anvil-out { cursor: default; background: rgba(140, 255, 90, 0.08); border-color: rgba(140, 255, 90, 0.35); }
+.anvil-row .slot .icon.ph { opacity: 0.16; filter: grayscale(1); }
+.anvil-op { font-size: 22px; font-weight: 900; color: var(--muted); }
+#anvil-info { min-height: 36px; font-size: 12px; color: var(--muted); margin-bottom: 8px; max-width: 330px; }
+#anvil-info b { color: #fff; }
+#anvil-info .cost { color: #8cff3a; font-weight: 900; }
+#anvil-info .warn { color: #ff8a8a; }
+#anvil-go:disabled { opacity: 0.45; }
