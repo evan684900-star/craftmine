@@ -136,7 +136,7 @@
       { k: 'dayLength', t: 'select', label: "Durée d'une journée", opts: [[5, '5 minutes'], [10, '10 minutes'], [20, '20 minutes'], [40, '40 minutes']] },
       { k: 'keepInventory', t: 'check', label: "Garder l'inventaire à la mort" },
       { k: 'fireSpread', t: 'check', label: 'Le feu se propage (bois, feuilles, laine, herbes…)', note: 'Désactivé : le feu reste là où on l’allume et brûle sans rien détruire.' },
-      { k: 'showQuests', t: 'check', label: 'Afficher les objectifs à l’écran' },
+      { k: 'showQuests', t: 'check', label: 'Afficher le guide (objectifs à l’écran)' },
       { k: 'autosave', t: 'select', label: 'Sauvegarde automatique', opts: [[30, 'Toutes les 30 s'], [45, 'Toutes les 45 s'], [120, 'Toutes les 2 min'], [300, 'Toutes les 5 min']] },
     ]],
     ['audio', 'Audio', [
@@ -1409,6 +1409,7 @@
         '<br>Jour ' + (g.dayCount + 1) + ' · ' + g.world.editCount() + ' blocs modifiés' +
         (net.active ? '<br><br>' + net.playersHTML() : '');
       // multijoueur : l'invité ne gère pas la sauvegarde du monde
+      $('btn-guide').textContent = g.options.showQuests ? 'Masquer le guide' : 'Afficher le guide';
       $('btn-lan').textContent = net.isHost ? 'Inviter des amis (code ' + net.code + ')' : 'Ouvrir aux amis (multijoueur)';
       $('btn-lan').classList.toggle('hidden', net.isClient);
       $('btn-export2').classList.toggle('hidden', net.isClient);

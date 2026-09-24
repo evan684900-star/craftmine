@@ -934,6 +934,12 @@
       });
       on('btn-resume', () => this.resume());
       on('btn-save', () => this.save(false));
+      // guide (objectifs à l'écran) : bouton du menu pause et croix sur le panneau
+      on('btn-guide', () => this.setGuide(!this.options.showQuests));
+      on('obj-close', (e) => {
+        e.stopPropagation();
+        this.setGuide(false);
+      });
       on('btn-quit', () => this.exitToMenu());
       on('btn-wake', () => this.wake('button'));
       // multijoueur
@@ -1109,6 +1115,12 @@
       this.optionsFrom = from;
       this.ui.hide(from);
       this.ui.openOptions(from === 'pause');
+    }
+    setGuide(show) {
+      this.options.showQuests = show;
+      this.applyOptions();
+      if (this.ui) this.ui.refreshPause();
+      this.ui.toast(show ? 'Guide affiché' : 'Guide masqué — Pause > « Afficher le guide » pour le remettre', 'info', 'guide');
     }
     pause() {
       this.paused = true;

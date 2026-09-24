@@ -121,7 +121,7 @@ Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
 | 💥 **TNT** | S'allume au briquet (ou avec une torche) et explose en réaction en chaîne. |
 | ☀ **Objectif final** | Forger le **Cœur d'aube** (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et le poser : il chasse définitivement les Ombres alentour. |
 
-Un **journal de quêtes** guide la progression (désactivable dans les Options) :
+Un **journal de quêtes** guide la progression ; on le masque (et on le remet) avec le bouton « Masquer le guide » du menu Pause, la croix du panneau ou les Options :
 bois → établi → pioche → pierre → torches → forge → fer → grappin → cristal → essence d'ombre → îles célestes → Cœur d'aube.
 
 ## Contenu
