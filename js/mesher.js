@@ -319,7 +319,12 @@
               blk4[k] = 255;
               sh4[k] = 255;
             }
-            boxQuads(opaqueBuf, LAYERS[id][0], bx + 7, by, bz + 7, bx + 9, by + 10, bz + 9, 7, 6, 9, 16);
+            if (b.wall) {
+              // torche murale : pied contre le mur, penchée vers l'extérieur (sommet décalé de 4/16)
+              const [dx, dz] = b.wall;
+              const x0 = dx > 0 ? 0 : dx < 0 ? 14 : 7, z0 = dz > 0 ? 0 : dz < 0 ? 14 : 7;
+              boxQuads(opaqueBuf, LAYERS[id][0], bx + x0, by + 3, bz + z0, bx + x0 + 2, by + 13, bz + z0 + 2, 7, 6, 9, 16, dx * 4, dz * 4);
+            } else boxQuads(opaqueBuf, LAYERS[id][0], bx + 7, by, bz + 7, bx + 9, by + 10, bz + 9, 7, 6, 9, 16);
           }
         }
     return {
@@ -382,15 +387,19 @@
   }
 
   // Petite boîte (torche) avec coordonnées de texture personnalisées.
-  function boxQuads(buf, layer, x0, y0, z0, x1, y1, z1, u0, v0, u1, v1) {
+  // shx, shz : décalage du haut de la boîte (torche penchée) ; le dessous est alors visible.
+  function boxQuads(buf, layer, x0, y0, z0, x1, y1, z1, u0, v0, u1, v1, shx, shz) {
+    const lean = !!(shx || shz);
     for (let fi = 0; fi < 6; fi++) {
-      if (fi === 3) continue;
+      if (fi === 3 && !lean) continue;
       const f = FACES[fi];
       const q = f.v.map((v) => {
         let u = v[3] ? u1 : u0;
         let vv = v[4] ? v1 : v0;
         if (fi === 2) vv = v[4] ? v0 + 2 : v0;
-        return [v[0] ? x1 : x0, v[1] ? y1 : y0, v[2] ? z1 : z0, u, vv];
+        else if (fi === 3) vv = v[4] ? v1 : v1 - 2;
+        const top = v[1] ? 1 : 0;
+        return [(v[0] ? x1 : x0) + (top ? shx || 0 : 0), v[1] ? y1 : y0, (v[2] ? z1 : z0) + (top ? shz || 0 : 0), u, vv];
       });
       buf.quad(q, layer, sky4, blk4, sh4, 0);
     }

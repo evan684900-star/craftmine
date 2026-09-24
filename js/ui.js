@@ -10,7 +10,9 @@
   // Texte d'aide partagé (menu principal + onglet « Mécaniques »).
   const GUIDE = [
     ['🍗 La faim', "La barre de faim (à droite des cœurs) baisse quand tu cours, sautes, mines, nages ou te bats. Faim presque pleine : tes cœurs remontent tout seuls. Faim à zéro : tu perds de la vie. En dessous de 3 cuisses tu ne peux plus courir ni faire de ruée. Chaque aliment rend de la faim et de la saturation (qui retarde la prochaine fringale) : la viande grillée, le pain et la tarte à la citrouille sont les plus nourrissants. Sous l'eau, surveille tes bulles d'air."],
-    ['🌾 Cultures', "Casse des herbes hautes pour trouver des graines. Laboure la terre avec une houe (clic droit), plante les graines puis récolte le blé mûr. 3 blés = 1 pain. La poudre d'os (clic droit) fait pousser instantanément cultures, pousses et fleurs."],
+    ['🌾 Agriculture', "Laboure la terre avec une houe (clic droit), puis plante : graines de blé ou de betterave (herbes hautes), carottes et pommes de terre (herbes hautes, villages, coffres), graines de citrouille ou de pastèque (1 citrouille = 4 graines, 1 tranche = 1 graine). Avec de l'eau à 4 blocs ou moins, la terre devient irriguée (plus sombre) et tout pousse 2,5 fois plus vite ; laissée sèche et vide, elle redevient de la terre. Un seau (3 lingots de fer) ramasse de l'eau et la verse où tu veux (versée juste avant de toucher le sol, elle annule les dégâts de chute : le fameux MLG !). Une tige adulte fait pousser une citrouille ou une pastèque sur une case libre à côté. La poudre d'os accélère tout."],
+    ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons ; carotte, pomme de terre ou betterave pour les sangliers. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
+    ['🍞 Manger', "Garde le clic droit enfoncé 1 seconde avec un aliment en main (sur téléphone, un toucher suffit : tu manges jusqu'au bout sauf si tu changes d'objet). On avance lentement pendant qu'on mange."],
     ['🪝 Grappin', "Fabrique-le avec 3 lingots de fer et 2 cordes. En main, clic droit sur un bloc jusqu'à 34 blocs : tu es tiré vers lui en gardant ton élan. Saut pendant la traction pour te décrocher avec un bond."],
     ['💨 Ruée et double saut', "La touche de ruée (F) lance un sprint éclair (tu es brièvement invulnérable et tu frappes plus fort). Tu peux la diriger pendant qu'elle dure : tourne la caméra ou change de direction, même dans l'élan en l'air. L'Amulette de plume, gardée dans l'inventaire, donne un double saut."],
     ['🔥 Combo de minage', "Casse des blocs à la suite (moins de 2,4 s d'écart) : chaque niveau de combo accélère le minage. À partir de x5, les minerais peuvent donner un double butin."],
@@ -24,7 +26,7 @@
     ['🗺 Biomes', "Plus de 20 biomes : plaines, prairies fleuries, forêts (chêne, bouleau, chêne noir), bosquets de cerisiers, taïga, taïga enneigée, toundra, pics de glace, savane, jungle, bambouseraie, marais, mangrove, désert, canyon rouge, montagnes, champignonnière, terres volcaniques, forêts fongiques, océans chauds à coraux, océans, lacs… et la Sylve cristalline. La taille des biomes se règle en créant le monde."],
     ['⛏ Minerais', "Charbon, fer, cuivre, or (canyons rouges), lapis-lazuli, redstone, diamant (très profond), émeraude et rubis (montagnes), cristal (sous la couche 20), quartz et or du Nether (terres volcaniques), débris antiques → netherite, et éclats célestes. Sous la couche 14, les minerais sont dans l'ardoise des abîmes."],
     ['🏛 Ruines', "Des ruines cachent un coffre rempli de butin : lingots, nourriture, diamants, livres, pousses, parfois un rubis ou un éclat céleste."],
-    ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs de blé, forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
+    ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs (blé, carottes, pommes de terre, betteraves), forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
     ['🚪 Portes et lits', "Porte : 6 planches d'une même essence (chêne, sapin, bouleau, acacia) donnent 3 portes à l'Établi ; clic droit pour l'ouvrir ou la fermer. Lit : 3 laines + 3 planches. Clic droit sur un lit pour y placer ton point de réapparition ; la nuit, tu t'y couches et passes au matin (en multijoueur, quand tout le monde est couché). Pas de sommeil si des Ombres rôdent tout près !"],
     ['🗿 Golem de fer', "Il garde les villages et écrase les Ombres. Construis le tien : 2 blocs de fer l'un sur l'autre, 1 bloc de fer de chaque côté en haut (un T), puis une citrouille par-dessus. Il patrouille autour de l'endroit où tu l'as construit. Attention : il se venge si tu le frappes, lui ou un villageois."],
     ['🐗 Faune', "Mouflons dans les prairies (laine, viande), sangliers dans les forêts (cuir ; ils chargent si on les attaque !), pingouins sur la neige (plumes pour l'Amulette de plume)."],
@@ -854,13 +856,17 @@
         if (info.toolType === 'axe' && info.tier >= 3) h += '<div class="tt-sub">Abat l’arbre entier d’un coup.</div>';
         if (info.toolType === 'axe') h += '<div class="tt-sub">Clic droit sur une bûche : l’écorcer.</div>';
       } else if (info.type === 'food') {
-        h += '<div class="tt-sub">Clic droit pour manger : +' + info.food / 2 + ' 🍗 (saturation ' + info.sat + ')' + (info.regen ? ', Régénération' : '') + '</div>';
+        h += '<div class="tt-sub">Clic droit maintenu 1 s pour manger : +' + info.food / 2 + ' 🍗 (saturation ' + info.sat + ')' + (info.regen ? ', Régénération' : '') + '</div>';
+        if (info.plant) h += '<div class="tt-sub">Clic droit sur de la terre labourée pour planter.</div>';
+        for (const [ty, foods] of Object.entries(CM.BREED_FOOD)) if (foods.includes(info.id)) h += '<div class="tt-sub">Plaît aux ' + (ty === 'boar' ? 'sangliers' : 'mouflons') + ' (élevage).</div>';
       } else if (info.type === 'charm') {
         h += '<div class="tt-gold">' + info.desc + '</div>';
       } else if (info.type === 'grapple') {
         h += '<div class="tt-sub">Clic droit : s’accrocher à un bloc (34 blocs). Saut : se décrocher.</div>';
       } else if (info.type === 'seeds') {
         h += '<div class="tt-sub">Clic droit sur de la terre labourée pour planter.</div>';
+      } else if (info.type === 'bucket') {
+        h += '<div class="tt-sub">' + info.desc + '</div>';
       } else if (info.type === 'bonemeal') {
         h += '<div class="tt-sub">Clic droit : fait pousser cultures, pousses et fleurs.</div>';
       } else if (info.type === 'igniter') {

@@ -7,20 +7,24 @@
 
   // ---------------------------------------------------------- physique ---
   const EPS = 1e-4;
-  // Les blocs partiels (dalles, tapis) occupent le bas de leur case : [y, y + hauteur].
+  // Chaque case a sa boîte de collision (bloc plein, dalle, tapis, battant de porte…).
   CM.Physics = {
-    // Parcourt les cases solides qui chevauchent la boîte ; fn(x, y, z, hauteur) peut renvoyer true pour arrêter.
+    // Parcourt les boîtes solides qui chevauchent la boîte ; fn(x, y, z, boîte) peut renvoyer true pour arrêter.
     each(world, x, y, z, hw, h, fn) {
       const x0 = Math.floor(x - hw), x1 = Math.floor(x + hw - 1e-7);
       const y0 = Math.floor(y), y1 = Math.floor(y + h - 1e-7);
       const z0 = Math.floor(z - hw), z1 = Math.floor(z + hw - 1e-7);
+      const FULL = CM.FULL_BOX;
       for (let yy = y0; yy <= y1; yy++)
         for (let zz = z0; zz <= z1; zz++)
           for (let xx = x0; xx <= x1; xx++) {
-            const sh = world.solidHeight(xx, yy, zz);
-            if (sh <= 0) continue;
-            if (yy + sh <= y || yy >= y + h) continue;
-            if (fn(xx, yy, zz, sh)) return true;
+            const b = world.colBox(xx, yy, zz);
+            if (!b) continue;
+            if (b !== FULL) {
+              if (yy + b[4] <= y || yy + b[1] >= y + h) continue;
+              if (xx + b[3] <= x - hw || xx + b[0] >= x + hw || zz + b[5] <= z - hw || zz + b[2] >= z + hw) continue;
+            }
+            if (fn(xx, yy, zz, b)) return true;
           }
       return false;
     },
@@ -30,8 +34,8 @@
     // Hauteur du plus haut obstacle chevauché (ou -Infinity).
     topOf(world, x, y, z, hw, h) {
       let top = -Infinity;
-      this.each(world, x, y, z, hw, h, (xx, yy, zz, sh) => {
-        top = Math.max(top, yy + sh);
+      this.each(world, x, y, z, hw, h, (xx, yy, zz, b) => {
+        top = Math.max(top, yy + b[4]);
       });
       return top;
     },
@@ -54,8 +58,8 @@
               e.landed = true;
             } else {
               let low = Infinity;
-              this.each(world, e.x, e.y, e.z, e.hw, e.h, (xx, yy) => {
-                low = Math.min(low, yy);
+              this.each(world, e.x, e.y, e.z, e.hw, e.h, (xx, yy, zz, b) => {
+                low = Math.min(low, yy + b[1]);
               });
               e.y = low - e.h - EPS;
             }
@@ -78,8 +82,24 @@
               continue;
             }
           }
-          const cell = Math.floor(dv > 0 ? e[axis] + e.hw : e[axis] - e.hw);
-          e[axis] = dv > 0 ? cell - e.hw - EPS : cell + 1 + e.hw + EPS;
+          // on s'arrête contre la face de la boîte la plus proche devant soi
+          const prev = e[axis] - dv, a0 = axis === 'x' ? 0 : 2;
+          let edge = dv > 0 ? Infinity : -Infinity;
+          this.each(world, e.x, e.y, e.z, e.hw, e.h, (xx, yy, zz, b) => {
+            const c = axis === 'x' ? xx : zz;
+            if (dv > 0) {
+              const f = c + b[a0];
+              if (f >= prev + e.hw - 1e-3) edge = Math.min(edge, f);
+            } else {
+              const f = c + b[a0 + 3];
+              if (f <= prev - e.hw + 1e-3) edge = Math.max(edge, f);
+            }
+          });
+          if (edge === Infinity || edge === -Infinity) {
+            // déjà coincé dans un bloc : on se cale sur la case comme avant
+            const cell = Math.floor(dv > 0 ? e[axis] + e.hw : e[axis] - e.hw);
+            e[axis] = dv > 0 ? cell - e.hw - EPS : cell + 1 + e.hw + EPS;
+          } else e[axis] = dv > 0 ? edge - e.hw - EPS : edge + e.hw + EPS;
           if (axis === 'x') { e.hitX = true; dx = 0; } else { e.hitZ = true; dz = 0; }
         }
       }
@@ -107,19 +127,25 @@
   };
 
   const MOBS = {
-    mouflon: { hw: 0.4, h: 1.15, hp: 8, speed: 1.4, passive: true },
-    boar: { hw: 0.45, h: 0.95, hp: 12, speed: 1.5, passive: true },
+    // pick : la boîte de frappe déborde un peu (tête et museau dépassent du corps)
+    mouflon: { hw: 0.4, h: 1.15, hp: 8, speed: 1.4, passive: true, pick: 1.35 },
+    boar: { hw: 0.45, h: 0.95, hp: 12, speed: 1.5, passive: true, pick: 1.25 },
     penguin: { hw: 0.28, h: 0.95, hp: 6, speed: 1.1, passive: true },
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
     villager: { hw: 0.3, h: 1.95, hp: 20, speed: 1.1, passive: true },
     golem: { hw: 0.65, h: 2.6, hp: 100, speed: 0.9 },
   };
+  // Élevage : la nourriture qui rend un animal amoureux (il suit aussi le joueur qui la tient).
+  CM.BREED_FOOD = { mouflon: [I.WHEAT], boar: [I.CARROT, I.POTATO, I.BEETROOT] };
+  const BABY_TIME = 300; // un petit devient adulte en 5 minutes
+  const BABY_SCALE = 0.55;
 
   // Métiers des villageois : robe et échanges ([ce qu'on donne], [ce qu'on reçoit]).
   const PROFS = [
     ['Fermier', 'wool_brown', [
-      [[['WHEAT', 20]], ['EMERALD', 1]], [[['SEEDS', 16]], ['EMERALD', 1]], [[['EMERALD', 1]], ['BREAD', 6]],
-      [[['EMERALD', 1]], ['APPLE', 4]], [[['EMERALD', 2]], ['PUMPKIN_PIE', 3]], [[['EMERALD', 6]], ['GOLDEN_APPLE', 1]],
+      [[['WHEAT', 20]], ['EMERALD', 1]], [[['CARROT', 16]], ['EMERALD', 1]], [[['POTATO', 16]], ['EMERALD', 1]], [[['BEETROOT', 12]], ['EMERALD', 1]],
+      [[['EMERALD', 1]], ['BREAD', 6]], [[['EMERALD', 1]], ['PUMPKIN_SEEDS', 4]], [[['EMERALD', 1]], ['MELON_SEEDS', 4]],
+      [[['EMERALD', 2]], ['PUMPKIN_PIE', 3]], [[['EMERALD', 3]], ['GOLDEN_CARROT', 3]], [[['EMERALD', 6]], ['GOLDEN_APPLE', 1]],
     ]],
     ['Forgeron', 'wool_gray', [
       [[['COAL', 12]], ['EMERALD', 1]], [[['IRON_INGOT', 4]], ['EMERALD', 1]], [[['EMERALD', 3]], ['AXE_IRON', 1]],
@@ -174,6 +200,10 @@
       this.dead = false;
       this.age = 0;
       this.ai = { timer: 0, dir: null, flee: 0, attackCd: 0, chasing: false, angry: 0 };
+      this.love = 0; // amoureux (secondes restantes)
+      this.loveCd = 0; // repos après avoir eu un petit
+      this.baby = 0; // petit : secondes avant d'être adulte
+      this.tame = false; // animal d'élevage : gardé (et sauvegardé) même loin du joueur
     }
   }
 
@@ -355,6 +385,9 @@
         }
         m.hflag = fl & 1;
         m.ai.chasing = !!(fl & 2);
+        if (!!(fl & 4) !== m.baby > 0) this.setBaby(m, fl & 4 ? 1 : 0);
+        m.love = fl & 8 ? 1 : 0;
+        m.loveCd = fl & 16 ? 1 : 0;
         this.mobs.push(m);
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
@@ -405,6 +438,7 @@
         m.age += dt;
         m.hurt = Math.max(0, m.hurt - dt);
         const dist = Math.hypot(p.x - m.x, p.z - m.z);
+        if (m.love > 0 && dist < 40 && r() < dt * 3) this.hearts(m, 1);
         if (MOBS[m.type].passive) {
           if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
         } else {
@@ -429,10 +463,20 @@
       const lp = g.player;
       const distL = Math.hypot(lp.x - m.x, lp.z - m.z); // distance au joueur de cet écran (sons, effets)
       if (!w.loaded(m.x, m.z)) {
+        if (m.tame) this.stash(m);
         m.dead = true;
         return;
       }
       m.age += dt;
+      if (m.love > 0) {
+        m.love -= dt;
+        if (distL < 40 && r() < dt * 3) this.hearts(m, 1);
+      }
+      if (m.loveCd > 0) m.loveCd -= dt;
+      if (m.baby > 0) {
+        m.baby -= dt;
+        if (m.baby <= 0) this.setBaby(m, 0);
+      }
       m.hurt = Math.max(0, m.hurt - dt);
       m.knock = Math.max(0, m.knock - dt);
       m.ai.attackCd = Math.max(0, m.ai.attackCd - dt);
@@ -520,6 +564,15 @@
           m.ai.dir = Math.atan2(dxp, dzp);
           speed = 4.2;
           if (m.hitX || m.hitZ) m.ai.dir += (r() - 0.5) * 2;
+        } else if (CM.BREED_FOOD[m.type] && (this.findMate(m) || this.tempter(m))) {
+          // amoureux : rejoint un partenaire ; sinon suit le joueur qui tient sa nourriture
+          const mate = this.findMate(m), o = mate || this.tempter(m);
+          const dx = o.x - m.x, dz = o.z - m.z, d = Math.hypot(dx, dz);
+          m.ai.dir = d > (mate ? 0.7 : 2.2) ? Math.atan2(-dx, -dz) : null;
+          if (m.ai.dir === null) m.yaw = Math.atan2(-dx, -dz);
+          m.ai.timer = 0.5;
+          if (mate) speed = def.speed * 1.3;
+          if (mate && d < 1.4) this.breed(m, mate);
         } else {
           m.ai.timer -= dt;
           if (m.ai.timer <= 0) {
@@ -776,7 +829,21 @@
       for (const m of this.mobs) {
         let dist = Infinity;
         for (const q of pls) dist = Math.min(dist, Math.hypot(m.x - q.x, m.z - q.z));
-        if (dist > (MOBS[m.type].passive ? 110 : 70)) m.dead = true;
+        if (dist > (MOBS[m.type].passive ? 110 : 70)) {
+          if (m.tame) this.stash(m);
+          m.dead = true;
+        }
+      }
+      // animaux d'élevage mis de côté : ils reviennent quand un joueur s'approche
+      const pen = g.animals || [];
+      for (let i = pen.length - 1; i >= 0; i--) {
+        const a = pen[i];
+        if (!w.loaded(a[1], a[3]) || !pls.some((q) => Math.hypot(a[1] - q.x, a[3] - q.z) < 90)) continue;
+        pen.splice(i, 1);
+        if (!MOBS[a[0]]) continue;
+        const m = this.addMob(a[0], a[1], a[2], a[3]);
+        m.tame = true;
+        if (a[4] > 0) this.setBaby(m, a[4]);
       }
       const nightfall = this.nightfall;
       this.nightfall = false;
@@ -792,7 +859,7 @@
       for (const m of this.mobs) {
         if (m.dead) continue;
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
-        if (m.type === 'villager' || m.type === 'golem') continue;
+        if (m.type === 'villager' || m.type === 'golem' || m.tame) continue;
         if (MOBS[m.type].passive) {
           if (dist <= 110) nMouf++;
         } else if (dist <= 70) nOmbre++;
@@ -904,11 +971,89 @@
       }
     }
 
+    // ------------------------------------------------------- élevage --
+    hearts(m, n) {
+      const s = m.baby > 0 ? BABY_SCALE : 1;
+      this.burst(CM.Textures.layer.heart, m.x, m.y + m.h + 0.2 * s, m.z, n, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true });
+    }
+    setBaby(m, t) {
+      const def = MOBS[m.type];
+      m.baby = t;
+      m.hw = def.hw * (t > 0 ? BABY_SCALE : 1);
+      m.h = def.h * (t > 0 ? BABY_SCALE : 1);
+    }
+    // Nourrir un animal : amoureux (adulte) ou croissance accélérée (petit). Renvoie true si accepté.
+    feedMob(m) {
+      const foods = CM.BREED_FOOD[m.type];
+      if (!foods || m.dead) return false;
+      if (m.baby > 0) {
+        m.baby = Math.max(0.01, m.baby - BABY_TIME * 0.1);
+        this.hearts(m, 2);
+      } else {
+        if (m.love > 0 || m.loveCd > 0) return false;
+        m.love = 30;
+        this.hearts(m, 6);
+      }
+      m.tame = true;
+      m.ai.flee = 0;
+      if (this.game.net) this.game.net.fx({ k: 'love', x: m.x, y: m.y + m.h, z: m.z });
+      return true;
+    }
+    findMate(m) {
+      if (m.love <= 0 || m.baby > 0) return null;
+      let best = null, bd = 8;
+      for (const o of this.mobs) {
+        if (o === m || o.type !== m.type || o.dead || o.love <= 0 || o.baby > 0) continue;
+        const d = Math.hypot(o.x - m.x, o.z - m.z);
+        if (d < bd && Math.abs(o.y - m.y) < 3) {
+          bd = d;
+          best = o;
+        }
+      }
+      return best;
+    }
+    // Joueur proche qui tient la nourriture de cet animal.
+    tempter(m) {
+      const foods = CM.BREED_FOOD[m.type], g = this.game;
+      for (const q of this.plist) {
+        if (!q.alive || Math.hypot(q.x - m.x, q.z - m.z) > 8 || Math.abs(q.y - m.y) > 3) continue;
+        const held = q === g.player ? g.inventory.held() && g.inventory.held().id : q.held;
+        if (held && foods.includes(held)) return q;
+      }
+      return null;
+    }
+    breed(a, b) {
+      a.love = b.love = 0;
+      a.loveCd = b.loveCd = 60;
+      const baby = this.addMob(a.type, (a.x + b.x) / 2, Math.max(a.y, b.y), (a.z + b.z) / 2);
+      this.setBaby(baby, BABY_TIME);
+      baby.tame = true;
+      baby.yaw = a.yaw;
+      this.hearts(baby, 8);
+      const p = this.game.player;
+      if (Math.hypot(p.x - a.x, p.z - a.z) < 20) CM.Audio.play(a.type === 'mouflon' ? 'baa' : 'grunt');
+      this.game.stats.bred = (this.game.stats.bred || 0) + 1;
+      if (this.game.net) this.game.net.fx({ k: 'love', x: baby.x, y: baby.y + 0.8, z: baby.z, n: 8 });
+    }
+    // Animal d'élevage qui sort de la zone chargée : mis de côté (et sauvegardé).
+    stash(m) {
+      const g = this.game;
+      if (!g.animals) g.animals = [];
+      g.animals.push([m.type, Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, Math.round(m.z * 10) / 10, Math.round(m.baby)]);
+    }
+    // Pour la sauvegarde : animaux présents + mis de côté.
+    tameList() {
+      const out = (this.game.animals || []).slice();
+      for (const m of this.mobs) if (m.tame && !m.dead) out.push([m.type, Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, Math.round(m.z * 10) / 10, Math.round(m.baby)]);
+      return out;
+    }
+
     // Rayon vers les créatures (pour attaquer).
     raycastMob(ox, oy, oz, dx, dy, dz, maxD) {
       let best = null, bestT = maxD;
       for (const m of this.mobs) {
-        const t = CM.rayBox(ox, oy, oz, dx, dy, dz, m.x - m.hw, m.y, m.z - m.hw, m.x + m.hw, m.y + m.h, m.z + m.hw);
+        const hw = m.hw * (MOBS[m.type].pick || 1);
+        const t = CM.rayBox(ox, oy, oz, dx, dy, dz, m.x - hw, m.y, m.z - hw, m.x + hw, m.y + m.h, m.z + hw);
         if (t >= 0 && t < bestT) {
           bestT = t;
           best = m;
@@ -935,7 +1080,7 @@
       for (const m of this.mobs) {
         const l = this.lightAt(m.x, m.y + 0.6, m.z);
         const flags = m.hurt > 0 ? 2 : 0;
-        mat4.compose(this.M, m.x, m.y, m.z, m.yaw, 0, 0, 1);
+        mat4.compose(this.M, m.x, m.y, m.z, m.yaw, 0, 0, m.baby > 0 ? BABY_SCALE : 1);
         const sw = m.moving ? Math.sin(m.walk) : 0;
         if (m.type === 'mouflon') {
           const wool = L.mouflon_wool, skin = L.mouflon_skin;

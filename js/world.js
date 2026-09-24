@@ -258,6 +258,7 @@
       this.legacy = this.settings.gen === 1;
       // villages : mondes créés depuis leur ajout (générateur 3), pour ne pas changer les anciens
       this.hasVillages = !this.legacy && (this.settings.gen || 2) >= 3;
+      this.mixedFarms = (this.settings.gen || 2) >= 4; // champs variés et irrigués dans les villages
       this.villageCache = new Map();
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
@@ -301,14 +302,18 @@
       const c = this.chunkAt(x, z);
       return c ? CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]].solid : true;
     }
+    // Boîte de collision d'une case (null : vide ou traversable). Tronçon non chargé : mur.
+    colBox(x, y, z) {
+      if (y < 0) return CM.FULL_BOX;
+      if (y >= H) return null;
+      const c = this.chunkAt(x, z);
+      if (!c) return CM.FULL_BOX;
+      return CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]].col;
+    }
     // Hauteur de la partie solide d'une case (0 : vide, 1 : bloc plein, 0.5 : dalle…).
     solidHeight(x, y, z) {
-      if (y < 0) return 1;
-      if (y >= H) return 0;
-      const c = this.chunkAt(x, z);
-      if (!c) return 1;
-      const b = CM.blocks[c.blocks[lidx(x & 15, y, z & 15)]];
-      return b.solid ? b.height : 0;
+      const b = this.colBox(x, y, z);
+      return b ? b[4] : 0;
     }
     skyAt(x, y, z) {
       if (y >= H) return 15;
@@ -1346,9 +1351,18 @@
               if (edge) set(X, y, Z, st.log);
               else if (u === (w >> 1)) set(X, y, Z, Bk.WATER);
               else {
-                set(X, y, Z, Bk.FARMLAND);
                 const g = hsh(X, y, Z, 2);
-                set(X, y + 1, Z, g < 0.45 ? Bk.WHEAT_3 : g < 0.7 ? Bk.WHEAT_2 : g < 0.9 ? Bk.WHEAT_1 : Bk.WHEAT_0);
+                const stage = g < 0.45 ? 3 : g < 0.7 ? 2 : g < 0.9 ? 1 : 0;
+                if (this.mixedFarms) {
+                  // chaque moitié du champ a sa culture : blé, carottes, pommes de terre ou betteraves
+                  const k = hsh(b.ox, u < w >> 1 ? 1 : 2, b.oz, 7);
+                  const kind = k < 0.45 ? 'wheat' : k < 0.65 ? 'carrot' : k < 0.85 ? 'potato' : 'beetroot';
+                  set(X, y, Z, Bk.FARMLAND_WET);
+                  set(X, y + 1, Z, CM.CROPS[kind][stage]);
+                } else {
+                  set(X, y, Z, Bk.FARMLAND);
+                  set(X, y + 1, Z, Bk['WHEAT_' + stage]);
+                }
               }
               continue;
             }
@@ -1822,6 +1836,15 @@
       return n;
     }
     // Position monde de chaque bloc modifié ayant l'identifiant id.
+    // Cases modifiées dont le bloc vérifie test(id) : [x, y, z, id].
+    editedWhere(test) {
+      const out = [];
+      for (const [k, m] of this.edits) {
+        const cx = Math.floor(k / 0x10000) - 0x8000, cz = (k % 0x10000) - 0x8000;
+        for (const [i, b] of m) if (test(b)) out.push([cx * 16 + (i & 15), i >> 8, cz * 16 + ((i >> 4) & 15), b]);
+      }
+      return out;
+    }
     editedPositions(id) {
       const out = [];
       for (const [k, m] of this.edits) {
@@ -1875,15 +1898,25 @@
       for (let i = 0; i < 512 && t <= maxDist; i++) {
         if (y >= 0 && y < H) {
           const id = this.get(x, y, z);
-          if (id && filter(id)) {
-            const hb = CM.blocks[id].height;
-            if (hb >= 1) return { x, y, z, nx, ny, nz, t, id };
-            // bloc partiel : le rayon doit toucher sa boîte
-            const tb = CM.rayBox(ox, oy, oz, dx, dy, dz, x, y, z, x + 1, y + hb, z + 1);
+          const s = id && filter(id) ? CM.blocks[id].sel : null;
+          if (s === CM.FULL_BOX) return { x, y, z, nx, ny, nz, t, id, box: s };
+          if (s) {
+            // bloc partiel (dalle, torche, plante, porte…) : le rayon doit toucher sa boîte
+            const tb = CM.rayBox(ox, oy, oz, dx, dy, dz, x + s[0], y + s[1], z + s[2], x + s[3], y + s[4], z + s[5]);
             if (tb >= 0 && tb <= maxDist) {
-              const hy = oy + dy * tb;
-              const top = Math.abs(hy - (y + hb)) < 1e-4;
-              return { x, y, z, nx: top ? 0 : nx, ny: top ? 1 : ny, nz: top ? 0 : nz, t: tb, id, h: hb };
+              // face touchée : celle sur laquelle se trouve le point d'impact
+              const hx = ox + dx * tb - x, hy = oy + dy * tb - y, hz = oz + dz * tb - z;
+              let fx = nx, fy = ny, fz = nz;
+              if (tb > 0) {
+                const e = 1e-4;
+                if (Math.abs(hy - s[4]) < e) (fx = 0), (fy = 1), (fz = 0);
+                else if (Math.abs(hy - s[1]) < e) (fx = 0), (fy = -1), (fz = 0);
+                else if (Math.abs(hx - s[3]) < e) (fx = 1), (fy = 0), (fz = 0);
+                else if (Math.abs(hx - s[0]) < e) (fx = -1), (fy = 0), (fz = 0);
+                else if (Math.abs(hz - s[5]) < e) (fx = 0), (fy = 0), (fz = 1);
+                else if (Math.abs(hz - s[2]) < e) (fx = 0), (fy = 0), (fz = -1);
+              }
+              return { x, y, z, nx: fx, ny: fy, nz: fz, t: tb, id, box: s };
             }
           }
         }

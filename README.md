@@ -53,7 +53,7 @@ Toutes les touches se changent dans **Options > Contrôles**.
 | **C** | S'accroupir (on ne tombe pas du bord) / descendre en vol |
 | **F** | Ruée : une accélération fulgurante, brièvement invulnérable |
 | **Clic gauche** (maintenu) | Miner / frapper |
-| **Clic droit** | Poser un bloc, manger, utiliser un outil (écorcer, labourer), lancer le grappin, ouvrir un coffre |
+| **Clic droit** | Poser un bloc, manger (maintenir 1 s), utiliser un outil (écorcer, labourer), semer, nourrir un animal, lancer le grappin, ouvrir un coffre |
 | **Clic molette** | Prendre le bloc visé |
 | **E** | Inventaire, fabrication, inventaire créatif, journal, aide |
 | **1–9 / molette** | Choisir l'objet en main |
@@ -68,7 +68,7 @@ Tiens l'appareil en **mode paysage** (un message le rappelle en mode portrait).
 | --- | --- |
 | Pouce en bas à gauche de l'écran | Joystick : il apparaît sous le doigt, plus on pousse plus on va vite |
 | Glisser ailleurs | Regarder autour |
-| Toucher un bloc | Poser un bloc contre lui, l'utiliser (coffre, établi…), manger, ou frapper la créature touchée |
+| Toucher un bloc | Poser un bloc contre lui, l'utiliser (coffre, établi…), manger (le repas continue tout seul pendant 1 s), ou frapper la créature touchée |
 | Garder le doigt appuyé sur un bloc | Le casser (on peut glisser pour tourner la caméra sans lâcher) |
 | ⤒ / ⤓ | Sauter (deux fois pour voler en créatif) / s'accroupir ou descendre en vol |
 | » / ⚡ | Courir (bascule) / ruée |
@@ -100,7 +100,9 @@ Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
 | Mécanique | Dans CraftMine |
 | --- | --- |
 | 🍗 **Faim** | Comme dans Minecraft : 10 cuisses, saturation et épuisement. Courir, sauter, nager, miner, se battre et la ruée font baisser la faim. Faim presque pleine : la vie remonte seule. Faim à zéro : on perd de la vie. Sous 3 cuisses, plus de course ni de ruée. Sous l'eau, des bulles d'air remplacent l'ancien souffle. |
-| 🌾 **Cultures** | Des graines dans les herbes hautes, une houe pour labourer, du blé qui pousse au soleil, du pain. La poudre d'os fait pousser instantanément blé, pousses d'arbre et fleurs. |
+| 🌾 **Agriculture** | Houe pour labourer, puis blé, carottes, pommes de terre, betteraves, citrouilles et pastèques. La terre labourée à 4 blocs ou moins d'une eau devient **irriguée** (plus sombre) : les cultures y poussent 2,5 fois plus vite ; sèche et vide, elle redevient de la terre. Le **seau** (3 lingots de fer) ramasse et verse l'eau ; versée juste avant de toucher le sol, elle annule les dégâts de chute (**MLG**). Les tiges adultes font pousser leur citrouille ou pastèque sur une case voisine. Poudre d'os pour accélérer. Nouvelles recettes : pomme de terre cuite, soupe de betterave, carotte dorée, graines, bloc de pastèque, teintures. |
+| 🐑 **Élevage** | Clic droit sur un animal avec sa nourriture (blé : mouflon ; carotte, pomme de terre ou betterave : sanglier) : il devient amoureux, rejoint un autre animal nourri et ils ont un petit, qui grandit en 5 minutes. Les animaux suivent le joueur qui tient leur nourriture. Les animaux nourris ne disparaissent plus et sont gardés dans la sauvegarde. |
+| 🍞 **Manger** | Tout aliment se mange en 1 seconde (clic droit maintenu ; sur téléphone un toucher suffit). On avance lentement pendant le repas ; relâcher avant la fin annule. |
 | 🪝 **Grappin** | 3 lingots de fer + 2 cordes. Clic droit sur un bloc jusqu'à 34 blocs : tu es tiré vers lui en gardant ton élan. |
 | 💨 **Ruée et double saut** | `F` lance une ruée (plus de dégâts si tu frappes pendant). Elle se dirige en direct : tourne la caméra ou change de touche pendant la ruée, et même l'élan en l'air qui suit prend le virage. L'*Amulette de plume* donne un double saut. |
 | 🔥 **Combo de minage** | Casser des blocs à la suite accélère le minage. À partir de x5, les minerais peuvent donner un double butin. |
@@ -127,8 +129,10 @@ bois → établi → pioche → pierre → torches → forge → fer → grappin
   - plantes : 19 fleurs, fougère, herbes, canne à sucre, bambou, azalées, racines du Nether, gorgones, blé.
 - **Monde infini** (graine au choix, 96 blocs de haut) avec **25 biomes** : plaines, prairie fleurie, forêt, forêt de bouleaux, forêt de chênes noirs, bosquet de cerisiers, taïga, taïga enneigée, toundra, pics de glace, savane, jungle, bambouseraie, marais, mangrove, désert, canyon rouge, montagnes, champignonnière, terres volcaniques, forêt fongique, Sylve cristalline, océan, océan chaud (récifs de corail) et lacs.
 - Géodes d'améthyste, sculk dans les profondeurs, ruines (en pierre, en grès, en pierre noire ou en prismarine sous l'océan) avec un coffre de butin, îles célestes et îles de l'End avec un sanctuaire de purpur.
-- **Villages** (plaines, prairies, forêts, bouleaux, cerisiers, taïga, taïga enneigée, toundra, savane, désert) : un puits sur la place, des chemins, des lampadaires, des maisons dans le bois du biome (grès à toits plats dans le désert, toits enneigés dans le froid), des grandes maisons, des champs de blé irrigués, une forge et une bibliothèque. Certaines maisons ont un coffre (celui du forgeron est mieux garni). L'indicateur de biome affiche « · Village » quand on y entre. Les villages apparaissent dans les mondes créés à partir de cette version (les anciens mondes ne changent pas, pour ne pas abîmer les constructions).
+- **Villages** (plaines, prairies, forêts, bouleaux, cerisiers, taïga, taïga enneigée, toundra, savane, désert) : un puits sur la place, des chemins, des lampadaires, des maisons dans le bois du biome (grès à toits plats dans le désert, toits enneigés dans le froid), des grandes maisons, des champs irrigués (blé, et dans les mondes récents carottes, pommes de terre et betteraves), une forge et une bibliothèque. Certaines maisons ont un coffre (celui du forgeron est mieux garni). L'indicateur de biome affiche « · Village » quand on y entre. Les villages apparaissent dans les mondes créés à partir de cette version (les anciens mondes ne changent pas, pour ne pas abîmer les constructions).
 - **Villageois** : ils vivent autour de leur village et y reviennent s'ils s'en éloignent. Clic droit (ou toucher sur téléphone) pour **échanger** : chacun a un métier (fermier, forgeron, bibliothécaire, berger, boucher, prêtre) et achète tes récoltes, ta viande, ton charbon, ton papier, ta laine ou tes essences d'ombre contre des **émeraudes**, qu'il échange ensuite contre du pain, des outils en fer, une pioche en diamant, des lanternes, de la laine colorée, un rubis…
+- **Torches** posées au sol ou accrochées au mur visé, penchées comme dans Minecraft ; une torche murale tombe si on casse son mur.
+- **Hitbox précises** : torches, fleurs, herbes, cultures, portes, lits, dalles et tapis ont une boîte de visée et de collision à leur vraie taille (on vise le bloc derrière une fleur, on passe à côté d'une porte ouverte, on s'arrête contre le battant d'une porte fermée).
 - **Portes** (chêne, sapin, bouleau, acacia ; 6 planches → 3 portes à l'Établi) : clic droit pour ouvrir ou fermer. Une porte se pose sur deux blocs de haut et s'oriente selon ton regard ; les maisons des villages en ont une.
 - **Lit** (3 laines + 3 planches à l'Établi) : clic droit dessus pour en faire ton **point de réapparition** ; la nuit, tu t'y couches et passes directement au matin. En multijoueur, le jour se lève quand tous les joueurs sont couchés. Impossible de dormir si des Ombres rôdent tout près. Chaque maison de village a un lit.
 - **Golem de fer** : il garde les villages assez peuplés et chasse les Ombres alentour. Tu peux en construire un : 4 blocs de fer en forme de T (deux l'un sur l'autre, un de chaque côté en haut), puis une citrouille (sculptée, lanterne-citrouille ou normale) posée dessus. Il reste près de l'endroit où il a été construit (même après avoir quitté la partie). Il est costaud (100 PV) et se venge si on le frappe, lui ou un villageois !

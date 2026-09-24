@@ -1518,6 +1518,41 @@
         for (let y = 10; y < 16; y++) for (let x = 3; x < 13; x++) put(d, x, y, [0, 0, 0, 0]);
       }
     },
+    // cultures : kind (carrot, potato, beetroot, pumpkin, melon), stage 0..3
+    crop(d, r, s) {
+      clear(d);
+      const st = s.stage;
+      if (s.kind === 'pumpkin' || s.kind === 'melon') {
+        // tige qui s'allonge, puis jaunit (citrouille) ou reste verte (pastèque) une fois adulte
+        const h = [5, 8, 11, 13][st];
+        const col = st === 3 ? (s.kind === 'pumpkin' ? [196, 170, 60] : [150, 176, 60]) : [96, 170, 60];
+        for (let y = 15; y > 15 - h; y--) put(d, 7 + ((y >> 2) & 1), y, vary(col, r, 10));
+        for (let k = 1; k <= st + 1; k++) {
+          const y = 15 - Math.round((h * k) / (st + 2));
+          const side = k % 2 ? -1 : 1;
+          put(d, 7 + ((y >> 2) & 1) + side, y, vary(shade(col, 0.85), r, 8));
+          put(d, 7 + ((y >> 2) & 1) + side * 2, y - 1, vary(shade(col, 0.75), r, 8));
+        }
+        return;
+      }
+      const h = [3, 5, 8, 10][st];
+      const leaf = s.kind === 'potato' ? [70, 150, 50] : s.kind === 'beetroot' ? [70, 140, 50] : [60, 160, 50];
+      for (const x0 of [2, 5, 8, 11, 14]) {
+        const hh = h - (x0 === 2 || x0 === 14 ? 1 : 0);
+        for (let y = 15; y > 15 - hh; y--) {
+          const c = s.kind === 'beetroot' && y > 15 - hh + 1 ? [150, 40, 50] : leaf;
+          put(d, x0, y, vary(c, r, 12));
+          if (y < 15 - hh / 2 && (y + x0) % 2 === 0) put(d, x0 + (x0 < 8 ? -1 : 1), y, vary(shade(leaf, 1.15), r, 10));
+        }
+        if (st === 3) {
+          // le légume dépasse de la terre
+          const c = s.kind === 'carrot' ? [240, 130, 30] : s.kind === 'potato' ? [200, 160, 80] : [130, 20, 40];
+          put(d, x0, 15, c);
+          if (s.kind !== 'carrot') put(d, x0 + (x0 < 8 ? 1 : -1), 15, shade(c, 0.85));
+          if (s.kind === 'potato') put(d, x0, 14 - hh, [236, 236, 240]);
+        }
+      }
+    },
     rock(d, r, s) {
       fill(d, r, s.c, s.v || 7);
       for (const [c, p] of s.s || []) speckle(d, r, c, p, 5);
@@ -2291,6 +2326,74 @@
     }
     for (const x of [5, 8, 11]) put(d, x, 7, [150, 96, 40]);
   });
+  make('heart', (d) => {
+    clear(d);
+    art(d, ['', '', '', '...rr...rr', '..rRRr.rrRr', '..rRRrrrrrr', '..rrrrrrrrr', '...rrrrrrr', '....rrrrr', '.....rrr', '......r'], { r: [220, 30, 50], R: [255, 150, 160] });
+  });
+  // ---- agriculture ----
+  make('farmland_wet_top', (d, r) => {
+    fill(d, r, [66, 42, 26], 6);
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) put(d, x, y, [44, 28, 16]);
+  });
+  const carrotTex = (d, r, body, hi) => {
+    clear(d);
+    for (let k = 0; k < 9; k++) {
+      const cx = 4 + k * 0.75, cy = 13 - k;
+      const rad = k < 2 ? 0.5 : k < 5 ? 1.2 : 1.6;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.hypot(dx, dy) <= rad) put(d, Math.round(cx + dx), Math.round(cy + dy), vary(dx + dy < 0 ? hi : body, r, 8));
+    }
+    for (const [x, y] of [[8, 9], [6, 11], [9, 7]]) put(d, x, y, shade(body, 0.75));
+    line(d, 11, 4, 13, 1, [60, 150, 40]); line(d, 11, 4, 14, 3, [80, 180, 50]); line(d, 11, 4, 11, 1, [60, 150, 40]);
+  };
+  make('carrot', (d, r) => carrotTex(d, r, [236, 124, 28], [250, 170, 70]));
+  make('golden_carrot', (d, r) => carrotTex(d, r, [224, 180, 40], [255, 236, 130]));
+  const potatoTex = (d, r, c, spot) => {
+    clear(d);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const e = ((x - 7.5) / 5.5) ** 2 + ((y - 8.5) / 4.2) ** 2;
+      if (e <= 1) put(d, x, y, vary(e > 0.7 ? shade(c, 0.8) : x + y < 14 ? mixc(c, WHITE, 0.15) : c, r, 7));
+    }
+    for (const [x, y] of [[5, 7], [9, 10], [10, 6], [6, 11]]) put(d, x, y, spot);
+  };
+  make('potato', (d, r) => potatoTex(d, r, [200, 162, 88], [150, 116, 60]));
+  make('baked_potato', (d, r) => potatoTex(d, r, [214, 150, 60], [120, 70, 30]));
+  make('beetroot', (d, r) => {
+    clear(d);
+    disc(d, 7.5, 10, 4.5, (x, y, dist) => put(d, x, y, vary(dist > 3.5 ? [110, 16, 36] : x + y < 16 ? [180, 40, 64] : [150, 26, 48], r, 8)));
+    put(d, 7, 15, [110, 16, 36]);
+    line(d, 7, 5, 5, 1, [60, 140, 50]); line(d, 8, 5, 10, 1, [70, 150, 60]); line(d, 7, 5, 8, 2, [150, 40, 50]);
+  });
+  const seedTex = (d, r, c, n) => {
+    clear(d);
+    for (let k = 0; k < n; k++) {
+      const x = 3 + Math.floor(r() * 9), y = 4 + Math.floor(r() * 8);
+      put(d, x, y, vary(c, r, 10)); put(d, x + 1, y, vary(shade(c, 0.8), r, 8)); put(d, x, y + 1, vary(shade(c, 0.9), r, 8));
+    }
+  };
+  make('beetroot_seeds', (d, r) => seedTex(d, r, [176, 150, 100], 6));
+  make('pumpkin_seeds', (d, r) => seedTex(d, r, [236, 228, 190], 5));
+  make('melon_seeds', (d, r) => seedTex(d, r, [96, 70, 44], 6));
+  make('beetroot_soup', (d, r) => {
+    clear(d);
+    for (let y = 8; y < 14; y++) for (let x = 2; x < 14; x++) {
+      if (y === 13 && (x < 4 || x > 11)) continue;
+      put(d, x, y, y === 8 ? [196, 140, 90] : [136, 92, 54]);
+    }
+    for (let x = 3; x < 13; x++) put(d, x, 7, vary([170, 30, 50], r, 12));
+    put(d, 6, 7, [220, 80, 90]);
+  });
+  const bucketTex = (d, r, water) => {
+    clear(d);
+    for (let y = 5; y < 14; y++) {
+      const inset = Math.floor((y - 5) / 4);
+      for (let x = 3 + inset; x < 13 - inset; x++) put(d, x, y, vary(x < 6 ? [196, 196, 204] : x > 10 - inset ? [120, 120, 130] : [160, 160, 170], r, 5));
+    }
+    for (let x = 3; x < 13; x++) put(d, x, 5, water ? [48, 96, 220] : [70, 70, 80]);
+    if (water) for (let x = 4; x < 12; x++) put(d, x, 6, [70, 130, 240]);
+    line(d, 3, 5, 5, 2, [110, 110, 120]); line(d, 5, 2, 10, 2, [110, 110, 120]); line(d, 10, 2, 12, 5, [110, 110, 120]);
+  };
+  make('bucket', (d, r) => bucketTex(d, r, false));
+  make('water_bucket', (d, r) => bucketTex(d, r, true));
   make('slimeball', (d, r) => {
     clear(d);
     disc(d, 7.5, 8.5, 4.5, (x, y, dist) => put(d, x, y, dist > 3.5 ? [80, 150, 60] : [120, 200, 96], 235));
@@ -2344,6 +2447,27 @@
     }
     return data;
   };
+
+  // ----------------------------------------- boîtes de sélection des plantes --
+  // D'après les pixels visibles de la texture : une fleur basse a une petite boîte.
+  // Les deux plans en croix vont de (2, 2) à (14, 14) : la colonne u est à 2 + 0,75 u.
+  for (const b of CM.blocks) {
+    if (!b || b.render !== 'cross' || !T.canvases[b.tex.side]) continue;
+    const px = T.canvases[b.tex.side].getContext('2d').getImageData(0, 0, 16, 16).data;
+    let u0 = 16, u1 = -1, v0 = 16;
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++)
+        if (px[(y * 16 + x) * 4 + 3] > 24) {
+          u0 = Math.min(u0, x);
+          u1 = Math.max(u1, x);
+          v0 = Math.min(v0, y);
+        }
+    if (u1 < 0) continue;
+    let lo = Math.min(2 + 0.75 * u0, 14 - 0.75 * (u1 + 1));
+    lo = Math.min(Math.max(0, Math.floor(lo)), 6);
+    const top = Math.max(3, 16 - v0);
+    b.sel = [lo / 16, 0, lo / 16, (16 - lo) / 16, top / 16, (16 - lo) / 16];
+  }
 
   // --------------------------------------------------------- icônes ------
   // Icônes isométriques des blocs et icônes plates des objets (data URL).

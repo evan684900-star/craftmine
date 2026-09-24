@@ -182,7 +182,7 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 3 }, (save && save.settings) || settings || {});
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 4 }, (save && save.settings) || settings || {});
       // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
       if (save && (save.v || 2) < 4) ws.gen = 1;
       this.settings = ws;
@@ -193,6 +193,7 @@
       this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
       this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
+      this.animals = (!this.net.isClient && save && Array.isArray(save.animals) && save.animals.filter((a) => Array.isArray(a) && a.length >= 4)) || []; // élevage hors de portée
       this.stats = this.freshStats();
       this.time = 0.03;
       this.dayCount = 0;
@@ -218,8 +219,13 @@
       this.world.dirty.clear();
       this.saplings = new Set();
       for (const id of CM.TAGS.saplings) for (const p of this.world.editedPositions(id)) this.saplings.add(p.join(','));
+      // cultures qui poussent encore (et tiges adultes, qui font pousser leur fruit), terre labourée
       this.crops = new Set();
-      for (let s = 0; s < 3; s++) for (const p of this.world.editedPositions(B['WHEAT_' + s])) this.crops.add(p.join(','));
+      this.farmland = new Set();
+      for (const p of this.world.editedWhere((id) => {
+        const b = CM.blocks[id];
+        return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
+      })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
       this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
@@ -337,6 +343,7 @@
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
         golems: this.golemHomes,
+        animals: this.entities.tameList(),
         guests: this.net.guests,
         savedAt: new Date().toISOString(),
       };
@@ -882,7 +889,7 @@
       if (vc) {
         const vt = vc.smith
           ? [[I.IRON_INGOT, 0.8, 2, 6], [I.COAL, 0.6, 3, 10], [I.EMERALD, 0.5, 1, 4], [I.PICKAXE_IRON, 0.25, 1, 1], [I.SWORD_IRON, 0.2, 1, 1], [I.AXE_IRON, 0.2, 1, 1], [I.GOLD_INGOT, 0.3, 1, 3], [I.BREAD, 0.4, 1, 3], [I.DIAMOND, 0.06, 1, 1]]
-          : [[I.BREAD, 0.6, 1, 4], [I.WHEAT, 0.5, 2, 8], [I.SEEDS, 0.5, 2, 8], [I.APPLE, 0.45, 1, 4], [I.EMERALD, 0.35, 1, 3], [I.COAL, 0.3, 1, 4], [B.TORCH, 0.4, 2, 6], [I.PAPER, 0.25, 1, 5], [I.IRON_INGOT, 0.15, 1, 2], [I.PUMPKIN_PIE, 0.15, 1, 2]];
+          : [[I.BREAD, 0.6, 1, 4], [I.WHEAT, 0.5, 2, 8], [I.SEEDS, 0.5, 2, 8], [I.APPLE, 0.45, 1, 4], [I.EMERALD, 0.35, 1, 3], [I.COAL, 0.3, 1, 4], [B.TORCH, 0.4, 2, 6], [I.PAPER, 0.25, 1, 5], [I.IRON_INGOT, 0.15, 1, 2], [I.PUMPKIN_PIE, 0.15, 1, 2], [I.CARROT, 0.35, 2, 6], [I.POTATO, 0.35, 2, 6], [I.BEETROOT_SEEDS, 0.3, 2, 6], [I.BUCKET, 0.1, 1, 1]];
         const its = [];
         for (const [id, p, a, b] of vt) if (id !== undefined && r() < p) its.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
         const free = [...Array(27).keys()];
@@ -900,6 +907,7 @@
         [I.DIAMOND, 0.12, 1, 2], [I.EMERALD, 0.15, 1, 3], [I.LAPIS, 0.2, 2, 6], [I.REDSTONE, 0.2, 2, 6],
         [I.BOOK, 0.2, 1, 3], [I.SLIMEBALL, 0.12, 1, 3], [I.HONEYCOMB, 0.12, 1, 3], [I.NETHERITE_SCRAP, 0.03, 1, 1],
         [I.AMETHYST_SHARD, 0.15, 1, 4], [I.GLOWSTONE_DUST, 0.15, 2, 5], [I.BONE_MEAL, 0.3, 2, 6], [I.LEATHER, 0.2, 1, 3],
+        [I.CARROT, 0.2, 1, 4], [I.POTATO, 0.2, 1, 4], [I.PUMPKIN_SEEDS, 0.12, 1, 3], [I.MELON_SEEDS, 0.12, 1, 3],
       ];
       const items = [];
       for (const [id, p, a, b] of table) if (r() < p) items.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
@@ -936,14 +944,60 @@
         const [x, y, z] = key.split(',').map(Number);
         if (!w.loaded(x, z)) continue;
         const b = CM.blocks[w.get(x, y, z)];
-        if (b.crop === undefined || b.crop >= 3) {
+        if (b.crop === undefined || (b.crop >= 3 && !b.fruit)) {
           this.crops.delete(key);
           continue;
         }
-        if (Math.random() > 1 / 45) continue;
+        // terre irriguée : pousse deux fois et demie plus vite
+        const wet = CM.blocks[w.get(x, y - 1, z)].wet;
+        if (Math.random() > (wet ? 1 / 40 : 1 / 100)) continue;
         if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
         this.growAt(x, y, z, false);
       }
+      // terre labourée : s'humidifie près de l'eau, sèche sinon ; laissée vide et sèche, elle redevient de la terre
+      for (const key of [...this.farmland]) {
+        const [x, y, z] = key.split(',').map(Number);
+        if (!w.loaded(x, z)) continue;
+        const id = w.get(x, y, z);
+        if (!CM.blocks[id].farmland) {
+          this.farmland.delete(key);
+          continue;
+        }
+        if (Math.random() > 0.25) continue;
+        const above = CM.blocks[w.get(x, y + 1, z)];
+        const wet = this.waterNear(x, y, z);
+        if (above.solid) {
+          w.setBlock(x, y, z, B.DIRT);
+          this.farmland.delete(key);
+        } else if (wet !== (id === B.FARMLAND_WET)) w.setBlock(x, y, z, wet ? B.FARMLAND_WET : B.FARMLAND);
+        else if (!wet && above.crop === undefined && Math.random() < 1 / 40) {
+          w.setBlock(x, y, z, B.DIRT);
+          this.farmland.delete(key);
+        }
+      }
+    }
+    // De l'eau à 4 blocs ou moins (au même niveau ou juste au-dessus) ?
+    waterNear(x, y, z) {
+      const w = this.world;
+      for (let dy = 0; dy <= 1; dy++) for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) if (w.get(x + dx, y + dy, z + dz) === B.WATER) return true;
+      return false;
+    }
+    // Labourer (houe) : terre labourée, déjà irriguée s'il y a de l'eau à côté.
+    till(x, y, z) {
+      this.world.setBlock(x, y, z, this.waterNear(x, y, z) ? B.FARMLAND_WET : B.FARMLAND);
+      this.farmland.add(x + ',' + y + ',' + z);
+    }
+    // Tige adulte : une citrouille ou une pastèque pousse sur une case voisine libre.
+    growFruit(x, y, z, fruit) {
+      const w = this.world;
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      if (dirs.some(([dx, dz]) => w.get(x + dx, y, z + dz) === fruit)) return false;
+      const [dx, dz] = dirs[Math.floor(Math.random() * 4)];
+      const X = x + dx, Z = z + dz, cur = w.get(X, y, Z), under = CM.blocks[w.get(X, y - 1, Z)];
+      if ((cur !== 0 && !CM.blocks[cur].replaceable) || cur === B.WATER || !(under.soil || under.farmland || under.id === B.DIRT)) return false;
+      w.setBlock(X, y, Z, fruit);
+      this.entities.burst(CM.Textures.layer.leaves, X + 0.5, y + 0.5, Z + 0.5, 8, { speed: 2, size: 0.06 });
+      return true;
     }
     // Fait pousser ce qui se trouve en (x, y, z). bonemeal : poudre d'os (effet immédiat).
     growAt(x, y, z, bonemeal) {
@@ -961,10 +1015,11 @@
       }
       if (b.crop !== undefined && b.crop < 3) {
         const next = Math.min(3, b.crop + (bonemeal ? 1 + Math.floor(Math.random() * 2) : 1));
-        w.setBlock(x, y, z, B['WHEAT_' + next]);
-        if (next >= 3) this.crops.delete(x + ',' + y + ',' + z);
+        w.setBlock(x, y, z, b.cropSet[next]);
+        if (next >= 3 && !b.fruit) this.crops.delete(x + ',' + y + ',' + z);
         return true;
       }
+      if (b.fruit && !bonemeal) return this.growFruit(x, y, z, b.fruit);
       if (bonemeal && b.soil) {
         // herbe et fleurs autour
         const flowers = [B.TALLGRASS, B.TALLGRASS, B.TALLGRASS, B.FLOWER, B.DANDELION, B.DAISY, B.AZURE_BLUET];
@@ -992,7 +1047,8 @@
       }
       if (CM.TAGS.saplings.includes(id)) this.saplings.add(k);
       const b = CM.blocks[id];
-      if (b.crop !== undefined && b.crop < 3) this.crops.add(k);
+      if (b.crop !== undefined && (b.crop < 3 || b.fruit)) this.crops.add(k);
+      if (b.farmland) this.farmland.add(k);
       if (id === B.DAWN_HEART) this.onDawnHeart(x, y, z, true);
       if (fx) this.netBlockFx(x, y, z, old, id, sound);
     }
@@ -1336,7 +1392,8 @@
         const m = p.mining;
         const M = this.crackM || (this.crackM = CM.mat4.create());
         CM.mat4.compose(M, m.x, m.y, m.z, 0, 0, 0, 1);
-        this.overlay.box(M, -0.003, -0.003, -0.003, 1.003, (m.h || 1) + 0.003, 1.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
+        const bx = m.box || CM.FULL_BOX;
+        this.overlay.box(M, bx[0] - 0.003, bx[1] - 0.003, bx[2] - 0.003, bx[3] + 0.003, bx[4] + 0.003, bx[5] + 0.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
       }
       if (p.alive) p.buildHand(this.hand, this.clock);
       const t = p.target;

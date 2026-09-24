@@ -534,6 +534,48 @@ nb('BED', {
   name: 'Lit', render: 'slab', height: 9 / 16, tex: { top: tx('bed_top', { type: 'bed', part: 0 }), bottom: 'planks', side: tx('bed_side', { type: 'bed', part: 1 }) },
   hardness: 0.3, sound: 'wool', bed: true,
 });
+// Torches murales : une variante par mur, le pied contre le bloc voisin.
+// wall = [dx, dz] : direction du mur vers la torche (la torche penche de ce côté).
+CM.WALL_TORCHES = {};
+for (const base of [CM.B.TORCH, CM.B.SOUL_TORCH]) {
+  const b0 = CM.blocks[base];
+  const pre = b0.key === 'TORCH' ? 'WALL_TORCH_' : 'SOUL_WALL_TORCH_';
+  const set = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(
+    (wall, i) => nb(pre + i, { name: b0.name, render: 'torch', tex: b0.tex.side, solid: false, opaque: false, light: b0.light, hardness: 0, sound: 'wood', drop: base, hidden: true, wall }).id,
+  );
+  b0.wallSet = set;
+  CM.WALL_TORCHES[base] = set;
+}
+CM.wallTorch = (base, dx, dz) => {
+  const set = CM.blocks[base].wallSet;
+  return set ? set[dx === 1 ? 0 : dx === -1 ? 1 : dz === 1 ? 2 : 3] : 0;
+};
+
+// ---- Agriculture ----
+// Terre labourée irriguée (de l'eau à 4 blocs ou moins) : plus sombre, les cultures y poussent plus vite.
+nb('FARMLAND_WET', {
+  name: 'Terre labourée irriguée', render: 'slab', height: 15 / 16, tex: { top: 'farmland_wet_top', bottom: 'dirt', side: 'dirt' },
+  opaque: true, hardness: 0.6, tool: 'shovel', sound: 'gravel', drop: 2, farmland: true, wet: true, hidden: true,
+});
+CM.blocks[CM.B.FARMLAND].farmland = true;
+// Cultures : 4 stades (le dernier est mûr). Les tiges de citrouille et de pastèque
+// font pousser leur fruit sur une case voisine une fois adultes.
+CM.CROPS = {};
+function cropSet(kind, key, label, matureLabel, extra) {
+  const set = [];
+  for (let s = 0; s < 4; s++) {
+    set.push(nb(key + '_' + s, plant(s === 3 ? matureLabel : label + ' (stade ' + (s + 1) + ')', tx(lc(key) + '_' + s, { type: 'crop', kind, stage: s }), Object.assign({ replaceable: false, drop: 0, crop: s, cropKind: kind, needsFarmland: true, hidden: s < 3 }, extra))).id);
+  }
+  for (const id of set) CM.blocks[id].cropSet = set;
+  CM.CROPS[kind] = set;
+}
+cropSet('carrot', 'CARROTS', 'Carottes', 'Carottes mûres');
+cropSet('potato', 'POTATOES', 'Pommes de terre', 'Pommes de terre mûres');
+cropSet('beetroot', 'BEETROOTS', 'Betteraves', 'Betteraves mûres');
+cropSet('pumpkin', 'PUMPKIN_STEM', 'Tige de citrouille', 'Tige de citrouille adulte', { fruit: CM.B.PUMPKIN, wave: false });
+cropSet('melon', 'MELON_STEM', 'Tige de pastèque', 'Tige de pastèque adulte', { fruit: CM.B.MELON, wave: false });
+CM.CROPS.wheat = [0, 1, 2, 3].map((s) => CM.B['WHEAT_' + s]);
+for (const id of CM.CROPS.wheat) Object.assign(CM.blocks[id], { cropSet: CM.CROPS.wheat, cropKind: 'wheat' });
 CM.BLOCK_COUNT = NEXT;
 
 // Les blocs qui laissent passer la lumière sans atténuation.
@@ -599,6 +641,20 @@ defItem(1119, 'FLINT', { name: 'Silex', tex: 'flint' });
 defItem(1120, 'FLINT_AND_STEEL', { name: 'Briquet', tex: 'flint_and_steel', stack: 1, type: 'igniter' });
 defItem(1121, 'COOKED_BERRIES', { name: 'Confiture de baies', tex: 'berry_jam', type: 'food', food: 4, sat: 4.8, stack: 16 });
 defItem(1122, 'HONEY_BOTTLE', { name: 'Fiole de miel', tex: 'honey_bottle', type: 'food', food: 6, sat: 1.2, stack: 16 });
+// Agriculture (plant : culture semée sur de la terre labourée)
+defItem(1250, 'CARROT', { name: 'Carotte', tex: 'carrot', type: 'food', food: 3, sat: 3.6, plant: 'CARROTS_0' });
+defItem(1251, 'POTATO', { name: 'Pomme de terre', tex: 'potato', type: 'food', food: 1, sat: 0.6, plant: 'POTATOES_0' });
+defItem(1252, 'BAKED_POTATO', { name: 'Pomme de terre cuite', tex: 'baked_potato', type: 'food', food: 5, sat: 6 });
+defItem(1253, 'BEETROOT', { name: 'Betterave', tex: 'beetroot', type: 'food', food: 1, sat: 1.2 });
+defItem(1254, 'BEETROOT_SEEDS', { name: 'Graines de betterave', tex: 'beetroot_seeds', type: 'seeds', plant: 'BEETROOTS_0' });
+defItem(1255, 'BEETROOT_SOUP', { name: 'Soupe de betterave', tex: 'beetroot_soup', type: 'food', food: 6, sat: 7.2, stack: 16 });
+defItem(1256, 'PUMPKIN_SEEDS', { name: 'Graines de citrouille', tex: 'pumpkin_seeds', type: 'seeds', plant: 'PUMPKIN_STEM_0' });
+defItem(1257, 'MELON_SEEDS', { name: 'Graines de pastèque', tex: 'melon_seeds', type: 'seeds', plant: 'MELON_STEM_0' });
+defItem(1258, 'GOLDEN_CARROT', { name: 'Carotte dorée', tex: 'golden_carrot', type: 'food', food: 6, sat: 14.4 });
+defItem(1259, 'BUCKET', { name: 'Seau', tex: 'bucket', stack: 16, type: 'bucket', desc: "Clic droit sur de l'eau pour la ramasser." });
+defItem(1260, 'WATER_BUCKET', { name: "Seau d'eau", tex: 'water_bucket', stack: 1, type: 'bucket', water: true, desc: "Clic droit pour verser l'eau (pour irriguer un champ)." });
+CM.items[CM.I.SEEDS].plant = 'WHEAT_0';
+for (const it of CM.items) if (it && typeof it.plant === 'string') it.plant = CM.B[it.plant];
 CM.DYE_ITEM = {};
 CM.DYES.forEach((d, i) => {
   defItem(1130 + i, 'DYE_' + d.key, { name: 'Teinture ' + d.f, tex: 'dye_' + lc(d.key), dye: d.key });
@@ -899,6 +955,17 @@ CM.recipes.push(r(27, 1, [[I.FIBER, 4]], 'table', 'deco'));
 // Portes (6 planches -> 3 portes) et lit
 for (const [wk, planks] of [['OAK', 'PLANKS'], ['SPRUCE', 'SPRUCE_PLANKS'], ['BIRCH', 'BIRCH_PLANKS'], ['ACACIA', 'ACACIA_PLANKS']]) CM.recipes.push(r(CM.DOORS[wk][0], 3, [[B[planks], 6]], 'table', 'deco'));
 CM.recipes.push(r(B.BED, 1, [[B.WOOL, 3], ['planks', 3]], 'table', 'deco'));
+// Agriculture
+CM.recipes.push(
+  r(I.PUMPKIN_SEEDS, 4, [[B.PUMPKIN, 1]], null, 'objets'),
+  r(I.MELON_SEEDS, 1, [[I.MELON_SLICE, 1]], null, 'objets'),
+  r(B.MELON, 1, [[I.MELON_SLICE, 9]], 'table', 'blocs'),
+  r(I.BEETROOT_SOUP, 1, [[I.BEETROOT, 6]], null, 'nourriture'),
+  r(I.GOLDEN_CARROT, 1, [[I.CARROT, 1], [I.GOLD_INGOT, 1]], 'table', 'nourriture'),
+  r(I.BUCKET, 1, [[I.IRON_INGOT, 3]], 'table', 'objets'),
+  r(CM.DYE_ITEM.RED, 1, [[I.BEETROOT, 1]], null, 'objets'),
+  r(CM.DYE_ITEM.ORANGE, 1, [[I.CARROT, 2]], null, 'objets'),
+);
 // Dalles : 3 blocs -> 6 dalles
 for (const s of CM.SLABS) CM.recipes.push(r(s, 6, [[CM.blocks[s].full, 3]], 'table', 'blocs'));
 // Objets divers
@@ -911,6 +978,7 @@ CM.recipes.push(
 );
 // Forge / fourneau (avec du charbon)
 const smelt = (out, n, ing, k, cat) => CM.recipes.push(r(out, n, [[ing, k], [I.COAL, 1]], 'forge', cat || 'blocs'));
+smelt(I.BAKED_POTATO, 4, I.POTATO, 4, 'nourriture');
 smelt(I.IRON_INGOT, 2, 'iron_ores', 2, 'objets');
 smelt(I.COPPER_INGOT, 2, 'copper_ores', 2, 'objets');
 smelt(I.GOLD_INGOT, 2, 'gold_ores', 2, 'objets');
@@ -958,14 +1026,32 @@ CM.blockDrops = function (id, rand) {
     return out;
   }
   if (b.crop !== undefined) {
-    if (b.crop < 3) return [[I.SEEDS, 1]];
+    const ripe = b.crop >= 3;
+    switch (b.cropKind) {
+      case 'carrot':
+        return [[I.CARROT, ripe ? 2 + Math.floor(rand() * 3) : 1]];
+      case 'potato':
+        return [[I.POTATO, ripe ? 2 + Math.floor(rand() * 3) : 1]];
+      case 'beetroot':
+        return ripe ? [[I.BEETROOT, 1], [I.BEETROOT_SEEDS, 1 + Math.floor(rand() * 3)]] : [[I.BEETROOT_SEEDS, 1]];
+      case 'pumpkin':
+        return [[I.PUMPKIN_SEEDS, ripe ? 1 + (rand() < 0.5 ? 1 : 0) : 1]];
+      case 'melon':
+        return [[I.MELON_SEEDS, ripe ? 1 + (rand() < 0.5 ? 1 : 0) : 1]];
+    }
+    if (!ripe) return [[I.SEEDS, 1]];
     return [[I.WHEAT, 1 + (rand() < 0.4 ? 1 : 0)], [I.SEEDS, 1 + Math.floor(rand() * 3)]];
   }
   const between = (a, c) => a + Math.floor(rand() * (c - a + 1));
   switch (id) {
-    case B.TALLGRASS:
-      if (rand() < 0.12) return [[I.SEEDS, 1]];
+    case B.TALLGRASS: {
+      const g = rand();
+      if (g < 0.12) return [[I.SEEDS, 1]];
+      if (g < 0.15) return [[I.BEETROOT_SEEDS, 1]];
+      if (g < 0.16) return [[I.CARROT, 1]];
+      if (g < 0.17) return [[I.POTATO, 1]];
       return rand() < 0.6 ? [[I.FIBER, 1]] : [];
+    }
     case B.FERN:
       return rand() < 0.5 ? [[I.FIBER, 1]] : [];
     case B.DEAD_BUSH:
@@ -1018,4 +1104,29 @@ CM.blockDrops = function (id, rand) {
       return b.drop ? [[b.drop, 1]] : [];
   }
 };
+
+// ------------------------------------------------------ boîtes des blocs --
+// sel : boîte de sélection (visée, contour, fissures) ; col : boîte de collision (null : on traverse).
+// En blocs, relatives à la case : [x0, y0, z0, x1, y1, z1]. Les plantes affinent la leur
+// d'après les pixels de leur texture (textures.js).
+CM.FULL_BOX = [0, 0, 0, 1, 1, 1];
+// torche murale penchée vers +x (pied contre le mur en x = 0), puis tournée selon le mur
+CM.wallTorchBox = function (dx, dz) {
+  const [a, b] = [0, 5.5];
+  const lo = 5.5, hi = 10.5;
+  const box = dx === 1 ? [a, 3, lo, b, 13.5, hi] : dx === -1 ? [16 - b, 3, lo, 16 - a, 13.5, hi] : dz === 1 ? [lo, 3, a, hi, 13.5, b] : [lo, 3, 16 - b, hi, 13.5, 16 - a];
+  return box.map((v) => v / 16);
+};
+for (const b of CM.blocks) {
+  if (!b) continue;
+  let sel = CM.FULL_BOX;
+  if (b.render === 'none') sel = null; // l'eau garde une boîte pleine (pour le seau), jamais solide
+  else if (b.box) sel = b.box.map((v) => v / 16);
+  else if (b.render === 'slab' || b.render === 'carpet') sel = [0, 0, 0, 1, b.height, 1];
+  else if (b.render === 'torch') sel = b.wall ? CM.wallTorchBox(b.wall[0], b.wall[1]) : [6 / 16, 0, 6 / 16, 10 / 16, 10 / 16, 10 / 16];
+  else if (b.render === 'cross') sel = [2 / 16, 0, 2 / 16, 14 / 16, 13 / 16, 14 / 16];
+  b.sel = sel;
+  // une porte ouverte garde son battant solide (on passe à côté, pas à travers)
+  b.col = b.solid || b.door ? sel : null;
+}
 })();

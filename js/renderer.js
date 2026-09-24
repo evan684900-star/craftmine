@@ -658,8 +658,9 @@
     drawOutline(t, cam) {
       const gl = this.gl;
       const e = 0.003;
-      const x0 = t.x - cam[0] - e, y0 = t.y - cam[1] - e, z0 = t.z - cam[2] - e;
-      const x1 = x0 + 1 + 2 * e, y1 = y0 + (t.h || 1) + 2 * e, z1 = z0 + 1 + 2 * e;
+      const b = t.box || CM.FULL_BOX;
+      const x0 = t.x + b[0] - cam[0] - e, y0 = t.y + b[1] - cam[1] - e, z0 = t.z + b[2] - cam[2] - e;
+      const x1 = t.x + b[3] - cam[0] + e, y1 = t.y + b[4] - cam[1] + e, z1 = t.z + b[5] - cam[2] + e;
       const v = [
         x0, y0, z0, x1, y0, z0, x1, y0, z0, x1, y0, z1, x1, y0, z1, x0, y0, z1, x0, y0, z1, x0, y0, z0,
         x0, y1, z0, x1, y1, z0, x1, y1, z0, x1, y1, z1, x1, y1, z1, x0, y1, z1, x0, y1, z1, x0, y1, z0,

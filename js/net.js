@@ -642,7 +642,11 @@
         if (!rp.seen) continue;
         const near = (o) => Math.abs(o.x - rp.x) < VIEW && Math.abs(o.z - rp.z) < VIEW;
         const m = [], d = [], tn = [];
-        for (const o of ents.mobs) if (!o.dead && near(o)) m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0)]);
+        for (const o of ents.mobs) {
+          if (o.dead || !near(o)) continue;
+          const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0);
+          m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
+        }
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z)]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
         e.link.send({ t: 'ent', m, d, tn });
@@ -754,6 +758,11 @@
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
           if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 8) break;
           g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
+          break;
+        }
+        case 'feed': {
+          const mob = g.entities.mobs.find((o) => o.uid === m.id);
+          if (mob && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 7) g.entities.feedMob(mob);
           break;
         }
         case 'tnt':
@@ -1026,12 +1035,17 @@
         if (d < 24) CM.Audio.play('fuse');
       } else if (m.k === 'kill') {
         if (d < 48) e.killFx(m.ty, m.x, m.y, m.z);
+      } else if (m.k === 'love') {
+        if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true });
       }
     }
 
     // Actions de l'invité transmises à l'hôte.
     hitMob(mob, dmg) {
       this.send({ t: 'hit', id: mob.uid, d: r2(dmg) });
+    }
+    feedMob(mob) {
+      this.send({ t: 'feed', id: mob.uid });
     }
     requestDrop(id, count, x, y, z, extra, vel) {
       const m = { t: 'drop', id, n: count, x: r2(x), y: r2(y), z: r2(z) };

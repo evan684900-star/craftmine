@@ -8,6 +8,7 @@
   const GRAVITY = 28;
   const REACH = 5;
   const GRAPPLE_RANGE = 34;
+  const EAT_TIME = 1; // secondes pour manger n’importe quel aliment
   const MAX_AIR = 15; // secondes de souffle sous l'eau
   // Faim (comme dans Minecraft) : 20 points, saturation, épuisement.
   const EXH = { sprint: 0.1, swim: 0.012, jump: 0.05, sprintJump: 0.2, mine: 0.005, attack: 0.1, hurt: 0.1, heal: 6, dash: 1.2, double: 0.6, grapple: 0.4 };
@@ -51,6 +52,7 @@
       this.mining = null;
       this.combo = 0; this.comboTimer = 0; this.lastBreak = -10;
       this.attackCd = 0; this.useCd = 0; this.breakCd = 0;
+      this.eating = null; // { id, slot, t } : en train de manger
       this.swing = 0;
       this.bob = 0; this.bobAmp = 0;
       this.stepDist = 0;
@@ -182,6 +184,10 @@
         g.ui.toast('Trop faim pour courir : mange quelque chose !', 'warn', 'nosprint');
       }
       if (this.sneaking) speed = 1.6;
+      if (this.eating) {
+        speed = Math.min(speed, 1.6);
+        this.sprinting = false;
+      }
       if (this.inWater) speed = this.sprinting ? 3.6 : 2.6;
       if (this.onGround && under.slow) speed *= under.slow;
       if (this.onGround && under.slip) speed *= 1.15;
@@ -322,7 +328,8 @@
           this.onGround = false;
           CM.Audio.play('bounce');
           g.entities.burst(CM.blockLayers[under2][2], this.x, this.y, this.z, 8, { speed: 3 });
-        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK) {
+        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK && w.get(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) !== B.WATER) {
+          // (atterrir dans l'eau, même versée au dernier moment avec un seau, annule la chute)
           this.damage(Math.floor(fall - 3), null, null, 'La gravité');
         }
         if (!wasGround && fall > 1) CM.Audio.play('step', { mat: this.matUnder() });
@@ -539,6 +546,7 @@
     updateActions(dt, input) {
       const g = this.game;
       const e = this.eye(), d = this.aim();
+      if (this.eating) this.updateEating(dt, input);
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
@@ -571,7 +579,7 @@
             }
           } else {
           if (!this.mining || this.mining.x !== t.x || this.mining.y !== t.y || this.mining.z !== t.z || this.mining.id !== t.id) {
-            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0, h: b.height };
+            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0, box: t.box };
           }
           const bi = this.breakInfo(t.id);
           this.mining.progress += dt / bi.time;
@@ -590,12 +598,15 @@
         }
       } else this.mining = null;
 
-      // clic droit sur un villageois : échanges
+      // clic droit sur un villageois : échanges ; sur un animal avec sa nourriture : élevage
       if (input.pressed.mouse2) {
         const vm = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
-        if (vm && vm.mob.type === 'villager' && (!this.target || vm.t < this.target.t)) {
-          g.ui.openTrade(vm.mob);
-          return;
+        if (vm && (!this.target || vm.t < this.target.t)) {
+          if (vm.mob.type === 'villager') {
+            g.ui.openTrade(vm.mob);
+            return;
+          }
+          if (this.feed(vm.mob)) return;
         }
       }
       // utilisation (clic droit)
@@ -604,11 +615,110 @@
       }
     }
 
+    // Seau : ramasse une case d'eau, ou la verse (l'eau posée ne coule pas).
+    useBucket(stack, info) {
+      const g = this.game, w = g.world, inv = g.inventory;
+      const e = this.eye(), d = this.aim(), reach = this.creative ? 7 : REACH;
+      const swap = (id) => {
+        if (this.creative) return;
+        if (stack.count <= 1) {
+          inv.slots[inv.selected] = { id, count: 1 };
+          inv.changed();
+        } else {
+          inv.consumeHeld(1);
+          const left = inv.add(id, 1);
+          if (left) g.entities.addDrop(id, left, this.x, this.y + 1, this.z);
+        }
+      };
+      if (!info.water) {
+        const h = w.raycast(e[0], e[1], e[2], d[0], d[1], d[2], reach, (id) => id === B.WATER || CM.blocks[id].solid);
+        if (!h || h.id !== B.WATER) return;
+        w.setBlock(h.x, h.y, h.z, 0);
+        swap(I.WATER_BUCKET);
+        CM.Audio.play('splash');
+        this.swing = 1;
+        return;
+      }
+      const t = this.target;
+      if (!t) return;
+      const tb = CM.blocks[t.id];
+      let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
+      if (tb.replaceable && t.id !== B.WATER) {
+        px = t.x; py = t.y; pz = t.z;
+      }
+      const cur = w.get(px, py, pz);
+      if (!w.inside(px, py, pz) || (cur !== 0 && !CM.blocks[cur].replaceable) || cur === B.WATER) return;
+      w.setBlock(px, py, pz, B.WATER);
+      swap(I.BUCKET);
+      CM.Audio.play('splash');
+      this.swing = 1;
+    }
+
+    // Donne à un animal la nourriture tenue (blé : mouflon ; carotte, pomme de terre, betterave : sanglier).
+    feed(mob) {
+      const g = this.game, stack = g.inventory.held();
+      const foods = CM.BREED_FOOD[mob.type];
+      if (!stack || !foods || !foods.includes(stack.id)) return false;
+      if (g.entities.remote) {
+        // invité : l'hôte décide ; on vérifie ce qu'on voit pour ne pas gaspiller
+        if ((mob.baby <= 0 && (mob.love > 0 || mob.loveCd > 0)) || mob.dead) return false;
+        g.net.feedMob(mob);
+        g.entities.hearts(mob, 4);
+      } else if (!g.entities.feedMob(mob)) {
+        if (mob.loveCd > 0) g.ui.toast('Cet animal a besoin de repos avant un nouveau petit', 'info', 'lovecd');
+        return false;
+      }
+      this.consume(1);
+      this.swing = 1;
+      this.useCd = 0.3;
+      CM.Audio.play('eat');
+      return true;
+    }
+
+    // Manger prend un moment : on garde le clic droit enfoncé (sur écran tactile, ça continue tout seul).
+    startEating(stack, info, input) {
+      const g = this.game;
+      if (this.food >= 20 && !info.always && !this.creative) {
+        if (input.pressed.mouse2) g.ui.toast('Tu n’as pas faim.', 'info', 'full');
+        return;
+      }
+      this.eating = { id: stack.id, slot: g.inventory.selected, t: 0, chew: 0, touch: !!(g.touch && g.touch.enabled) };
+    }
+    updateEating(dt, input) {
+      const g = this.game, ea = this.eating, stack = g.inventory.held();
+      if (!this.alive || !stack || stack.id !== ea.id || g.inventory.selected !== ea.slot || (!ea.touch && !input.mouse[2])) {
+        this.eating = null;
+        return;
+      }
+      const info = CM.itemInfo(ea.id);
+      ea.t += dt;
+      ea.chew -= dt;
+      if (ea.chew <= 0) {
+        ea.chew = 0.24;
+        CM.Audio.play('eat');
+        const layer = CM.Textures.layer[info.tex];
+        g.entities.burst(layer, this.x - Math.sin(this.yaw) * 0.4, this.y + 1.4, this.z - Math.cos(this.yaw) * 0.4, 3, { speed: 1.2, size: 0.05 });
+      }
+      if (ea.t < EAT_TIME) return;
+      this.eating = null;
+      this.food = Math.min(20, this.food + info.food);
+      this.sat = Math.min(this.food, this.sat + info.sat);
+      if (info.regen) {
+        this.regenEffect = info.regen;
+        g.ui.toast('Régénération (' + info.regen + ' s)', 'gold');
+      }
+      this.consume(1);
+      this.useCd = 0.35;
+      CM.Audio.play('pop');
+    }
+
     // Mode créatif : met le bloc visé dans la main.
     pickBlock(id) {
       const inv = this.game.inventory;
+      // variantes (porte ouverte, torche murale, culture…) : l'objet correspondant
+      if (CM.blocks[id] && CM.blocks[id].hidden) id = CM.blocks[id].drop;
       const drop = CM.blocks[id];
-      if (!drop || id === B.WATER) return;
+      if (!id || !drop || id === B.WATER) return;
       for (let i = 0; i < 9; i++) {
         if (inv.slots[i] && inv.slots[i].id === id) {
           inv.selected = i;
@@ -699,8 +809,13 @@
       // plantes, torches et tapis posés dessus tombent aussi
       const above = w.get(x, y + 1, z);
       const ab = CM.blocks[above];
-      if (above && (ab.plant || ab.render === 'torch' || above === B.CACTUS || ab.render === 'carpet' || above === B.SUGAR_CANE || above === B.BAMBOO || (ab.door && !ab.door.half))) {
+      if (above && (ab.plant || (ab.render === 'torch' && !ab.wall) || above === B.CACTUS || ab.render === 'carpet' || above === B.SUGAR_CANE || above === B.BAMBOO || (ab.door && !ab.door.half))) {
         this.breakBlock(x, y + 1, z, above, !this.creative, false);
+      }
+      // torches murales accrochées à ce bloc
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nid = w.get(x + dx, y, z + dz), nbk = CM.blocks[nid];
+        if (nbk.wall && nbk.wall[0] === dx && nbk.wall[1] === dz) this.breakBlock(x + dx, y, z + dz, nid, !this.creative, false);
       }
       if (this.creative) return;
       if (!primary) {
@@ -858,23 +973,21 @@
         }
       }
       if (!info) return;
-      if (info.type === 'food') {
-        if (!input.pressed.mouse2) return;
-        if (this.food >= 20 && !info.always && !this.creative) {
-          g.ui.toast('Tu n’as pas faim.', 'info', 'full');
-          return;
-        }
-        this.food = Math.min(20, this.food + info.food);
-        this.sat = Math.min(this.food, this.sat + info.sat);
-        if (info.regen) {
-          this.regenEffect = info.regen;
-          g.ui.toast('Régénération (' + info.regen + ' s)', 'gold');
-        }
+      // semer : graines, carotte, pomme de terre (clic droit sur le dessus de la terre labourée)
+      if (info.plant && input.pressed.mouse2 && t && tb.farmland && t.ny === 1 && w.get(t.x, t.y + 1, t.z) === 0) {
+        w.setBlock(t.x, t.y + 1, t.z, info.plant);
+        g.crops.add(t.x + ',' + (t.y + 1) + ',' + t.z);
         this.consume(1);
+        CM.Audio.play('place', { mat: 'grass' });
         this.swing = 1;
-        this.useCd = 0.5;
-        CM.Audio.play('eat');
-        g.entities.burst(CM.Textures.layer[info.tex], this.x - Math.sin(this.yaw) * 0.4, this.y + 1.4, this.z - Math.cos(this.yaw) * 0.4, 8, { speed: 1.5, size: 0.06 });
+        return;
+      }
+      if (info.type === 'food') {
+        if (!this.eating) this.startEating(stack, info, input);
+        return;
+      }
+      if (info.type === 'bucket') {
+        if (input.pressed.mouse2) this.useBucket(stack, info);
         return;
       }
       if (info.type === 'grapple') {
@@ -895,10 +1008,10 @@
           return;
         }
         // houe : labourer la terre
-        if (info.toolType === 'hoe' && (tb.soil || t.id === B.DIRT) && t.id !== B.FARMLAND && !CM.blocks[w.get(t.x, t.y + 1, t.z)].solid) {
+        if (info.toolType === 'hoe' && (tb.soil || t.id === B.DIRT) && !tb.farmland && !CM.blocks[w.get(t.x, t.y + 1, t.z)].solid) {
           const above = w.get(t.x, t.y + 1, t.z);
           if (above && CM.blocks[above].plant) w.setBlock(t.x, t.y + 1, t.z, 0);
-          w.setBlock(t.x, t.y, t.z, B.FARMLAND);
+          g.till(t.x, t.y, t.z);
           CM.Audio.play('step', { mat: 'gravel' });
           this.swing = 1;
           this.gainXp(stack, 1);
@@ -907,14 +1020,7 @@
         return;
       }
       if (info.type === 'seeds') {
-        if (!input.pressed.mouse2) return;
-        if (t.id === B.FARMLAND && t.ny === 1 && w.get(t.x, t.y + 1, t.z) === 0) {
-          w.setBlock(t.x, t.y + 1, t.z, B.WHEAT_0);
-          g.crops.add(t.x + ',' + (t.y + 1) + ',' + t.z);
-          this.consume(1);
-          CM.Audio.play('place', { mat: 'grass' });
-          this.swing = 1;
-        } else g.ui.toast('Les graines se plantent sur de la terre labourée (houe + clic droit sur la terre)', 'info', 'seeds');
+        if (input.pressed.mouse2) g.ui.toast('Les graines se plantent sur de la terre labourée (houe + clic droit sur la terre)', 'info', 'seeds');
         return;
       }
       if (info.type === 'bonemeal') {
@@ -953,7 +1059,7 @@
       const below = w.get(px, py - 1, pz);
       const bb = CM.blocks[below];
       if (b.plant) {
-        if (b.needsFarmland ? below !== B.FARMLAND : b.soilAny ? !bb.solid : !bb.soil) {
+        if (b.needsFarmland ? !bb.farmland : b.soilAny ? !bb.solid : !bb.soil) {
           g.ui.toast(b.needsFarmland ? 'Se plante sur de la terre labourée' : b.soilAny ? 'Il faut un bloc solide dessous' : 'Se plante sur de l’herbe ou de la terre', 'warn', 'plant');
           return;
         }
@@ -964,9 +1070,25 @@
         g.ui.toast('Le cactus se plante sur du sable', 'warn', 'cactus');
         return;
       }
+      // torche : posée sur le dessus d'un bloc plein, ou accrochée au mur visé
       if (b.render === 'torch') {
-        const sup = w.solidAt(px, py - 1, pz) || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.solidAt(px + dx, py, pz + dz));
-        if (!sup || cur === B.WATER) return;
+        if (cur === B.WATER) return;
+        const full = (x, y, z) => w.colBox(x, y, z) === CM.FULL_BOX;
+        let tid = 0;
+        if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) tid = CM.wallTorch(stack.id, t.nx, t.nz);
+        else if (full(px, py - 1, pz)) tid = stack.id;
+        else {
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (full(px - dx, py, pz - dz)) {
+              tid = CM.wallTorch(stack.id, dx, dz);
+              break;
+            }
+          }
+        }
+        if (!tid) return;
+        w.setBlock(px, py, pz, tid);
+        this.afterPlace(b, stack.id, px, py, pz);
+        return;
       }
       // porte : deux cases libres, tournée face au joueur
       if (b.door) {
@@ -981,12 +1103,12 @@
         this.afterPlace(b, stack.id, px, py, pz);
         return;
       }
-      if (b.solid) {
-        const top = py + b.height;
-        const hit = (ex, ey, ez, hw, h) => ex + hw > px && ex - hw < px + 1 && ey + h > py && ey < top && ez + hw > pz && ez - hw < pz + 1;
+      if (b.col) {
+        const c = b.col, top = py + c[4];
+        const hit = (ex, ey, ez, hw, h) => ex + hw > px + c[0] && ex - hw < px + c[3] && ey + h > py + c[1] && ey < top && ez + hw > pz + c[2] && ez - hw < pz + c[5];
         if (hit(this.x, this.y, this.z, this.hw, this.h)) {
           // un tapis ou une dalle sous les pieds : on se hisse dessus
-          if (b.height <= 0.55 && this.y < top && !CM.Physics.overlaps(w, this.x, top + 0.001, this.z, this.hw, this.h)) this.y = top + 0.001;
+          if (c[4] <= 0.55 && this.y < top && !CM.Physics.overlaps(w, this.x, top + 0.001, this.z, this.hw, this.h)) this.y = top + 0.001;
           else return;
         }
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
@@ -1003,6 +1125,7 @@
       const g = this.game;
       if (CM.TAGS.saplings.includes(id)) g.saplings.add(px + ',' + py + ',' + pz);
       if (b.crop !== undefined) g.crops.add(px + ',' + py + ',' + pz);
+      if (b.farmland) g.farmland.add(px + ',' + py + ',' + pz);
       g.stats.placed[id] = (g.stats.placed[id] || 0) + 1;
       CM.Audio.play('place', { mat: b.sound });
       this.swing = 1;
@@ -1110,7 +1233,11 @@
         batch.box(M, -0.16, -0.16, -0.16, 0.16, -0.16 + hh, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
       } else {
         const layer = info.isBlock ? CM.blockLayers[stack.id][0] : L[info.tex];
-        mat4.compose(M, 0.52 + bx - swingOn * 0.1, -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, -0.55, -0.2 - swingOn * 1.1, 0.3, 1);
+        if (this.eating) {
+          // porté à la bouche, petits mouvements de mastication
+          const k = Math.min(1, this.eating.t / 0.15), chew = Math.abs(Math.sin(this.eating.t * 16)) * 0.035 * k;
+          mat4.compose(M, 0.52 - 0.36 * k, -0.36 + 0.1 * k - chew, -0.72 + 0.2 * k, -0.55 + 0.4 * k, -0.2 + 0.25 * k, 0.3, 1);
+        } else mat4.compose(M, 0.52 + bx - swingOn * 0.1, -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, -0.55, -0.2 - swingOn * 1.1, 0.3, 1);
         const emi = info.isBlock && info.block.light ? 1 : 0;
         batch.box(M, -0.2, -0.2, 0, 0.2, 0.2, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], emi);
       }
