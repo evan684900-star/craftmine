@@ -488,6 +488,22 @@
     }
     for (let x = 5; x < 11; x++) put(d, x, 11 + (x % 2), [70, 30, 100]);
   });
+  // Ombre ardente du Nether : braise noire veinée de feu, yeux jaunes
+  make('ardent_body', (d, r) => {
+    fill(d, r, [46, 16, 10], 6);
+    for (let k = 0; k < 7; k++) {
+      const x = Math.floor(r() * 16);
+      for (let y = 0; y < 16; y++) if (r() < 0.6) put(d, (x + Math.floor(y / 4)) % 16, y, r() < 0.3 ? [255, 190, 60] : [220, 90, 20]);
+    }
+  });
+  make('ardent_face', (d, r) => {
+    fill(d, r, [40, 12, 8], 5);
+    for (const ex of [3, 10]) {
+      put(d, ex, 6, [255, 220, 80]); put(d, ex + 1, 6, [255, 250, 190]);
+      put(d, ex, 7, [240, 140, 30]); put(d, ex + 1, 7, [255, 220, 80]);
+    }
+    for (let x = 5; x < 11; x++) put(d, x, 11 + (x % 2), [230, 90, 20]);
+  });
   make('skin', (d, r) => fill(d, r, [214, 168, 128], 5));
   make('sleeve', (d, r) => fill(d, r, [58, 110, 168], 6));
   // autres joueurs (multijoueur) : visage, cheveux, pantalon
@@ -1544,6 +1560,23 @@
         }
       }
     },
+    // lave : orange vif et jaune, veines sombres
+    lava(d, r) {
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const v = Math.sin(x * 0.9 + y * 0.35) + Math.sin(y * 0.7 - x * 0.4) + r() * 0.8;
+          put(d, x, y, v > 1.3 ? [255, 214, 90] : v > 0.4 ? [245, 130, 25] : v > -0.6 ? [214, 84, 14] : [150, 44, 10]);
+        }
+    },
+    // portail : tourbillon violet translucide
+    portal(d, r) {
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const a = Math.atan2(y - 7.5, x - 7.5), rr = Math.hypot(x - 7.5, y - 7.5);
+          const v = Math.sin(a * 3 + rr * 0.9) * 0.5 + 0.5 + (r() - 0.5) * 0.3;
+          put(d, x, y, [110 + v * 90, 30 + v * 40, 190 + v * 60], 150 + v * 70);
+        }
+    },
     // enclume : fer sombre, dessus plus clair avec un rebord
     anvil(d, r, s) {
       for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) put(d, x, y, vary([62, 62, 66], r, 5));
@@ -2467,6 +2500,11 @@
     line(d, 3, 5, 5, 2, [110, 110, 120]); line(d, 5, 2, 10, 2, [110, 110, 120]); line(d, 10, 2, 12, 5, [110, 110, 120]);
   };
   make('bucket', (d, r) => bucketTex(d, r, false));
+  make('lava_bucket', (d, r) => {
+    bucketTex(d, r, true);
+    for (let x = 3; x < 13; x++) put(d, x, 5, [230, 100, 20]);
+    for (let x = 4; x < 12; x++) put(d, x, 6, [255, 170, 40]);
+  });
   make('water_bucket', (d, r) => bucketTex(d, r, true));
   make('slimeball', (d, r) => {
     clear(d);

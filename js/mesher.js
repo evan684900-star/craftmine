@@ -218,7 +218,7 @@
     // 14 pour une source ou une chute, de plus en plus basse en s'éloignant de la source
     const wTop = (pp) => {
       const ab = padId[pp + PP];
-      if (ab !== BORDER && (WATERY[ab] || (defs[ab] && defs[ab].render === 'tglass'))) return 16;
+      if (ab !== BORDER && (WATERY[ab] === WATERY[padId[pp]] || (defs[ab] && defs[ab].render === 'tglass'))) return 16;
       const l = defs[padId[pp]].level;
       return l === 0 || l === 8 ? 14 : Math.max(2, 14 - Math.round(l * 1.6));
     };
@@ -269,21 +269,23 @@
               const nid = padId[p + f.nOff];
               if (nid === id || OPQ[nid]) continue;
               // pas de face contre l'eau sous la glace (évite les faces superposées)
-              if (WATERY[nid] && fi === 3) continue;
+              if (WATERY[nid] === 1 && fi === 3) continue;
               faceLighting(p, f, false, false);
               setVerts(f, bx, by, bz, FACE_SHADE[fi], 16, false);
               emitQuad(waterBuf, layers[fi], false, 0);
             }
-          } else if (r === 'water') {
+          } else if (r === 'water' || r === 'lava') {
+            // eau (translucide) et lave (opaque et lumineuse) : même forme, hauteur selon le niveau
+            const lava = r === 'lava', buf = lava ? opaqueBuf : waterBuf;
             const topH = wTop(p);
             const layer = LAYERS[id][2];
             for (let fi = 0; fi < 6; fi++) {
               const f = FACES[fi];
               const nid = padId[p + f.nOff];
               if (OPQ[nid]) continue;
-              // contre une eau plus basse : seule la partie qui dépasse est visible
+              // contre un liquide plus bas du même genre : seule la partie qui dépasse est visible
               let baseH = 0;
-              if (nid !== BORDER && WATERY[nid]) {
+              if (nid !== BORDER && WATERY[nid] === WATERY[id]) {
                 if (fi === 2 || fi === 3) continue;
                 baseH = wTop(p + f.nOff);
                 if (baseH >= topH) continue;
@@ -291,7 +293,9 @@
               // contre la glace : seule la surface reste visible
               if (fi !== 2 && nid !== BORDER && defs[nid] && defs[nid].render === 'tglass') continue;
               if (fi === 3 && nid !== 0) continue;
-              faceLighting(p, f, false, false);
+              if (lava) {
+                for (let k = 0; k < 4; k++) sky4[k] = blk4[k] = 255;
+              } else faceLighting(p, f, false, false);
               for (let k = 0; k < 4; k++) {
                 const v = f.v[k];
                 const t = vs[k];
@@ -300,15 +304,34 @@
                 t[2] = bz + v[2] * 16;
                 t[3] = v[3];
                 t[4] = v[4];
-                sh4[k] = Math.round(255 * FACE_SHADE[fi]);
+                sh4[k] = Math.round(255 * (lava ? 0.85 + FACE_SHADE[fi] * 0.15 : FACE_SHADE[fi]));
               }
-              const flag = fi === 2 && topH === 14 ? 2 : 0;
-              waterBuf.quad(vs, layer, sky4, blk4, sh4, flag);
+              const flag = !lava && fi === 2 && topH === 14 ? 2 : 0;
+              buf.quad(vs, layer, sky4, blk4, sh4, flag);
               // surface visible aussi depuis le dessous (sous l'eau)
-              if (fi === 2) {
+              if (fi === 2 && !lava) {
                 vtmp[0] = vs[3]; vtmp[1] = vs[2]; vtmp[2] = vs[1]; vtmp[3] = vs[0];
                 waterBuf.quad(vtmp, layer, sky4, blk4, sh4, flag);
               }
+            }
+          } else if (r === 'portal') {
+            // portail : plan épais translucide, lumineux ; pas de face entre deux blocs de portail
+            const [x0, y0, z0, x1, y1, z1] = b.box;
+            for (let fi = 0; fi < 6; fi++) {
+              const nid = padId[p + FACES[fi].nOff];
+              if (OPQ[nid] || (nid !== BORDER && defs[nid] && defs[nid].portal)) continue;
+              const f = FACES[fi];
+              for (let k = 0; k < 4; k++) {
+                const v = f.v[k];
+                const t = vs[k];
+                t[0] = bx + (v[0] ? x1 : x0);
+                t[1] = by + (v[1] ? y1 : y0);
+                t[2] = bz + (v[2] ? z1 : z0);
+                t[3] = v[3];
+                t[4] = v[4];
+                sky4[k] = blk4[k] = sh4[k] = 255;
+              }
+              waterBuf.quad(vs, LAYERS[id][fi], sky4, blk4, sh4, 0);
             }
           } else if (r === 'cross') {
             const l = padL[p];

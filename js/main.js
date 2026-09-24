@@ -182,15 +182,22 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 4 }, (save && save.settings) || settings || {});
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 5 }, (save && save.settings) || settings || {});
       // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
       if (save && (save.v || 2) < 4) ws.gen = 1;
       this.settings = ws;
       this.mode = ws.mode;
       this.difficulty = ws.difficulty;
-      this.world = new CM.World(seed, save ? save.edits : null, ws);
+      // deux mondes : le monde normal et le Nether (créé au premier voyage)
+      this.worlds = { overworld: new CM.World(seed, save ? save.edits : null, ws) };
       // les modifications sont maintenant rangées avec les couches négatives : à noter dans la sauvegarde
-      ws.ymin = this.world.settings.ymin;
+      ws.ymin = this.worlds.overworld.settings.ymin;
+      this.netherEdits = (save && save.nether && save.nether.edits) || null;
+      this.netherArrival = (save && save.nether && save.nether.arrival) || null;
+      this.dim = save && save.dim === 'nether' ? 'nether' : 'overworld';
+      if (save && save.spawn) this.worlds.overworld.spawn = save.spawn;
+      if (this.dim === 'nether') this.worlds.nether = this.makeNether();
+      this.world = this.worlds[this.dim];
       this.entities = new CM.Entities(this);
       this.entities.remote = this.net.isClient; // invité : l'hôte simule créatures et objets
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
@@ -218,28 +225,10 @@
         if (left <= 0) break;
         await new Promise((r) => setTimeout(r, 0));
       }
-      this.world.fixSpawn();
+      if (this.dim === 'overworld') this.world.fixSpawn();
       this.world.dirty.clear();
-      this.saplings = new Set();
-      for (const id of CM.TAGS.saplings) for (const p of this.world.editedPositions(id)) this.saplings.add(p.join(','));
-      // cultures qui poussent encore (et tiges adultes, qui font pousser leur fruit), terre labourée
-      this.crops = new Set();
-      this.farmland = new Set();
-      for (const p of this.world.editedWhere((id) => {
-        const b = CM.blocks[id];
-        return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
-      })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
-      // tables d'enchantement (livre flottant, runes)
-      this.enchTables = new Set(this.world.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
-      // eau qui coule et feu
       this.ticks = new CM.BlockTicks(this);
-      this.ticks.reset();
-      this.world.onEdit = (x, y, z, id) => {
-        const k = x + ',' + y + ',' + z;
-        if (id === B.ENCHANTING_TABLE) this.enchTables.add(k);
-        else if (this.enchTables.size) this.enchTables.delete(k);
-        this.ticks.onEdit(x, y, z, id);
-      };
+      this.indexWorld();
       this.growTimer = 1;
       this.player = new CM.Player(this);
       if (save) {
@@ -262,7 +251,6 @@
         this.stats = Object.assign(this.freshStats(), migrateStats(save.stats || {}, v));
         this.dawnHearts = save.dawnHearts || [];
         this.victory = !!save.victory;
-        if (save.spawn) this.world.spawn = save.spawn;
         this.noteBlocks = save.noteBlocks || {};
         for (const k in save.chests || {}) {
           this.chests.set(k, save.chests[k].map((s) => {
@@ -274,7 +262,7 @@
       } else if (ws.bonusChest) this.placeBonusChest();
       if (!save && ws.mode === 'creative') this.player.flying = false;
       this.inventory.changed();
-      if (!this.net.isClient) this.spawnInitialMobs();
+      if (!this.net.isClient && this.dim === 'overworld') this.spawnInitialMobs();
       // pré-construction des maillages autour du joueur
       $('load-text').textContent = 'Construction du paysage…';
       total = 0;
@@ -303,6 +291,297 @@
       if (save && save.v < 4) setTimeout(() => this.ui.toast('Nouvelle version : plus de 500 blocs, la faim remplace l’endurance, mode créatif…', 'gold'), 800);
     }
 
+    // ------------------------------------------------------ dimensions --
+    makeNether(edits) {
+      const ws = Object.assign({}, this.settings, { type: 'nether', ymin: CM.WORLD.MINY });
+      return new CM.World(this.worlds.overworld.seed, edits !== undefined ? edits : this.netherEdits, ws);
+    }
+    // Repères tirés des modifications du monde courant (pousses, cultures, tables d'enchantement),
+    // et reprise des liquides et du feu.
+    indexWorld() {
+      const w = this.world;
+      this.saplings = new Set();
+      for (const id of CM.TAGS.saplings) for (const p of w.editedPositions(id)) this.saplings.add(p.join(','));
+      // cultures qui poussent encore (et tiges adultes, qui font pousser leur fruit), terre labourée
+      this.crops = new Set();
+      this.farmland = new Set();
+      for (const p of w.editedWhere((id) => {
+        const b = CM.blocks[id];
+        return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
+      })) (CM.blocks[p[3]].farmland ? this.farmland : this.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
+      // tables d'enchantement (livre flottant, runes)
+      this.enchTables = new Set(w.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      // liquides qui coulent et feu
+      this.ticks.reset();
+      w.onEdit = (x, y, z, id) => {
+        const k = x + ',' + y + ',' + z;
+        if (id === B.ENCHANTING_TABLE) this.enchTables.add(k);
+        else if (this.enchTables.size) this.enchTables.delete(k);
+        this.ticks.onEdit(x, y, z, id);
+      };
+    }
+    // Où réapparaître : dans le monde normal (lit ou départ) ; en multijoueur, le groupe
+    // reste ensemble, donc dans le Nether on repart du portail d'arrivée.
+    respawnPoint() {
+      if (this.dim === 'nether' && this.net.active && this.netherArrival) return Object.assign({ dim: 'nether' }, this.netherArrival);
+      const ow = this.worlds.overworld, bed = this.player.bed;
+      if (bed) return { dim: 'overworld', x: bed[0] + 0.5, y: bed[1] + 9 / 16 + 0.01, z: bed[2] + 0.5 };
+      return { dim: 'overworld', x: ow.spawn.x, y: ow.spawn.y, z: ow.spawn.z };
+    }
+
+    // Cadre de portail autour d'une case vide : 2 à 21 de large, 3 à 21 de haut, en obsidienne
+    // (les coins ne comptent pas). axis 0 : plan le long de x, 1 : le long de z.
+    portalFrame(x, y, z, axis) {
+      const w = this.world, OB = B.OBSIDIAN;
+      const ax = axis ? 0 : 1, az = axis ? 1 : 0;
+      const open = (id) => id === 0 || id === B.FIRE || CM.blocks[id].portal;
+      if (!open(w.get(x, y, z))) return null;
+      let by = y;
+      while (by > y - 22 && open(w.get(x, by - 1, z))) by--;
+      if (w.get(x, by - 1, z) !== OB) return null;
+      let l = 0, r = 0;
+      while (l < 22 && open(w.get(x - ax * (l + 1), by, z - az * (l + 1)))) l++;
+      while (r < 22 && open(w.get(x + ax * (r + 1), by, z + az * (r + 1)))) r++;
+      const width = l + r + 1;
+      if (width < 2 || width > 21) return null;
+      const x0 = x - ax * l, z0 = z - az * l;
+      let h = 0;
+      while (h < 22 && open(w.get(x0, by + h, z0))) h++;
+      if (h < 3 || h > 21) return null;
+      for (let i = 0; i < width; i++) {
+        const X = x0 + ax * i, Z = z0 + az * i;
+        if (w.get(X, by - 1, Z) !== OB || w.get(X, by + h, Z) !== OB) return null;
+        for (let j = 0; j < h; j++) if (!open(w.get(X, by + j, Z))) return null;
+      }
+      for (let j = 0; j < h; j++) {
+        if (w.get(x0 - ax, by + j, z0 - az) !== OB || w.get(x0 + ax * width, by + j, z0 + az * width) !== OB) return null;
+      }
+      return { x0, y0: by, z0, ax, az, width, h, axis };
+    }
+    // Briquet dans un cadre d'obsidienne : le portail s'allume.
+    tryLightPortal(x, y, z) {
+      for (const axis of [0, 1]) {
+        const f = this.portalFrame(x, y, z, axis);
+        if (!f) continue;
+        const id = CM.PORTALS[axis];
+        for (let i = 0; i < f.width; i++) for (let j = 0; j < f.h; j++) this.world.setBlock(f.x0 + f.ax * i, f.y0 + j, f.z0 + f.az * i, id);
+        CM.Audio.play('portal');
+        if (!this.stats.portal) {
+          this.stats.portal = 1;
+          this.ui.toast('Le portail du Nether s’allume ! Reste quelques secondes dedans pour voyager.', 'gold');
+        }
+        return true;
+      }
+      return false;
+    }
+    // Un bloc voisin d'un portail a changé : si le cadre est cassé, tout le portail s'éteint.
+    checkPortal(x, y, z) {
+      const w = this.world, id = w.get(x, y, z), b = CM.blocks[id];
+      if (!b.portal) return;
+      const axis = id === CM.PORTALS[1] ? 1 : 0;
+      if (this.portalFrame(x, y, z, axis)) return;
+      const ax = axis ? 0 : 1, az = axis ? 1 : 0;
+      const todo = [[x, y, z]], seen = new Set();
+      while (todo.length && seen.size < 500) {
+        const [X, Y, Z] = todo.pop();
+        const k = X + ',' + Y + ',' + Z;
+        if (seen.has(k) || w.get(X, Y, Z) !== id) continue;
+        seen.add(k);
+        w.setBlock(X, Y, Z, 0);
+        todo.push([X + ax, Y, Z + az], [X - ax, Y, Z - az], [X, Y + 1, Z], [X, Y - 1, Z]);
+      }
+    }
+    // Portail existant le plus proche (d'après les modifications : les portails sont toujours posés).
+    findPortal(w, tx, tz, radius) {
+      let best = null, bd = Infinity;
+      for (const [x, y, z, id] of w.editedWhere((i) => !!CM.blocks[i].portal)) {
+        const d = Math.hypot(x - tx, z - tz);
+        if (d > radius || d >= bd) continue;
+        let yy = y;
+        while (CM.blocks[w.get(x, yy - 1, z)].portal && yy > y - 22) yy--;
+        bd = d;
+        best = { x: x + 0.5, y: yy, z: z + 0.5, id };
+      }
+      return best;
+    }
+    // Construit un portail (cadre 4 × 5) à l'arrivée ; cherche un endroit dégagé, sinon creuse
+    // et pose une plateforme d'obsidienne. Renvoie le point d'arrivée.
+    buildPortal(w, tx, ty, tz, axis) {
+      const ax = axis ? 0 : 1, az = axis ? 1 : 0;
+      const nether = w.nether;
+      const free = (id) => !CM.blocks[id].solid && !CM.isFluid(id) && !CM.blocks[id].portal;
+      const siteOK = (x, y, z) => {
+        for (let i = 0; i < 4; i++)
+          for (let j = -1; j <= 1; j++) {
+            const X = x + ax * i + az * j, Z = z + az * i + ax * j;
+            if (!w.loaded(X, Z) || !w.solidAt(X, y - 1, Z) || CM.isFluid(w.get(X, y - 1, Z))) return false;
+            for (let k = 0; k < 5; k++) if (!free(w.get(X, y + k, Z))) return false;
+          }
+        return true;
+      };
+      let site = null;
+      const R = nether ? 12 : 16;
+      search: for (let r = 0; r <= R; r++)
+        for (let dz = -r; dz <= r; dz++)
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+            const x = tx + dx, z = tz + dz;
+            if (!w.loaded(x, z)) continue;
+            if (nether) {
+              for (let k = 0; k <= 24; k++) {
+                const y = ty + (k % 2 ? -((k + 1) >> 1) : k >> 1);
+                if (y < 33 || y > 84) continue;
+                if (siteOK(x, y, z)) {
+                  site = [x, y, z];
+                  break search;
+                }
+              }
+            } else {
+              const y = w.groundBelow(x, CM.WORLD.H - 1, z) + 1;
+              if (y > CM.WORLD.MINY + 5 && y < CM.WORLD.H - 6 && siteOK(x, y, z)) {
+                site = [x, y, z];
+                break search;
+              }
+            }
+          }
+      let [x, y, z] = site || [tx, ty, tz];
+      if (!site) {
+        // rien de dégagé : on creuse une niche et on pose une plateforme
+        y = nether ? Math.max(34, Math.min(80, ty)) : Math.max(CM.WORLD.MINY + 6, Math.min(CM.WORLD.H - 7, ty));
+        for (let i = -1; i <= 4; i++)
+          for (let j = -1; j <= 1; j++) {
+            const X = x + ax * i + az * j, Z = z + az * i + ax * j;
+            for (let k = 0; k < 5; k++) if (w.get(X, y + k, Z) !== B.BEDROCK) w.setBlock(X, y + k, Z, 0);
+            if (i >= 0 && i <= 3 && w.get(X, y - 1, Z) !== B.BEDROCK && !w.solidAt(X, y - 1, Z)) w.setBlock(X, y - 1, Z, B.OBSIDIAN);
+          }
+      }
+      for (let i = 0; i < 4; i++)
+        for (let k = 0; k < 5; k++) {
+          const edge = i === 0 || i === 3 || k === 0 || k === 4;
+          w.setBlock(x + ax * i, y + k, z + az * i, edge ? B.OBSIDIAN : CM.PORTALS[axis]);
+        }
+      return { x: x + ax * 2 + az * 0.5, y: y + 1, z: z + az * 2 + ax * 0.5 };
+    }
+    // Le joueur est resté assez longtemps dans un portail.
+    enterPortal(x, y, z) {
+      if (this.net.isClient) {
+        this.net.send({ t: 'portal', x, y, z });
+        this.ui.toast('Le portail vous emporte…', 'info', 'portal');
+        return;
+      }
+      this.changeDim(this.dim === 'nether' ? 'overworld' : 'nether', { from: [x, y, z] });
+    }
+    // Voyage vers l'autre dimension. opts.from : portail de départ (le portail d'arrivée est
+    // trouvé ou construit) ; opts.at : point d'arrivée imposé (réapparition, invité) ;
+    // opts.edits : modifications du monde d'arrivée envoyées par l'hôte.
+    async changeDim(to, opts) {
+      opts = opts || {};
+      if (this.switching || !this.world) return;
+      this.switching = true;
+      const net = this.net, p = this.player;
+      net.flushSets();
+      net.locks.clear();
+      net.chestKey = null;
+      if (this.ui.invOpen) this.ui.closeInventory();
+      if (p.sleeping) this.wake('dim');
+      const from = this.world;
+      const src = opts.from ? { x: opts.from[0], y: opts.from[1], z: opts.from[2], id: from.get(opts.from[0], opts.from[1], opts.from[2]) } : null;
+      this.state = 'loading';
+      this.ui.show('loading');
+      $('load-text').textContent = to === 'nether' ? 'Voyage vers le Nether…' : 'Retour dans le monde normal…';
+      $('load-fill').style.width = '0%';
+      CM.Audio.play('travel');
+      // les animaux d'élevage restent dans le monde normal, les objets au sol dans leur monde :
+      // on les retrouve au retour (par exemple ce qu'on a perdu en mourant dans le Nether)
+      if (!net.isClient) {
+        if (this.dim === 'overworld') this.animals = this.entities.tameList();
+        this.dimDrops = this.dimDrops || {};
+        this.dimDrops[this.dim] = this.entities.drops.filter((d) => !d.dead);
+      }
+      // on quitte l'ancien monde (ses modifications restent en mémoire)
+      from.onEdit = null;
+      from.onSet = null;
+      for (const c of [...from.chunks.values()]) from.removeChunk(c);
+      from.dirty.clear();
+      this.renderer.freeAll();
+      this.dim = to;
+      if (opts.edits !== undefined) this.worlds[to] = to === 'nether' ? this.makeNether(opts.edits) : new CM.World(from.seed, opts.edits, this.settings);
+      else if (!this.worlds[to]) this.worlds[to] = this.makeNether();
+      const w = (this.world = this.worlds[to]);
+      const remote = this.entities.remote;
+      this.entities = new CM.Entities(this);
+      this.entities.remote = remote;
+      if (!net.isClient && this.dimDrops && this.dimDrops[to]) {
+        this.entities.drops.push(...this.dimDrops[to]);
+        delete this.dimDrops[to];
+      }
+      this.indexWorld();
+      // point visé : coordonnées ÷ 8 dans le Nether, × 8 au retour
+      let dest = opts.at || null;
+      const k = to === 'nether' ? 1 / 8 : 8;
+      const tx = dest ? Math.floor(dest.x) : Math.floor((src ? src.x : p.x) * k);
+      const tz = dest ? Math.floor(dest.z) : Math.floor((src ? src.z : p.z) * k);
+      const ty = dest ? Math.floor(dest.y) : Math.floor(src ? src.y : p.y);
+      net.muted = true;
+      let total = 0;
+      for (;;) {
+        const left = w.stream(tx, tz, this.renderer.renderDist + 1, 40);
+        if (!total) total = left + 1;
+        $('load-fill').style.width = Math.round((1 - left / total) * 60) + '%';
+        if (left <= 0) break;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      if (!dest) {
+        const found = this.findPortal(w, tx, tz, to === 'nether' ? 16 : 128);
+        if (found) dest = found;
+        else {
+          const axis = src && src.id === CM.PORTALS[1] ? 1 : 0;
+          dest = this.buildPortal(w, tx, ty, tz, axis);
+        }
+      }
+      net.muted = false;
+      if (to === 'nether') this.netherArrival = { x: dest.x, y: dest.y, z: dest.z };
+      else if (!this.worlds.nether) this.netherEdits = null;
+      p.x = dest.x;
+      p.y = dest.y;
+      p.z = dest.z;
+      p.vx = p.vy = p.vz = 0;
+      p.fallStart = p.y;
+      p.portalLock = true;
+      p.portalT = 0;
+      p.target = null;
+      p.mining = null;
+      p.hook = null;
+      w.stream(p.x, p.z, this.renderer.renderDist + 1, 40);
+      // l'hôte emmène tout le groupe
+      if (net.isHost) {
+        net.broadcast({ t: 'dim', to, e: w.editsObject(), at: [dest.x, dest.y, dest.z] });
+        for (const rp of net.remotes.values()) {
+          rp.x = rp.rx = dest.x;
+          rp.y = rp.ry = dest.y;
+          rp.z = rp.rz = dest.z;
+        }
+      }
+      if (net.active) net.attachWorld();
+      $('load-text').textContent = 'Construction du paysage…';
+      total = 0;
+      for (;;) {
+        const left = this.renderer.updateMeshes(w, p.x, p.z, 40);
+        if (!total) total = left + 1;
+        $('load-fill').style.width = Math.round(60 + (1 - left / total) * 40) + '%';
+        if (left <= 0) break;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      this.ui.hide('loading');
+      this.state = 'playing';
+      this.switching = false;
+      this.last = performance.now();
+      if (to === 'nether') this.ui.toast('Bienvenue dans le Nether ! Attention à la lave et aux Ombres ardentes.', 'gold', 'dim');
+      else this.ui.toast('De retour dans le monde normal', 'good', 'dim');
+      this.save(true);
+      if (opts.then) opts.then();
+    }
+
     // Coffre de départ (option à la création du monde).
     placeBonusChest() {
       const w = this.world, sp = w.spawn;
@@ -318,7 +597,7 @@
         slots[i] = { id, count: n };
         if (CM.hasWear(id)) slots[i].xp = 0;
       });
-      this.chests.set(x + ',' + y + ',' + z, slots);
+      this.chests.set(this.bkey(x, y, z), slots);
     }
 
     spawnInitialMobs() {
@@ -339,15 +618,20 @@
     // ----------------------------------------------------- sauvegarde ----
     // État complet de la partie en cours (ce qui est sauvegardé / exporté).
     saveData() {
-      const p = this.player;
+      const p = this.player, ow = this.worlds.overworld;
+      // mort : on repart du point de réapparition (monde normal, ou portail du Nether en multijoueur)
+      const rs = p.alive ? null : this.respawnPoint();
+      const nether = this.worlds.nether ? this.worlds.nether.editsObject() : this.netherEdits;
       return {
         v: SAVE_VERSION,
-        seed: this.world.seed,
+        seed: ow.seed,
         settings: Object.assign({}, this.settings, { mode: this.mode, difficulty: this.difficulty }),
-        spawn: this.world.spawn,
-        edits: this.world.editsObject(),
+        spawn: ow.spawn,
+        edits: ow.editsObject(),
+        dim: rs ? rs.dim : this.dim,
+        nether: nether ? { edits: nether, arrival: this.netherArrival } : undefined,
         player: {
-          x: p.alive ? p.x : this.world.spawn.x, y: p.alive ? p.y : this.world.spawn.y, z: p.alive ? p.z : this.world.spawn.z,
+          x: rs ? rs.x : p.x, y: rs ? rs.y : p.y, z: rs ? rs.z : p.z,
           yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
           xp: p.xpTotal, enchSeed: p.enchSeed,
         },
@@ -847,7 +1131,7 @@
     }
     setDifficulty(d) {
       this.difficulty = d;
-      if (d === 'peaceful') for (const m of this.entities.mobs) if (m.type === 'ombre') m.dead = true;
+      if (d === 'peaceful') for (const m of this.entities.mobs) if (m.type === 'ombre' || m.type === 'ardent') m.dead = true;
       this.net.sendCfg();
     }
 
@@ -882,13 +1166,17 @@
       this.ui.pickup(id, n);
     }
     // Ouvre un coffre (partagé en multijoueur : un seul joueur à la fois).
+    // Clé d'un bloc à contenu (coffre, bloc musical) : celles du Nether commencent par « N ».
+    bkey(x, y, z) {
+      return (this.dim === 'nether' ? 'N' : '') + x + ',' + y + ',' + z;
+    }
     openChestAt(x, y, z, title) {
       if (this.net.active) this.net.openChest(x, y, z, title);
       else this.ui.openChest(this.chestAt(x, y, z), title);
     }
     chestAt(x, y, z) {
       if (this.net.isClient) return new Array(27).fill(null); // les coffres sont chez l'hôte
-      const k = x + ',' + y + ',' + z;
+      const k = this.bkey(x, y, z);
       if (!this.chests.has(k)) {
         const slots = new Array(27).fill(null);
         if (this.world.isNaturalChest(x, y, z)) this.fillLoot(slots, x, y, z);
@@ -900,6 +1188,25 @@
     fillLoot(slots, x, y, z) {
       const r = CM.rng((CM.hash3(x, y, z, this.world.seed + 999) * 4294967296) >>> 0);
       const I = CM.I;
+      // coffre de forteresse du Nether
+      if (this.world.nether) {
+        const nt = [[I.GOLD_INGOT, 0.7, 2, 7], [I.IRON_INGOT, 0.5, 1, 5], [I.DIAMOND, 0.25, 1, 3], [I.FLINT_AND_STEEL, 0.25, 1, 1], [B.OBSIDIAN, 0.35, 2, 6],
+          [I.NETHERITE_SCRAP, 0.12, 1, 1], [I.QUARTZ, 0.45, 3, 10], [I.GOLDEN_APPLE, 0.1, 1, 1], [I.GLOWSTONE_DUST, 0.35, 2, 8], [I.LAVA_BUCKET, 0.08, 1, 1],
+          [I.CHESTPLATE_GOLD, 0.15, 1, 1], [I.HELMET_GOLD, 0.15, 1, 1], [I.SWORD_GOLD, 0.15, 1, 1], [I.BOOTS_IRON, 0.08, 1, 1], [I.COOKED_MEAT, 0.3, 1, 4]];
+        const its = [];
+        for (const [id, p, a, b] of nt) if (id !== undefined && r() < p) its.push({ id, count: a + Math.floor(r() * (b - a + 1)) });
+        if (r() < 0.25) {
+          const pool = [I.SWORD_GOLD, I.PICKAXE_IRON, I.CHESTPLATE_GOLD, I.BOOTS_GOLD, I.HELMET_IRON];
+          const id = pool[Math.floor(r() * pool.length)];
+          if (id !== undefined) its.push({ id, count: 1, ench: CM.rollEnchants(id, 10 + Math.floor(r() * 16), r) });
+        }
+        const free = [...Array(27).keys()];
+        for (const it of its) {
+          if (CM.hasWear(it.id)) it.xp = it.xp || 0;
+          slots[free.splice(Math.floor(r() * free.length), 1)[0]] = it;
+        }
+        return;
+      }
       // coffre d'une maison de village (celui du forgeron est mieux garni)
       const vil = this.world.villageNear(x, z, 0);
       const vc = vil && vil.chests.find((c) => c.x === x && c.y === y && c.z === z);
@@ -950,7 +1257,7 @@
     }
     spillChest(x, y, z) {
       if (this.net.isClient) return; // l'hôte fait tomber le contenu
-      const k = x + ',' + y + ',' + z;
+      const k = this.bkey(x, y, z);
       const c = this.chests.get(k);
       if (!c) return;
       this.net.chestGone(k);
@@ -1116,6 +1423,14 @@
     // ----------------------------------------------------------- lits -----
     tryBed(x, y, z) {
       const p = this.player;
+      // dans le Nether, un lit explose (comme dans Minecraft)
+      if (this.dim === 'nether') {
+        this.world.setBlock(x, y, z, 0);
+        this.ui.toast('Les lits explosent dans le Nether !', 'warn', 'bednether');
+        if (this.net.isClient) this.entities.addTnt(x + 0.5, y, z + 0.5, 0.05);
+        else this.explode(x + 0.5, y + 0.5, z + 0.5, 4.5);
+        return;
+      }
       if (!p.bed || p.bed.join() !== [x, y, z].join()) this.ui.toast('Point de réapparition défini sur ce lit', 'good', 'bedspawn');
       p.bed = [x, y, z];
       if (this.daylight >= 0.35) {
@@ -1204,6 +1519,7 @@
     // Citrouille posée sur un T de 4 blocs de fer : le golem se réveille.
     tryBuildGolem(x, y, z) {
       const w = this.world, IB = B.IRON_BLOCK;
+      if (this.dim === 'nether') return false;
       if (w.get(x, y - 1, z) !== IB || w.get(x, y - 2, z) !== IB) return false;
       let arms = null;
       if (w.get(x - 1, y - 1, z) === IB && w.get(x + 1, y - 1, z) === IB) arms = [[x - 1, y - 1, z], [x + 1, y - 1, z]];
@@ -1341,10 +1657,28 @@
       let fogColor = mix([0.02, 0.02, 0.03], horizon, 0.25 + 0.75 * cave);
       const rd = this.renderer.renderDist * 16;
       let fog = [rd * 0.55, rd - 6];
-      const underwater = CM.isWater(w.get(Math.floor(cam[0]), Math.floor(cam[1] + 0.05), Math.floor(cam[2])));
+      const camId = w.get(Math.floor(cam[0]), Math.floor(cam[1] + 0.05), Math.floor(cam[2]));
+      const underwater = CM.isWater(camId);
+      let flatSky = null, ambient = null;
+      if (w.nether) {
+        // Nether : brume colorée selon le biome, pas de ciel, lueur ambiante
+        const bi = w.column(Math.floor(cam[0]), Math.floor(cam[2])).bi, BIO = CM.BIO;
+        const want = bi === BIO.CRIMSON_FOREST ? [0.24, 0.03, 0.03] : bi === BIO.WARPED_FOREST ? [0.05, 0.12, 0.12] : bi === BIO.SOUL_VALLEY ? [0.1, 0.2, 0.19] : bi === BIO.BASALT_DELTAS ? [0.28, 0.24, 0.27] : [0.22, 0.04, 0.03];
+        const nf = this.netherFog || (this.netherFog = want.slice());
+        for (let i = 0; i < 3; i++) nf[i] += (want[i] - nf[i]) * 0.02;
+        fogColor = nf.slice();
+        fog = [rd * 0.2, rd * 0.8];
+        flatSky = fogColor;
+        ambient = [0.3, 0.2, 0.17];
+      }
       if (underwater) {
         fogColor = mix([0.02, 0.05, 0.12], [0.1, 0.28, 0.55], day);
         fog = [0, 22];
+        flatSky = [0.1, 0.22, 0.45];
+      } else if (CM.isLava(camId)) {
+        fogColor = [0.72, 0.22, 0.03];
+        fog = [0, 1.6];
+        flatSky = fogColor;
       }
       return {
         sunDir, zenith, horizon, fogColor, fog,
@@ -1354,6 +1688,8 @@
         sunset,
         time: this.clock,
         underwater,
+        flatSky,
+        ambient,
         held: [cam[0], cam[1], cam[2], p.heldLight()],
         cam,
       };

@@ -144,6 +144,10 @@
       this.inWater = CM.isWater(w.get(fx, Math.floor(this.y + 0.4), fz));
       const wasHeadIn = this.headInWater;
       this.headInWater = CM.isWater(w.get(fx, Math.floor(this.y + this.eyeH), fz));
+      // lave : on s'y enfonce lentement, on y nage à peine
+      this.inLava = CM.isLava(w.get(fx, Math.floor(this.y + 0.4), fz)) || CM.isLava(w.get(fx, Math.floor(this.y + 0.05), fz));
+      this.headInLava = CM.isLava(w.get(fx, Math.floor(this.y + this.eyeH), fz));
+      this.inFluid = this.inWater || this.inLava;
       if (this.inWater && !this.wasInWater && this.vy < -6) CM.Audio.play('splash');
       this.wasInWater = this.inWater;
 
@@ -173,7 +177,7 @@
       }
 
       const under = CM.blocks[w.get(fx, Math.floor(this.y - 0.05), fz)];
-      this.sneaking = !this.flying && !!k[K.sneak] && !this.inWater;
+      this.sneaking = !this.flying && !!k[K.sneak] && !this.inFluid;
       this.eyeOffset += ((this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
       // course : maintenir ou basculer (option)
       const sprintKey = !!k[K.sprint];
@@ -196,6 +200,7 @@
         this.sprinting = false;
       }
       if (this.inWater) speed = this.sprinting ? 3.6 : 2.6;
+      if (this.inLava) speed = this.sprinting ? 1.6 : 1.2;
       if (this.onGround && under.slow) speed *= under.slow;
       if (this.onGround && under.slip) speed *= 1.15;
       if (this.flying) speed = this.sprinting ? 21 : 11;
@@ -226,7 +231,7 @@
       if (this.dashTime > 0) {
         if (wl) this.steer(wx, wz, 22 * dt);
         else this.steer(-Math.sin(this.yaw), -Math.cos(this.yaw), 22 * dt);
-      } else if (this.dashAir && wl && !this.onGround && !this.inWater && !this.hook) {
+      } else if (this.dashAir && wl && !this.onGround && !this.inFluid && !this.hook) {
         this.steer(wx, wz, 8 * dt);
       }
 
@@ -236,9 +241,9 @@
         if (this.flying) {
           this.vx += (wx * speed - this.vx) * Math.min(1, 10 * dt);
           this.vz += (wz * speed - this.vz) * Math.min(1, 10 * dt);
-        } else if (this.onGround || this.inWater) {
+        } else if (this.onGround || this.inFluid) {
           const slip = this.onGround && under.slip;
-          const acc = this.inWater ? 8 : slip ? 1.2 * (1 - under.slip) * 60 : 16;
+          const acc = this.inLava ? 5 : this.inWater ? 8 : slip ? 1.2 * (1 - under.slip) * 60 : 16;
           this.vx += (wx * speed - this.vx) * Math.min(1, acc * dt);
           this.vz += (wz * speed - this.vz) * Math.min(1, acc * dt);
         } else {
@@ -258,12 +263,13 @@
         }
       }
 
-      // ----- courant : l'eau qui coule entraîne le joueur
-      if (this.inWater && !this.flying) {
+      // ----- courant : l'eau (et un peu la lave) qui coule entraîne le joueur
+      if (this.inFluid && !this.flying) {
         const fv = CM.flowVector(w, fx, Math.floor(this.y + 0.4), fz);
         if (fv) {
-          this.vx += fv[0] * 9 * dt;
-          this.vz += fv[1] * 9 * dt;
+          const push = this.inLava ? 3 : 9;
+          this.vx += fv[0] * push * dt;
+          this.vz += fv[1] * push * dt;
           if (fv[2] < 0) this.vy -= 6 * dt;
         }
       }
@@ -273,6 +279,10 @@
       if (this.flying) {
         const up = (k[K.jump] ? 1 : 0) - (k[K.sneak] ? 1 : 0);
         this.vy += (up * 9 - this.vy) * Math.min(1, 10 * dt);
+      } else if (this.inLava) {
+        if (k[K.jump]) this.vy = Math.min(this.vy + 10 * dt, Math.max(this.vy, 2.2));
+        else this.vy = Math.max(this.vy - 5 * dt, -1.6);
+        if (k[K.jump] && (this.hitX || this.hitZ) && !this.headInLava) this.vy = 7.5;
       } else if (this.inWater) {
         if (k[K.jump]) this.vy = Math.min(this.vy + 16 * dt, Math.max(this.vy, 3.4));
         else this.vy = Math.max(this.vy - 7 * dt, -2.8);
@@ -345,13 +355,13 @@
           this.onGround = false;
           CM.Audio.play('bounce');
           g.entities.burst(CM.blockLayers[under2][2], this.x, this.y, this.z, 8, { speed: 3 });
-        } else if (fall > 3.6 && !this.inWater && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK && !CM.isWater(w.get(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)))) {
+        } else if (fall > 3.6 && !this.inFluid && !bouncy && under2 !== B.HAY_BLOCK && under2 !== B.HONEY_BLOCK && !CM.isWater(w.get(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)))) {
           // (atterrir dans l'eau, même versée au dernier moment avec un seau, annule la chute)
           this.damage(Math.floor(fall - 3), null, null, 'La gravité');
         }
         if (!wasGround && fall > 1) CM.Audio.play('step', { mat: this.matUnder() });
       }
-      if (this.onGround || this.inWater || this.hook || this.flying) {
+      if (this.onGround || this.inFluid || this.hook || this.flying) {
         if (this.dashTime <= 0) this.dashAir = false;
         this.fallStart = this.y;
         if (this.onGround) this.usedDouble = false;
@@ -379,6 +389,15 @@
         this.burning = Math.max(this.burning || 0, 8);
         if (this.invul <= 0) this.damage(1, null, null, 'Le feu');
       }
+      // lave : 4 points de dégâts toutes les demi-secondes et 15 s de brûlure en sortant
+      if (!this.creative && (this.inLava || this.touching((b) => b.lava))) {
+        this.burning = Math.max(this.burning || 0, 15);
+        if (this.invul <= 0) {
+          this.damage(4, null, null, 'La lave');
+          this.invul = Math.min(this.invul, 0.5);
+          CM.Audio.play('burn');
+        }
+      }
       if (this.burning > 0) {
         this.burning -= dt;
         if (this.inWater || this.creative) this.burning = 0;
@@ -388,6 +407,21 @@
           this.damage(1, null, null, 'Le feu', true);
         }
         if (Math.random() < dt * 20) g.entities.burst(CM.Textures.layer.flame, this.x + (Math.random() - 0.5) * 0.6, this.y + Math.random() * 1.6, this.z + (Math.random() - 0.5) * 0.6, 1, { speed: 0.4, grav: -2.5, life: 0.5, size: 0.1, emissive: true });
+      }
+
+      // portail du Nether : rester dedans quelques secondes pour voyager
+      const inPortal = !g.switching && this.touching((b) => b.portal);
+      if (inPortal && !this.portalLock) {
+        if (!(this.portalT > 0)) CM.Audio.play('portal');
+        this.portalT = (this.portalT || 0) + dt;
+        if (this.portalT >= this.portalTime()) {
+          this.portalT = 0;
+          this.portalLock = true;
+          g.enterPortal(Math.floor(this.x), Math.floor(this.y + 0.2), Math.floor(this.z));
+        }
+      } else {
+        if (!inPortal) this.portalLock = false;
+        this.portalT = Math.max(0, (this.portalT || 0) - dt * 2);
       }
 
       // ----- visée, minage, combat, utilisation
@@ -469,6 +503,9 @@
     }
 
     // Un bloc qui vérifie test() touche-t-il le joueur ?
+    portalTime() {
+      return this.creative ? 1 : 3.5;
+    }
     touching(test) {
       const w = this.game.world, e = 0.06;
       const x0 = Math.floor(this.x - this.hw - e), x1 = Math.floor(this.x + this.hw + e);
@@ -485,7 +522,7 @@
 
     updateTarget() {
       const e = this.eye(), d = this.aim();
-      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => !CM.isWater(id));
+      this.target = this.game.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => !CM.isFluid(id) && !CM.blocks[id].portal);
     }
 
     // ------------------------------------------------------------ grappin --
@@ -665,13 +702,13 @@
           if (left) g.entities.addDrop(id, left, this.x, this.y + 1, this.z);
         }
       };
-      if (!info.water) {
-        // seule une source se ramasse (l'eau qui coule, non)
-        const h = w.raycast(e[0], e[1], e[2], d[0], d[1], d[2], reach, (id) => id === B.WATER || CM.blocks[id].solid);
-        if (!h || h.id !== B.WATER) return;
+      if (!info.water && !info.lava) {
+        // seule une source se ramasse (le liquide qui coule, non)
+        const h = w.raycast(e[0], e[1], e[2], d[0], d[1], d[2], reach, (id) => id === B.WATER || id === B.LAVA || CM.blocks[id].solid);
+        if (!h || (h.id !== B.WATER && h.id !== B.LAVA)) return;
         w.setBlock(h.x, h.y, h.z, 0);
-        swap(I.WATER_BUCKET);
-        CM.Audio.play('splash');
+        swap(h.id === B.LAVA ? I.LAVA_BUCKET : I.WATER_BUCKET);
+        CM.Audio.play(h.id === B.LAVA ? 'burn' : 'splash');
         this.swing = 1;
         return;
       }
@@ -683,12 +720,27 @@
         px = t.x; py = t.y; pz = t.z;
       }
       const cur = w.get(px, py, pz);
-      // on peut verser dans de l'eau qui coule (elle devient une source), pas sur une source
-      if (!w.inside(px, py, pz) || (cur !== 0 && !CM.blocks[cur].replaceable) || cur === B.WATER) return;
-      w.setBlock(px, py, pz, B.WATER);
-      swap(I.BUCKET);
-      CM.Audio.play('splash');
+      const fluid = info.lava ? B.LAVA : B.WATER;
+      // on peut verser dans un liquide qui coule (il devient une source), pas sur une source
+      if (!w.inside(px, py, pz) || (cur !== 0 && !CM.blocks[cur].replaceable) || cur === fluid) return;
       this.swing = 1;
+      swap(I.BUCKET);
+      // l'eau s'évapore dans le Nether
+      if (!info.lava && w.type === 'nether') {
+        CM.Audio.play('burn');
+        g.entities.burst(CM.Textures.layer.smoke, px + 0.5, py + 0.5, pz + 0.5, 12, { speed: 1, grav: -2, life: 0.9, size: 0.14 });
+        return;
+      }
+      // eau et lave qui se rencontrent : obsidienne (source) ou galets (lave qui coule)
+      const other = info.lava ? CM.isWater(cur) : CM.isLava(cur);
+      if (other) {
+        w.setBlock(px, py, pz, cur === B.WATER || cur === B.LAVA ? B.OBSIDIAN : B.COBBLE);
+        CM.Audio.play('burn');
+        g.entities.burst(CM.Textures.layer.smoke, px + 0.5, py + 1, pz + 0.5, 8, { speed: 0.6, grav: -2, life: 0.8, size: 0.12 });
+        return;
+      }
+      w.setBlock(px, py, pz, fluid);
+      CM.Audio.play(info.lava ? 'burn' : 'splash');
     }
 
     // Donne à un animal la nourriture tenue (blé : mouflon ; carotte, pomme de terre, betterave : sanglier).
@@ -1059,7 +1111,7 @@
         if (tb.note) {
           const n = ((t.x * 7 + t.y * 3 + t.z * 5) % 24 + 24) % 24;
           g.noteBlocks = g.noteBlocks || {};
-          const k = t.x + ',' + t.y + ',' + t.z;
+          const k = g.bkey(t.x, t.y, t.z);
           g.noteBlocks[k] = ((g.noteBlocks[k] === undefined ? n : g.noteBlocks[k]) + 1) % 25;
           g.noteFx(t.x, t.y, t.z, g.noteBlocks[k]);
           g.net.noteChanged(t.x, t.y, t.z, g.noteBlocks[k]);
@@ -1148,7 +1200,13 @@
           fx2 = t.x; fy2 = t.y; fz2 = t.z;
         }
         const cur = w.get(fx2, fy2, fz2);
-        if (!w.inside(fx2, fy2, fz2) || CM.isWater(cur) || (cur !== 0 && !CM.blocks[cur].replaceable)) return;
+        if (!w.inside(fx2, fy2, fz2) || CM.isFluid(cur) || (cur !== 0 && !CM.blocks[cur].replaceable)) return;
+        // dans un cadre d'obsidienne : le portail du Nether s'allume
+        if (g.tryLightPortal(fx2, fy2, fz2)) {
+          CM.Audio.play('ignite');
+          this.swing = 1;
+          return;
+        }
         const under = CM.blocks[w.get(fx2, fy2 - 1, fz2)];
         const flamNear = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => CM.blocks[w.get(fx2 + dx, fy2 + dy, fz2 + dz)].flam);
         if (!under.solid && !flamNear) return;
@@ -1196,7 +1254,7 @@
       }
       // torche : posée sur le dessus d'un bloc plein, ou accrochée au mur visé
       if (b.render === 'torch') {
-        if (CM.isWater(cur)) return;
+        if (CM.isFluid(cur)) return;
         const full = (x, y, z) => w.colBox(x, y, z) === CM.FULL_BOX;
         let tid = 0;
         if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) tid = CM.wallTorch(stack.id, t.nx, t.nz);
@@ -1278,7 +1336,8 @@
       n = this.enchantProtect(n, cause);
       if (attacker && !attacker.dead) this.thorns(attacker);
       this.health -= n;
-      this.invul = 0.55;
+      // (la brûlure qui dure ne protège pas des autres coups)
+      if (!(bypass && cause === 'Le feu')) this.invul = 0.55;
       this.hurtFlash = 0.45;
       this.exhaust(EXH.hurt);
       CM.Audio.play('hurt');
@@ -1373,6 +1432,21 @@
 
     respawn() {
       const g = this.game, w = g.world;
+      // mort dans le Nether : retour au monde normal (en multijoueur, au portail d'arrivée)
+      if (g.dim === 'nether') {
+        const rs = g.respawnPoint();
+        if (rs.dim === 'nether') {
+          w.stream(rs.x, rs.z, 2, 0);
+          this.reset(rs);
+          this.portalLock = true;
+          g.ui.hideDeath();
+          return;
+        }
+        g.ui.hideDeath();
+        this.reset({ x: rs.x, y: rs.y, z: rs.z });
+        g.changeDim('overworld', { at: { x: rs.x, y: rs.y, z: rs.z }, then: () => this.respawn() });
+        return;
+      }
       // lit : on y réapparaît s'il existe encore
       const bed = this.bed;
       if (bed) {

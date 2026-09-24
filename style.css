@@ -484,6 +484,11 @@ body.touch #armor-panel .ap-num { min-width: 40px; }
 #hud.burning::after { opacity: 1; animation: burnflick 0.35s infinite alternate; }
 @keyframes burnflick { from { filter: brightness(1); } to { filter: brightness(1.35); } }
 
+/* ---- portail du Nether : la vue se trouble en violet ---- */
+#portal-fx { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 50%, rgba(120, 40, 220, 0.15), rgba(110, 30, 200, 0.75) 75%);
+  animation: portalwarp 1.6s ease-in-out infinite alternate; }
+@keyframes portalwarp { from { filter: hue-rotate(0deg); transform: scale(1); } to { filter: hue-rotate(35deg); transform: scale(1.06); } }
+
 /* ---- enclume ---- */
 .anvil-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
 .anvil-row .slot { width: 52px; height: 52px; cursor: pointer; }

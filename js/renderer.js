@@ -12,7 +12,8 @@
       float d = distance(pos, uHeld.xyz);
       float held = uHeld.w * curve(clamp((14.5 - d) / 15.0, 0.0, 1.0));
       blk = max(blk, held);
-      vec3 l = max(uSkyTint * sky, vec3(1.0, 0.82, 0.58) * blk);
+      // (Nether : lueur ambiante rougeâtre, il n'y a pas de ciel)
+      vec3 l = max(max(uSkyTint * sky, vec3(1.0, 0.82, 0.58) * blk), uAmbient);
       // luminosité (option) : courbe gamma + lumière ambiante minimale
       l = pow(l, vec3(1.15 - uBright * 0.5));
       return clamp(l + vec3(0.03, 0.03, 0.045) * (0.6 + uBright * 1.4), 0.0, 1.1);
@@ -27,6 +28,7 @@
     uniform float uBright;
     uniform float uDay;
     uniform vec3 uSkyTint;
+    uniform vec3 uAmbient;
     uniform vec4 uHeld;
     uniform vec3 uFogColor;
     uniform vec2 uFog;
@@ -157,6 +159,7 @@
     uniform float uTime;
     uniform vec3 uCamPos;
     uniform float uUnderwater;
+    uniform vec3 uFlatSky;
     uniform float uClouds;
     in vec2 vNdc;
     out vec4 outColor;
@@ -207,7 +210,8 @@
           }
         }
       }
-      if (uUnderwater > 0.5) col = vec3(0.1, 0.22, 0.45);
+      // sous l'eau, dans la lave, dans le Nether : ciel uni
+      if (uUnderwater > 0.5) col = uFlatSky;
       outColor = vec4(col, 1.0);
     }`;
 
@@ -501,6 +505,7 @@
       gl.uniform1f(u.uDay, env.day);
       gl.uniform1f(u.uBright, this.brightness);
       gl.uniform3fv(u.uSkyTint, env.skyTint);
+      if (u.uAmbient) gl.uniform3fv(u.uAmbient, env.ambient || [0, 0, 0]);
       gl.uniform4fv(u.uHeld, env.held);
       gl.uniform3fv(u.uFogColor, env.fogColor);
       gl.uniform2fv(u.uFog, env.fog);
@@ -570,7 +575,8 @@
       gl.uniform1f(su.uSunset, env.sunset);
       gl.uniform1f(su.uTime, env.time);
       gl.uniform3f(su.uCamPos, cam[0] % 14000, cam[1], cam[2] % 14000);
-      gl.uniform1f(su.uUnderwater, env.underwater ? 1 : 0);
+      gl.uniform1f(su.uUnderwater, env.flatSky ? 1 : 0);
+      if (env.flatSky) gl.uniform3fv(su.uFlatSky, env.flatSky);
       gl.uniform1f(su.uClouds, this.clouds ? 1 : 0);
       gl.bindVertexArray(this.skyVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

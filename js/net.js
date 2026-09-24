@@ -6,7 +6,7 @@
 // Chaque invité gère lui-même ses déplacements, son inventaire, sa faim et sa santé.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const PROTO = 1;
+  const PROTO = 2; // 2 : dimensions (Nether)
   const PREFIX = 'craftmine16-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const MAX_PLAYERS = 8;
@@ -394,9 +394,15 @@
     guestSave(w) {
       const you = w.you || {};
       const sp = w.spawn;
+      // le groupe est dans une seule dimension : si l'invité l'avait quittée ailleurs, il rejoint l'hôte
+      const nether = w.dim === 'nether';
+      const same = you.player && Number.isFinite(you.player.x) && (you.dim === 'nether') === nether;
+      const start = nether && Array.isArray(w.at) ? { x: w.at[0], y: w.at[1], z: w.at[2] } : sp;
       return {
         v: 4, seed: w.seed, settings: w.settings, spawn: sp, edits: w.edits || {},
-        player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
+        dim: nether ? 'nether' : 'overworld',
+        nether: w.ne ? { edits: w.ne, arrival: w.arr || null } : undefined,
+        player: same ? you.player : Object.assign({}, you.player || {}, { x: start.x, y: start.y, z: start.z, health: (you.player && you.player.health) || 20, food: (you.player && you.player.food) || 20, sat: 5 }),
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
       };
     }
@@ -505,12 +511,17 @@
       if (last && last[0] === origin) last[1].push(x, y, z, id);
       else this.outSets.push([origin, [x, y, z, id]]);
     }
+    // Numéro de la dimension courante (0 : monde normal, 1 : Nether), joint aux blocs modifiés.
+    get dimId() {
+      return this.game.dim === 'nether' ? 1 : 0;
+    }
     flushSets() {
       if (!this.outSets.length) return;
+      const d = this.dimId;
       if (this.isHost) {
-        for (const [o, b] of this.outSets) this.broadcast({ t: 'set', o, b });
+        for (const [o, b] of this.outSets) this.broadcast({ t: 'set', o, b, d });
       } else if (this.hostLink) {
-        for (const [, b] of this.outSets) this.hostLink.send({ t: 'set', b });
+        for (const [, b] of this.outSets) this.hostLink.send({ t: 'set', b, d });
       }
       this.outSets = [];
     }
@@ -553,10 +564,11 @@
     sendGuestSave() {
       const g = this.game, p = g.player;
       if (!this.isClient || !this.hostLink || !p || !g.world) return;
-      const sp = g.world.spawn;
+      const sp = p.alive ? null : g.respawnPoint();
       this.hostLink.send({
         t: 'save',
         d: {
+          dim: sp ? sp.dim : g.dim,
           player: {
             x: p.alive ? p.x : sp.x, y: p.alive ? p.y : sp.y, z: p.alive ? p.z : sp.z,
             yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
@@ -716,11 +728,12 @@
       e.pid = this.nextPid++;
       e.name = name;
       e.rp = new RemotePlayer(this, e.pid, name);
-      const w = g.world;
+      const w = g.worlds.overworld, nw = g.worlds.nether;
       e.link.send({
         t: 'welcome', v: PROTO, pid: e.pid, host: this.name,
         seed: w.seed, settings: Object.assign({}, g.settings, { mode: g.mode, difficulty: g.difficulty }),
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
+        dim: g.dim, ne: nw ? nw.editsObject() : g.netherEdits, at: g.dim === 'nether' ? [r2(g.player.x), r2(g.player.y), r2(g.player.z)] : null, arr: g.netherArrival,
         time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(),
         players: [[0, this.name], ...[...this.links.values()].map((x) => [x.pid, x.name])],
         you: this.guests[name] || null,
@@ -760,8 +773,19 @@
           }
           break;
         case 'set':
-          this.clientSets(e.pid, m.b);
+          if ((m.d | 0) === this.dimId) this.clientSets(e.pid, m.b); // (envoyé avant un voyage : ignoré)
           break;
+        case 'portal': {
+          // un invité est resté dans un portail : tout le groupe voyage
+          const x = m.x | 0, y = m.y | 0, z = m.z | 0;
+          let near = false;
+          for (let dy = -1; dy <= 1 && !near; dy++) for (let dz = -1; dz <= 1 && !near; dz++) for (let dx = -1; dx <= 1; dx++) if (CM.blocks[g.world.get(x + dx, y + dy, z + dz)].portal) near = true;
+          if (!near || g.switching || Math.hypot(rp.x - x, rp.z - z) > 4) break;
+          const to = g.dim === 'nether' ? 'overworld' : 'nether';
+          this.sysAll('🌀 ' + e.name + (to === 'nether' ? ' emmène le groupe dans le Nether' : ' ramène le groupe dans le monde normal'));
+          g.changeDim(to, { from: [x, y, z] });
+          break;
+        }
         case 'drop': {
           const id = m.id | 0, n = Math.min(4096, m.n | 0);
           if (!CM.itemInfo(id) || n <= 0) break;
@@ -797,7 +821,7 @@
           break;
         case 'note': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0, n = (m.n | 0) % 25;
-          g.noteBlocks[x + ',' + y + ',' + z] = n;
+          g.noteBlocks[g.bkey(x, y, z)] = n;
           g.noteFx(x, y, z, n);
           this.broadcast({ t: 'note', x, y, z, n }, e.pid);
           break;
@@ -857,7 +881,7 @@
     chestOpen(e, x, y, z) {
       const g = this.game;
       if (!CM.blocks[g.world.get(x, y, z)].container) return;
-      const k = x + ',' + y + ',' + z;
+      const k = g.bkey(x, y, z);
       const by = this.locks.get(k);
       if (by !== undefined && by !== e.pid) {
         e.link.send({ t: 'cbusy', n: by === 0 ? this.name : (this.links.get(by) || {}).name || '?' });
@@ -924,7 +948,7 @@
       switch (m.t) {
         case 'set': {
           const b = m.b;
-          if (!Array.isArray(b)) break;
+          if (!Array.isArray(b) || (m.d | 0) !== this.dimId) break;
           const mine = m.o === this.pid;
           let fx = 6;
           for (let i = 0; i + 3 < b.length; i += 4) {
@@ -970,12 +994,23 @@
         }
         case 'hurt':
           if (!p) break;
+          const h0 = p.health;
           p.damage(num(m.n), m.sx === undefined ? null : m.sx, m.sz, m.c, !!m.b, m.u ? g.entities.mobs.find((o) => o.uid === m.u) : null);
+          if (m.c === 'Une Ombre ardente' && p.health < h0) p.burning = Math.max(p.burning || 0, 4);
           if (m.vy && p.alive) p.vy += m.vy;
           break;
         case 'fx':
           this.onFx(m);
           break;
+        case 'dim': {
+          // l'hôte emmène le groupe dans l'autre dimension
+          if (m.to !== 'nether' && m.to !== 'overworld') break;
+          const at = Array.isArray(m.at) ? { x: num(m.at[0]), y: num(m.at[1]), z: num(m.at[2]) } : null;
+          if (!at) break;
+          this.pending.clear();
+          g.changeDim(m.to, { at, edits: m.e && typeof m.e === 'object' ? m.e : {} });
+          break;
+        }
         case 'time': {
           const d = m.d | 0;
           if (d > g.dayCount) g.ui.toast('Jour ' + (d + 1) + ' — tu as survécu à la nuit !', 'good');
@@ -1017,7 +1052,7 @@
           break;
         case 'note': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0;
-          g.noteBlocks[x + ',' + y + ',' + z] = m.n | 0;
+          g.noteBlocks[g.bkey(x, y, z)] = m.n | 0;
           g.noteFx(x, y, z, m.n | 0);
           break;
         }
@@ -1100,7 +1135,7 @@
     }
     // Ouvre un coffre partagé.
     openChest(x, y, z, title) {
-      const g = this.game, k = x + ',' + y + ',' + z;
+      const g = this.game, k = g.bkey(x, y, z);
       if (this.isClient) {
         this.chestTitle = title;
         this.send({ t: 'co', x, y, z });

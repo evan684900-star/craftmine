@@ -90,12 +90,14 @@
     SAVANNA: 8, JUNGLE: 9, SWAMP: 10, BADLANDS: 11, CRYSTAL: 12, OCEAN: 13, LAKE: 14,
     DARK_FOREST: 15, CHERRY: 16, MANGROVE: 17, BAMBOO: 18, MUSHROOM: 19, VOLCANIC: 20,
     FUNGUS: 21, ICE_SPIKES: 22, FLOWERS: 23, WARM_OCEAN: 24,
+    NETHER_WASTES: 25, CRIMSON_FOREST: 26, WARPED_FOREST: 27, SOUL_VALLEY: 28, BASALT_DELTAS: 29,
   };
   const BIOME_NAMES = [
     'Plaines', 'Désert', 'Forêt', 'Montagnes', 'Forêt de bouleaux', 'Taïga', 'Taïga enneigée', 'Toundra glacée',
     'Savane', 'Jungle', 'Marais', 'Canyon rouge', 'Sylve cristalline', 'Océan', 'Lac',
     'Forêt de chênes noirs', 'Bosquet de cerisiers', 'Mangrove', 'Bambouseraie', 'Champignonnière', 'Terres volcaniques',
     'Forêt fongique', 'Pics de glace', 'Prairie fleurie', 'Océan chaud',
+    'Désolation du Nether', 'Forêt carmin', 'Forêt biscornue', 'Vallée des âmes', 'Deltas de basalte',
   ];
   CM.BIO = BIO;
   CM.BIOME_NAMES = BIOME_NAMES;
@@ -231,6 +233,7 @@
     library: { w: 7, d: 5, h: 4 },
   };
   const GEODE_REGION = 80;
+  const FORT_REGION = 160; // forteresses du Nether
   CM.initWorldTables = function () {
     const Bk = CM.B;
     for (const k of ['STONE', 'DEEPSTONE', 'GRANITE', 'DIORITE', 'ANDESITE', 'TUFF', 'NETHERRACK', 'BLACKSTONE', 'BASALT']) ROCK[Bk[k]] = 1;
@@ -271,7 +274,14 @@
       // villages : mondes créés depuis leur ajout (générateur 3), pour ne pas changer les anciens
       this.hasVillages = !this.legacy && (this.settings.gen || 2) >= 3;
       this.mixedFarms = (this.settings.gen || 2) >= 4; // champs variés et irrigués dans les villages
+      // lave : lacs au fond des cavernes (tous les mondes : sans elle, pas d'obsidienne ni de Nether),
+      // mares en surface dans les terres volcaniques (mondes récents seulement)
+      this.lavaLakes = true;
+      this.lavaPools = (this.settings.gen || 2) >= 5;
       this.villageCache = new Map();
+      // Nether : pas de villages ni d'îles, un autre générateur (voir generateNether)
+      this.nether = this.type === 'nether';
+      if (this.nether) this.hasVillages = false;
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
       this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
@@ -423,6 +433,7 @@
 
     column(x, z) {
       const Bk = CM.B;
+      if (this.nether) return this.netherColumn(x, z);
       if (this.legacy) return this.columnV3(x, z);
       if (this.type === 'flat') return { h: SEA + 8, bi: BIO.PLAINS, topB: Bk.GRASS, subB: Bk.DIRT, subDepth: 3, deepSub: 0, frozen: false, flat: true };
       const { nA, nB, nC, nD, nE, nF } = this;
@@ -507,7 +518,7 @@
         subDepth = 14;
       } else if (bi === BIO.VOLCANIC) {
         const v = nC.noise2(X / 14, Z / 14), v2 = nB.noise2(X / 6, Z / 6);
-        topB = v2 > 0.62 ? Bk.MAGMA : v > 0.25 ? Bk.BASALT : v < -0.3 ? Bk.NETHERRACK : v2 < -0.6 ? Bk.SOUL_SAND : Bk.BLACKSTONE;
+        topB = v2 > 0.62 ? (v2 > 0.76 && this.lavaPools && h > SEA + 1 ? Bk.LAVA : Bk.MAGMA) : v > 0.25 ? Bk.BASALT : v < -0.3 ? Bk.NETHERRACK : v2 < -0.6 ? Bk.SOUL_SAND : Bk.BLACKSTONE;
         subB = Bk.BLACKSTONE;
         subDepth = 5;
         deepSub = Bk.NETHERRACK;
@@ -772,6 +783,7 @@
     }
 
     findSpawn() {
+      if (this.nether) return { x: 0.5, y: 64, z: 0.5 }; // on y arrive par un portail
       for (let rad = 0; rad < 4000; rad += 3) {
         const n = rad === 0 ? 1 : 24;
         for (let k = 0; k < n; k++) {
@@ -807,6 +819,7 @@
 
     // ------------------------------------------------------ génération ---
     generateChunk(cx, cz) {
+      if (this.nether) return this.generateNether(cx, cz);
       const Bk = CM.B;
       const c = new Chunk(cx, cz);
       const blocks = c.blocks, seed = this.seed;
@@ -891,7 +904,8 @@
             if (!carve && y < 34) carve = tri(gC, lx, y, lz) > Math.max(0.42, 0.58 - (34 - y) * 0.004);
             if (carve) {
               const i = lidx(lx, y, lz);
-              if (blocks[i] !== Bk.BEDROCK) blocks[i] = y <= MINY + 5 ? Bk.BEDROCK : 0;
+              // tout au fond, les cavernes baignent dans des lacs de lave
+              if (blocks[i] !== Bk.BEDROCK) blocks[i] = y <= MINY + 5 ? Bk.BEDROCK : y <= MINY + 9 && this.lavaLakes ? Bk.LAVA : 0;
             }
           }
         }
@@ -948,7 +962,7 @@
             } else if (p < 0.3) blocks[lidx(lx, h + 1, lz)] = Bk.TUBE_CORAL_FAN + Math.floor(CM.hash3(x, 16, z, seed) * 5);
             continue;
           }
-          if (h <= SEA) continue;
+          if (h <= SEA || CM.isFluid(info.topB)) continue;
           if (blocks[lidx(lx, h, lz)] !== info.topB || blocks[lidx(lx, h + 1, lz)] !== 0) continue;
           if (this.treeAt(x, z, info)) continue;
           // dans un village : pas de cactus ni de grandes plantes au milieu des maisons
@@ -1043,6 +1057,229 @@
       const e = this.edits.get(ckey(cx, cz));
       if (e) for (const [i, id] of e) blocks[i] = id;
       return c;
+    }
+
+    // ---------------------------------------------------------- Nether ----
+    // Colonne du Nether : biome, hauteur moyenne du sol et du plafond des cavernes.
+    netherColumn(x, z) {
+      const X = x + this.ox, Z = z + this.oz;
+      const t = this.nE.noise2(X / 170, Z / 170), u = this.nF.noise2(X / 150 + 50, Z / 150 - 30);
+      let bi = BIO.NETHER_WASTES;
+      if (t > 0.28) bi = BIO.CRIMSON_FOREST;
+      else if (t < -0.28) bi = BIO.WARPED_FOREST;
+      else if (u > 0.3) bi = BIO.SOUL_VALLEY;
+      else if (u < -0.32) bi = BIO.BASALT_DELTAS;
+      const h = 31 + Math.round(this.nC.fbm2(X / 70, Z / 70, 3) * 18);
+      const ceil = 80 + Math.round(this.nD.noise2(X / 45, Z / 45) * 7);
+      return { h, ceil, bi, nether: true };
+    }
+    // Tronçon du Nether : roche du Nether entre un sol et un plafond de bedrock,
+    // grandes cavernes, océan de lave (y ≤ 31), forêts de champignons, vallées des âmes,
+    // deltas de basalte, pierre lumineuse au plafond, minerais et forteresses.
+    generateNether(cx, cz) {
+      const Bk = CM.B;
+      const c = new Chunk(cx, cz);
+      const blocks = c.blocks, seed = this.seed;
+      const x0 = c.x0, z0 = c.z0;
+      const cols = new Array(256);
+      const NL = 31; // niveau de l'océan de lave
+      for (let gy = 0; gy < GY; gy++)
+        for (let gz = 0; gz < G; gz++)
+          for (let gx = 0; gx < G; gx++) {
+            const x = x0 + gx * GS + this.ox, y = MINY + gy * GS, z = z0 + gz * GS + this.oz;
+            const gi = (gy * G + gz) * G + gx;
+            gA[gi] = this.nA.noise3(x / 44, y / 26, z / 44);
+            gB[gi] = this.nB.noise3(x / 18, y / 12, z / 18);
+          }
+      // 1) roche, cavernes, lave
+      for (let lz = 0; lz < 16; lz++)
+        for (let lx = 0; lx < 16; lx++) {
+          const x = x0 + lx, z = z0 + lz;
+          const col = this.netherColumn(x, z);
+          cols[(lz << 4) | lx] = col;
+          for (let y = MINY; y < H; y++) {
+            let id;
+            if (y <= 0 || y >= H - 1) id = Bk.BEDROCK;
+            else if (y <= 3 && CM.hash3(x, y, z, seed + 61) < 0.6 - y * 0.12) id = Bk.BEDROCK;
+            else if (y >= H - 5 && CM.hash3(x, y, z, seed + 62) < 0.25 + (y - (H - 5)) * 0.2) id = Bk.BEDROCK;
+            else {
+              const d = tri(gA, lx, y, lz) + 0.5 * tri(gB, lx, y, lz);
+              const dens = d * 0.9 + Math.max(0, (col.h - y) / 4) + Math.max(0, (y - col.ceil) / 4);
+              id = dens > 0.55 || y >= H - 5 ? Bk.NETHERRACK : y <= NL ? Bk.LAVA : 0;
+            }
+            blocks[lidx(lx, y, lz)] = id;
+          }
+        }
+      // 2) sols, plafonds, plantes selon le biome
+      const inC = (lx, lz) => lx >= 0 && lx < 16 && lz >= 0 && lz < 16;
+      for (let lz = 0; lz < 16; lz++)
+        for (let lx = 0; lx < 16; lx++) {
+          const x = x0 + lx, z = z0 + lz;
+          const bi = cols[(lz << 4) | lx].bi;
+          const glow = CM.hash3(x, 71, z, seed) < 0.007;
+          for (let y = H - 6; y > 1; y--) {
+            const i = lidx(lx, y, lz);
+            if (blocks[i] !== Bk.NETHERRACK) continue;
+            const above = blocks[i + 256], below = blocks[i - 256];
+            const h = CM.hash3(x, y, z, seed + 63);
+            if (above === 0) {
+              // sol d'une caverne
+              if (bi === BIO.CRIMSON_FOREST || bi === BIO.WARPED_FOREST) {
+                const crim = bi === BIO.CRIMSON_FOREST;
+                blocks[i] = crim ? Bk.CRIMSON_NYLIUM : Bk.WARPED_NYLIUM;
+                if (h < 0.14 && y + 1 < H - 5) blocks[i + 256] = crim ? (h < 0.1 ? Bk.CRIMSON_ROOTS : Bk.NETHER_SPROUTS) : h < 0.07 ? Bk.WARPED_ROOTS : Bk.NETHER_SPROUTS;
+              } else if (bi === BIO.SOUL_VALLEY) {
+                blocks[i] = h < 0.55 ? Bk.SOUL_SAND : Bk.SOUL_SOIL;
+                if (blocks[i - 256] === Bk.NETHERRACK) blocks[i - 256] = Bk.SOUL_SOIL;
+              } else if (bi === BIO.BASALT_DELTAS) {
+                blocks[i] = h < 0.6 ? Bk.BASALT : Bk.BLACKSTONE;
+                if (blocks[i - 256] === Bk.NETHERRACK) blocks[i - 256] = Bk.BLACKSTONE;
+                // petites mares de lave entre les coulées de basalte
+                if (h > 0.93 && lx > 0 && lx < 15 && lz > 0 && lz < 15 && y > NL) blocks[i] = Bk.LAVA;
+              } else if (y <= NL + 3 && h < 0.35) blocks[i] = h < 0.2 ? Bk.GRAVEL : Bk.SOUL_SAND;
+            } else if (CM.isLava(above)) {
+              if (y >= NL - 4 && h < 0.2) blocks[i] = Bk.MAGMA;
+            } else if (below === 0 && glow) {
+              // grappes de pierre lumineuse sous le plafond
+              const len = 1 + Math.floor(CM.hash3(x, y, z, seed + 64) * 4);
+              for (let k = 1; k <= len && blocks[i - k * 256] === 0; k++) blocks[i - k * 256] = Bk.GLOWSTONE;
+              for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                if (!inC(lx + dx, lz + dz) || CM.hash3(x + dx, y, z + dz, seed + 65) > 0.55) continue;
+                const j = lidx(lx + dx, y - 1, lz + dz);
+                if (blocks[j] === 0) blocks[j] = Bk.GLOWSTONE;
+              }
+            }
+          }
+        }
+      // 3) minerais et poches (filons découpés au tronçon)
+      const rand = CM.rng((CM.hash3(cx, 66, cz, seed) * 4294967296) >>> 0);
+      const vein = (id, per, ymin, ymax, size, over) => {
+        const n = Math.floor(per + rand());
+        for (let k = 0; k < n; k++) {
+          let lx = Math.floor(rand() * 16), y = ymin + Math.floor(rand() * (ymax - ymin)), lz = Math.floor(rand() * 16);
+          for (let s = 0; s < size; s++) {
+            if (inC(lx, lz) && y > 0 && y < H - 1) {
+              const i = lidx(lx, y, lz);
+              if (over.includes(blocks[i])) blocks[i] = id;
+            }
+            const r = rand();
+            if (r < 0.33) lx += rand() < 0.5 ? -1 : 1;
+            else if (r < 0.66) lz += rand() < 0.5 ? -1 : 1;
+            else y += rand() < 0.5 ? -1 : 1;
+          }
+        }
+      };
+      const RACK = [Bk.NETHERRACK];
+      vein(Bk.NETHER_QUARTZ_ORE, 12, 8, 88, 7, RACK);
+      vein(Bk.NETHER_GOLD_ORE, 7, 8, 88, 5, RACK);
+      vein(Bk.MAGMA, 2.5, 24, 38, 10, RACK);
+      vein(Bk.GRAVEL, 1.5, 6, 70, 12, RACK);
+      vein(Bk.SOUL_SAND, 1, 20, 50, 10, RACK);
+      vein(Bk.ANCIENT_DEBRIS, 0.6, 8, 22, 2, [Bk.NETHERRACK, Bk.BASALT, Bk.BLACKSTONE]);
+      vein(Bk.GILDED_BLACKSTONE, 0.5, 20, 80, 3, [Bk.BLACKSTONE]);
+      // 4) champignons géants, piliers de basalte
+      for (let lz = 2; lz < 14; lz++)
+        for (let lx = 2; lx < 14; lx++) {
+          const x = x0 + lx, z = z0 + lz;
+          const bi = cols[(lz << 4) | lx].bi;
+          const forest = bi === BIO.CRIMSON_FOREST || bi === BIO.WARPED_FOREST;
+          const pillar = (bi === BIO.SOUL_VALLEY && CM.hash3(x, 72, z, seed) < 0.006) || (bi === BIO.BASALT_DELTAS && CM.hash3(x, 72, z, seed) < 0.02);
+          if (!pillar && !(forest && CM.hash3(x, 73, z, seed) < 0.045)) continue;
+          const nyl = bi === BIO.CRIMSON_FOREST ? Bk.CRIMSON_NYLIUM : Bk.WARPED_NYLIUM;
+          for (let y = NL + 1; y < H - 12; y++) {
+            const b = blocks[lidx(lx, y, lz)];
+            if (pillar) {
+              if ((b === Bk.SOUL_SAND || b === Bk.SOUL_SOIL || b === Bk.BASALT || b === Bk.BLACKSTONE) && blocks[lidx(lx, y + 1, lz)] === 0) {
+                for (let yy = y + 1; yy < H - 5 && blocks[lidx(lx, yy, lz)] === 0; yy++) blocks[lidx(lx, yy, lz)] = Bk.BASALT;
+                break;
+              }
+            } else if (b === nyl) {
+              let free = true;
+              for (let k = 1; k <= 12 && free; k++) if (blocks[lidx(lx, y + k, lz)] !== 0 && !CM.blocks[blocks[lidx(lx, y + k, lz)]].plant) free = false;
+              if (free) {
+                this.placeTree(c, bi === BIO.CRIMSON_FOREST ? 'CRIMSON' : 'WARPED', false, x, y + 1, z, false);
+                break;
+              }
+            }
+          }
+        }
+      // 5) forteresses
+      this.fortressesFor(c);
+      // 6) modifications des joueurs
+      const e = this.edits.get(ckey(cx, cz));
+      if (e) for (const [i, id] of e) blocks[i] = id;
+      return c;
+    }
+    // Une forteresse par région de 160 blocs (une fois sur deux) : donjon et ponts de briques.
+    fortressAt(rx, rz) {
+      const rand = CM.rng((CM.hash3(rx, 181, rz, this.seed) * 4294967296) >>> 0);
+      if (rand() > 0.55) return null;
+      const x = rx * FORT_REGION + 56 + Math.floor(rand() * (FORT_REGION - 112));
+      const z = rz * FORT_REGION + 56 + Math.floor(rand() * (FORT_REGION - 112));
+      const y = 46 + Math.floor(rand() * 14);
+      const arms = [0, 1, 2, 3].filter(() => rand() < 0.75).map((d) => ({ d, len: 22 + Math.floor(rand() * 26) }));
+      return { x, y, z, arms, seed: Math.floor(rand() * 1e9) };
+    }
+    fortressesFor(c) {
+      const Bk = CM.B;
+      const R = 50;
+      const r0x = Math.floor((c.x0 - R) / FORT_REGION), r1x = Math.floor((c.x0 + 15 + R) / FORT_REGION);
+      const r0z = Math.floor((c.z0 - R) / FORT_REGION), r1z = Math.floor((c.z0 + 15 + R) / FORT_REGION);
+      for (let rz = r0z; rz <= r1z; rz++)
+        for (let rx = r0x; rx <= r1x; rx++) {
+          const f = this.fortressAt(rx, rz);
+          if (!f || f.x + R < c.x0 || f.x - R > c.x0 + 15 || f.z + R < c.z0 || f.z - R > c.z0 + 15) continue;
+          const brick = (X, Y, Z) => {
+            const h = CM.hash3(X, Y, Z, f.seed);
+            return h < 0.1 ? Bk.CRACKED_NETHER_BRICKS : h < 0.13 ? Bk.CHISELED_NETHER_BRICKS : Bk.NETHER_BRICKS;
+          };
+          const put = (X, Y, Z, id) => {
+            const lx = X - c.x0, lz = Z - c.z0;
+            if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || Y <= 0 || Y >= H - 1) return;
+            c.blocks[lidx(lx, Y, lz)] = id;
+          };
+          // piliers jusqu'au sol (ou dans la lave)
+          const pillar = (X, Z, top) => {
+            const lx = X - c.x0, lz = Z - c.z0;
+            if (lx < 0 || lx > 15 || lz < 0 || lz > 15) return;
+            for (let y = top; y > 1; y--) {
+              const i = lidx(lx, y, lz), cur = c.blocks[i];
+              if (cur !== 0 && !CM.isLava(cur) && !CM.blocks[cur].plant) break;
+              c.blocks[i] = brick(X, y, Z);
+            }
+          };
+          const y0 = f.y;
+          // ponts : tablier de 5 de large, parapets, passage dégagé de 4 de haut
+          for (const { d, len } of f.arms) {
+            const ax = [1, -1, 0, 0][d], az = [0, 0, 1, -1][d];
+            for (let s = 6; s <= 6 + len; s++)
+              for (let w = -2; w <= 2; w++) {
+                const X = f.x + ax * s + (az ? w : 0), Z = f.z + az * s + (ax ? w : 0);
+                put(X, y0, Z, brick(X, y0, Z));
+                const edge = Math.abs(w) === 2;
+                for (let dy = 1; dy <= 4; dy++) put(X, y0 + dy, Z, edge && dy === 1 ? brick(X, y0 + 1, Z) : 0);
+                if (s % 8 === 0 && Math.abs(w) <= 1) pillar(X, Z, y0 - 1);
+              }
+          }
+          // donjon : 13 × 13, 7 de haut, portes vers les ponts, coffre au centre
+          for (let dz = -6; dz <= 6; dz++)
+            for (let dx = -6; dx <= 6; dx++) {
+              const X = f.x + dx, Z = f.z + dz;
+              const wall = Math.abs(dx) === 6 || Math.abs(dz) === 6;
+              const door = wall && ((Math.abs(dz) <= 1 && f.arms.some((a) => a.d === (dx > 0 ? 0 : 1))) || (Math.abs(dx) <= 1 && f.arms.some((a) => a.d === (dz > 0 ? 2 : 3))));
+              put(X, y0, Z, brick(X, y0, Z));
+              for (let dy = 1; dy <= 6; dy++) {
+                const window = wall && dy === 3 && (Math.abs(dx) === 3 || Math.abs(dz) === 3);
+                put(X, y0 + dy, Z, wall && !(door && dy <= 3) && !window ? brick(X, y0 + dy, Z) : 0);
+              }
+              put(X, y0 + 7, Z, dx === 0 && dz === 0 ? Bk.GLOWSTONE : brick(X, y0 + 7, Z));
+              if ((Math.abs(dx) === 6 && Math.abs(dz) === 6) || (dx % 4 === 0 && dz % 4 === 0 && wall)) pillar(X, Z, y0 - 1);
+              if (Math.abs(dx) === 4 && Math.abs(dz) === 4) put(X, y0 + 1, Z, Bk.SOUL_LANTERN);
+            }
+          put(f.x, y0 + 1, f.z, Bk.CHEST);
+          put(f.x + 1, y0 + 1, f.z, Bk.RED_NETHER_BRICKS);
+          put(f.x - 1, y0 + 1, f.z, Bk.RED_NETHER_BRICKS);
+        }
     }
 
     // Arbre découpé au tronçon c (seules les cases de c sont écrites).

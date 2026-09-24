@@ -1,37 +1,40 @@
 'use strict';
-// Blocs qui évoluent seuls : l'eau qui coule et le feu (comme dans Minecraft).
+// Blocs qui évoluent seuls : l'eau et la lave qui coulent, le feu (comme dans Minecraft).
 // Seul l'hôte (ou la partie solo) les simule ; les invités reçoivent les blocs modifiés.
 (function () {
   const B = CM.B;
   const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const NB6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   const WATER_DELAY = 0.25; // 5 ticks de Minecraft
-  const MAX_WATER_PER_FRAME = 160;
+  const LAVA_DELAY = 1.5; // 30 ticks (10 dans le Nether)
+  const MAX_FLUID_PER_FRAME = 160;
   const MAX_FIRES = 400;
 
   const blk = (id) => CM.blocks[id];
+  const kindOf = (id) => CM.WATERY[id]; // 1 eau, 2 lave, 0 autre
+  const idsOf = (kind) => (kind === 2 ? CM.LAVA_IDS : CM.WATER_IDS);
   // Niveau « efficace » : une chute nourrit les côtés comme une source.
   const effLevel = (id) => {
     const l = blk(id).level;
     return l === 8 ? 0 : l;
   };
-  // L'eau peut-elle entrer dans cette case ? (air, plantes, torches, feu… qu'elle emporte)
+  // Un liquide peut-il entrer dans cette case ? (air, plantes, torches, feu… qu'il emporte ou brûle)
   const canFlow = (id) => {
     if (id === 0) return true;
     const b = blk(id);
-    if (b.water || b.solid) return false;
+    if (CM.WATERY[id] || b.solid || b.portal) return false;
     return b.replaceable || b.plant || b.render === 'torch' || !!b.fire;
   };
 
-  // Direction du courant dans une case d'eau qui coule : vers les niveaux plus bas et le vide.
+  // Direction du courant dans une case de liquide qui coule : vers les niveaux plus bas et le vide.
   CM.flowVector = function (w, x, y, z) {
-    const b = blk(w.get(x, y, z));
-    if (!b.water || b.level === 0) return null;
+    const id = w.get(x, y, z), kind = kindOf(id), b = blk(id);
+    if (!kind || b.level === 0) return null;
     const L = b.level === 8 ? 0 : b.level;
     let vx = 0, vz = 0;
     for (const [dx, dz] of DIRS4) {
-      const n = w.get(x + dx, y, z + dz), nb = blk(n);
-      if (nb.water) {
+      const n = w.get(x + dx, y, z + dz);
+      if (kindOf(n) === kind) {
         const d = effLevel(n) - L;
         vx += dx * d;
         vz += dz * d;
@@ -50,7 +53,10 @@
       this.game = game;
       this.t = 0;
       this.due = new Map(); // eau : clé -> instant (dans l'ordre d'insertion = ordre des échéances)
+      this.dueLava = new Map(); // lave : idem, plus lente
       this.fires = new Map(); // feu : clé -> { age, due }
+      this.embers = new Map(); // lave près de blocs inflammables : clé -> prochain essai d'allumage
+      this.portalChecks = new Set(); // portails dont un voisin a changé (cadre peut-être cassé)
     }
     get world() {
       return this.game.world;
@@ -58,40 +64,65 @@
     get active() {
       return !this.game.net.isClient;
     }
-    // Au chargement d'une partie : les feux déjà présents reprennent.
+    get nether() {
+      return this.world && this.world.type === 'nether';
+    }
+    // Au chargement d'une partie (ou d'une dimension) : les feux déjà présents reprennent.
     reset() {
       this.due.clear();
+      this.dueLava.clear();
       this.fires.clear();
-      if (!this.active) return;
+      this.embers.clear();
+      this.portalChecks.clear();
+      if (!this.active || !this.world) return;
       for (const [x, y, z] of this.world.editedWhere((id) => id === B.FIRE)) this.addFire(x, y, z);
+      // liquides posés ou qui coulaient encore : ils reprennent (sans rien changer s'ils sont stables)
+      for (const [x, y, z, id] of this.world.editedWhere((id) => CM.isLava(id) || (CM.isWater(id) && blk(id).level !== 0))) this.schedule(x, y, z, kindOf(id));
     }
-    schedule(x, y, z) {
+    schedule(x, y, z, kind) {
       const k = x + ',' + y + ',' + z;
-      if (!this.due.has(k)) this.due.set(k, this.t + WATER_DELAY);
+      const map = kind === 2 ? this.dueLava : this.due;
+      if (!map.has(k)) map.set(k, this.t + (kind === 2 ? (this.nether ? LAVA_DELAY / 3 : LAVA_DELAY) : WATER_DELAY));
     }
     addFire(x, y, z) {
       const k = x + ',' + y + ',' + z;
       if (!this.fires.has(k)) this.fires.set(k, { age: 0, due: this.t + 1 + Math.random() });
     }
-    // Un bloc a changé : l'eau voisine réagit, un nouveau feu commence à vivre.
+    // Un bloc a changé : les liquides voisins réagissent, un nouveau feu commence à vivre.
     onEdit(x, y, z, id) {
       if (!this.active) return;
       const w = this.world;
-      if (CM.isWater(id)) this.schedule(x, y, z);
-      for (const [dx, dy, dz] of NB6) if (CM.isWater(w.get(x + dx, y + dy, z + dz))) this.schedule(x + dx, y + dy, z + dz);
+      if (kindOf(id)) this.schedule(x, y, z, kindOf(id));
+      for (const [dx, dy, dz] of NB6) {
+        const kind = kindOf(w.get(x + dx, y + dy, z + dz));
+        if (kind) this.schedule(x + dx, y + dy, z + dz, kind);
+      }
       if (id === B.FIRE) this.addFire(x, y, z);
+      if (!blk(id).portal) {
+        for (const [dx, dy, dz] of NB6) if (blk(w.get(x + dx, y + dy, z + dz)).portal) this.portalChecks.add(x + dx + ',' + (y + dy) + ',' + (z + dz));
+      }
     }
 
     update(dt) {
       if (!this.active || !this.world) return;
       this.t += dt;
+      if (this.portalChecks.size) {
+        const list = [...this.portalChecks];
+        this.portalChecks.clear();
+        for (const k of list) {
+          const [x, y, z] = k.split(',').map(Number);
+          this.game.checkPortal(x, y, z);
+        }
+      }
       let n = 0;
-      for (const [k, t] of this.due) {
-        if (t > this.t || n >= MAX_WATER_PER_FRAME) break;
-        this.due.delete(k);
-        n++;
-        const [x, y, z] = k.split(',').map(Number);
-        this.tickWater(x, y, z);
+      for (const map of [this.due, this.dueLava]) {
+        for (const [k, t] of map) {
+          if (t > this.t || n >= MAX_FLUID_PER_FRAME) break;
+          map.delete(k);
+          n++;
+          const [x, y, z] = k.split(',').map(Number);
+          this.tickFluid(x, y, z);
+        }
       }
       if (this.fires.size) {
         for (const [k, f] of this.fires) {
@@ -100,68 +131,111 @@
           this.tickFire(x, y, z, f, k);
         }
       }
+      if (this.embers.size) {
+        for (const [k, t] of this.embers) {
+          if (t > this.t) continue;
+          this.embers.delete(k);
+          const [x, y, z] = k.split(',').map(Number);
+          if (CM.isLava(this.world.get(x, y, z))) this.lavaIgnite(x, y, z, true);
+        }
+      }
     }
 
-    // ------------------------------------------------------------ eau --
-    tickWater(x, y, z) {
+    // ------------------------------------------------------- liquides --
+    // Réglages du liquide : pas de niveau par case, distance de recherche des trous.
+    step(kind) {
+      return kind === 2 && !this.nether ? 2 : 1;
+    }
+    tickFluid(x, y, z) {
       const w = this.world;
       if (y < CM.WORLD.MINY || y >= CM.WORLD.H || !w.loaded(x, z)) return;
-      const id = w.get(x, y, z);
-      if (!CM.isWater(id)) return;
+      const id = w.get(x, y, z), kind = kindOf(id);
+      if (!kind) return;
+      if (kind === 2 && this.lavaMeetsWater(x, y, z, id)) return;
       const lvl = blk(id).level;
       if (lvl !== 0) {
-        const nl = this.targetLevel(x, y, z);
+        const nl = this.targetLevel(x, y, z, kind);
         if (nl !== lvl) {
-          w.setBlock(x, y, z, nl < 0 ? 0 : CM.WATER_IDS[nl]);
+          w.setBlock(x, y, z, nl < 0 ? 0 : idsOf(kind)[nl]);
           return;
         }
       }
-      this.spread(x, y, z, lvl);
+      this.spread(x, y, z, lvl, kind);
+      if (kind === 2) this.lavaIgnite(x, y, z, false);
     }
-    // Niveau que devrait avoir une case d'eau qui coule, d'après ses voisines (-1 : elle disparaît).
-    targetLevel(x, y, z) {
+    // Lave contre eau : la source durcit en obsidienne, la lave qui coule en galets.
+    lavaMeetsWater(x, y, z, id) {
       const w = this.world;
-      if (CM.isWater(w.get(x, y + 1, z))) return 8;
+      for (const [dx, dy, dz] of NB6) {
+        if (dy < 0) continue;
+        if (!CM.isWater(w.get(x + dx, y + dy, z + dz))) continue;
+        w.setBlock(x, y, z, blk(id).level === 0 ? B.OBSIDIAN : B.COBBLE);
+        this.fizz(x, y, z);
+        return true;
+      }
+      return false;
+    }
+    fizz(x, y, z) {
+      const g = this.game, p = g.player;
+      if (p && Math.hypot(p.x - x, p.y - y, p.z - z) < 20) CM.Audio.play('burn');
+      if (g.entities) g.entities.burst(CM.Textures.layer.smoke, x + 0.5, y + 1, z + 0.5, 6, { speed: 0.6, grav: -2, life: 0.8, size: 0.12 });
+    }
+    // Niveau que devrait avoir une case de liquide qui coule, d'après ses voisines (-1 : elle disparaît).
+    targetLevel(x, y, z, kind) {
+      const w = this.world;
+      if (kindOf(w.get(x, y + 1, z)) === kind) return 8;
       let best = 99, sources = 0;
       for (const [dx, dz] of DIRS4) {
         const n = w.get(x + dx, y, z + dz);
-        if (!CM.isWater(n)) continue;
+        if (kindOf(n) !== kind) continue;
         if (blk(n).level === 0) sources++;
         best = Math.min(best, effLevel(n));
       }
-      // source infinie : deux sources voisines et un appui (bloc solide ou source) dessous
+      // source infinie (eau seulement) : deux sources voisines et un appui (bloc solide ou source) dessous
       const below = w.get(x, y - 1, z);
-      if (sources >= 2 && (blk(below).solid || below === B.WATER)) return 0;
-      return best + 1 <= 7 ? best + 1 : -1;
+      if (kind === 1 && sources >= 2 && (blk(below).solid || below === B.WATER)) return 0;
+      const out = best + this.step(kind);
+      return out <= 7 ? out : -1;
     }
-    spread(x, y, z, lvl) {
+    spread(x, y, z, lvl, kind) {
       const w = this.world;
-      const below = w.get(x, y - 1, z), bb = blk(below);
-      const hole = y > 0 && (canFlow(below) || bb.water);
-      if (y > 0 && (canFlow(below) || (bb.water && bb.level !== 0 && bb.level !== 8))) this.flowInto(x, y - 1, z, 8);
-      // l'eau qui coule tombe plutôt que de s'étaler ; une source s'étale toujours
+      const below = w.get(x, y - 1, z), bk = kindOf(below), bb = blk(below);
+      // la lave qui tombe sur de l'eau la change en pierre
+      if (kind === 2 && bk === 1) {
+        w.setBlock(x, y - 1, z, B.STONE);
+        this.fizz(x, y - 1, z);
+        return;
+      }
+      const hole = y > CM.WORLD.MINY && (canFlow(below) || bk === kind);
+      if (y > CM.WORLD.MINY && (canFlow(below) || (bk === kind && bb.level !== 0 && bb.level !== 8))) this.flowInto(x, y - 1, z, 8, kind);
+      // le liquide qui coule tombe plutôt que de s'étaler ; une source s'étale toujours
       if (hole && lvl !== 0) return;
-      const out = lvl === 0 || lvl === 8 ? 1 : lvl + 1;
+      const st = this.step(kind);
+      const out = lvl === 0 || lvl === 8 ? st : lvl + st;
       if (out > 7) return;
-      for (const [dx, dz] of this.bestDirs(x, y, z)) {
+      for (const [dx, dz] of this.bestDirs(x, y, z, kind)) {
         const n = w.get(x + dx, y, z + dz), nb = blk(n);
-        if (canFlow(n) || (nb.water && nb.level !== 0 && nb.level !== 8 && nb.level > out)) this.flowInto(x + dx, y, z + dz, out);
+        if (canFlow(n) || (kindOf(n) === kind && nb.level !== 0 && nb.level !== 8 && nb.level > out)) this.flowInto(x + dx, y, z + dz, out, kind);
       }
     }
-    flowInto(x, y, z, l) {
+    flowInto(x, y, z, l, kind) {
       const w = this.world, g = this.game;
       if (!w.loaded(x, z)) return;
       const id = w.get(x, y, z), b = blk(id);
-      // l'eau emporte plantes et torches (qui tombent en objets) et éteint le feu
-      if (id && !b.water && !b.fire) for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n, x + 0.5, y + 0.3, z + 0.5);
-      w.setBlock(x, y, z, CM.WATER_IDS[l]);
+      if (id && !kindOf(id) && !b.fire) {
+        // l'eau emporte plantes et torches (qui tombent en objets), la lave les brûle
+        if (kind === 1) for (const [did, n] of CM.blockDrops(id, Math.random)) g.entities.addDrop(did, n, x + 0.5, y + 0.3, z + 0.5);
+        else this.fizz(x, y, z);
+      }
+      w.setBlock(x, y, z, idsOf(kind)[l]);
     }
-    // Comme dans Minecraft : l'eau part vers le trou le plus proche (4 blocs au plus), sinon partout.
-    bestDirs(x, y, z) {
+    // Comme dans Minecraft : le liquide part vers le trou le plus proche (4 blocs au plus, 2 pour la lave), sinon partout.
+    bestDirs(x, y, z, kind) {
+      const reach = kind === 2 && !this.nether ? 2 : 4;
       let best = Infinity;
       const res = [];
       for (const [dx, dz] of DIRS4) {
-        const d = this.holeDist(x + dx, y, z + dz, dx, dz, 1);
+        const d = this.holeDist(x + dx, y, z + dz, dx, dz, 1, kind, reach);
         if (d === null) continue;
         if (d < best) {
           best = d;
@@ -171,20 +245,42 @@
       }
       return res;
     }
-    holeDist(x, y, z, fdx, fdz, depth) {
+    holeDist(x, y, z, fdx, fdz, depth, kind, reach) {
       const w = this.world;
       const id = w.get(x, y, z), b = blk(id);
-      if (!canFlow(id) && !(b.water && b.level !== 0)) return null;
+      if (!canFlow(id) && !(kindOf(id) === kind && b.level !== 0)) return null;
       const below = w.get(x, y - 1, z);
-      if (canFlow(below) || CM.isWater(below)) return depth;
-      if (depth >= 4) return 1000;
+      if (canFlow(below) || kindOf(below) === kind) return depth;
+      if (depth >= reach) return 1000;
       let best = 1000;
       for (const [dx, dz] of DIRS4) {
         if (dx === -fdx && dz === -fdz) continue;
-        const d = this.holeDist(x + dx, y, z + dz, dx, dz, depth + 1);
+        const d = this.holeDist(x + dx, y, z + dz, dx, dz, depth + 1, kind, reach);
         if (d !== null && d < best) best = d;
       }
       return best;
+    }
+    // La lave met parfois le feu à l'air voisin des blocs inflammables (et réessaie tant qu'il y en a).
+    lavaIgnite(x, y, z, roll) {
+      const g = this.game, w = this.world;
+      if (!g.options.fireSpread || this.fires.size > MAX_FIRES) return;
+      let found = false;
+      for (let dy = 0; dy <= 2; dy++)
+        for (let dz = -2; dz <= 2; dz++)
+          for (let dx = -2; dx <= 2; dx++) {
+            const X = x + dx, Y = y + dy, Z = z + dz;
+            if (w.get(X, Y, Z) !== 0) continue;
+            let flam = false;
+            for (const [ex, ey, ez] of NB6) if (blk(w.get(X + ex, Y + ey, Z + ez)).flam) flam = true;
+            if (!flam) continue;
+            found = true;
+            if (roll && Math.random() < 0.08) {
+              w.setBlock(X, Y, Z, B.FIRE);
+              return;
+            }
+          }
+      const k = x + ',' + y + ',' + z;
+      if (found && this.embers.size < 600 && !this.embers.has(k)) this.embers.set(k, this.t + 3 + Math.random() * 6);
     }
 
     // ------------------------------------------------------------ feu --

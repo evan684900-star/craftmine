@@ -195,6 +195,16 @@
       case 'bounce':
         tone(t, 0.2, 'sine', 180, 520, 0.2);
         break;
+      case 'portal':
+        // portail : bourdonnement qui monte en tournoyant
+        tone(t, 1.8, 'sine', 70, 240, 0.14, 0.5);
+        tone(t, 1.8, 'triangle', 105, 380, 0.05, 0.6);
+        noise(t, 1.6, 'bandpass', 500, 3, 0.08, 2200);
+        break;
+      case 'travel':
+        tone(t, 0.9, 'sine', 420, 90, 0.16, 0.02);
+        noise(t, 0.8, 'lowpass', 2400, 0.8, 0.12, 200);
+        break;
       case 'splash':
         noise(t, 0.3, 'lowpass', 1200, 0.7, 0.25, 300);
         break;

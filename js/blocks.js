@@ -607,11 +607,28 @@ CM.ANVILS = [0, 1].map((ax) =>
   }).id,
 );
 CM.blocks[CM.ANVILS[1]].drop = CM.ANVILS[0];
+// Lave : comme l'eau (source, coulées 1 à 7, chute) mais lente, lumineuse et brûlante.
+CM.LAVA_IDS = [];
+for (let l = 0; l <= 8; l++) {
+  CM.LAVA_IDS[l] = nb(l === 0 ? 'LAVA' : l === 8 ? 'LAVA_FALL' : 'LAVA_FLOW_' + l, {
+    name: 'Lave', render: 'lava', tex: tx('lava', { type: 'lava' }), solid: false, opaque: false, light: 15, hardness: -1, drop: 0, replaceable: true, hidden: l > 0, lava: true, level: l,
+  }).id;
+}
+// Portail du Nether : entre deux colonnes d'obsidienne (axe 0 : plan le long de x, axe 1 : le long de z).
+CM.PORTALS = [0, 1].map((ax) =>
+  nb(ax ? 'NETHER_PORTAL_Z' : 'NETHER_PORTAL', {
+    name: 'Portail du Nether', render: 'portal', tex: tx('portal', { type: 'portal' }), solid: false, opaque: false, light: 11, hardness: -1, drop: 0, hidden: true, portal: true,
+    box: ax ? [6, 0, 0, 10, 16, 16] : [0, 0, 6, 16, 16, 10],
+  }).id,
+);
 CM.BLOCK_COUNT = NEXT;
 // Recherche rapide : est-ce de l'eau ? (source, courant ou chute)
 CM.WATERY = new Uint8Array(CM.BLOCK_COUNT);
 for (const id of CM.WATER_IDS) CM.WATERY[id] = 1;
+for (const id of CM.LAVA_IDS) CM.WATERY[id] = 2;
 CM.isWater = (id) => CM.WATERY[id] === 1;
+CM.isLava = (id) => CM.WATERY[id] === 2;
+CM.isFluid = (id) => CM.WATERY[id] > 0;
 
 // Les blocs qui laissent passer la lumière sans atténuation.
 for (const b of CM.blocks) if (b) b.lightPass = !b.lightOpaque;
@@ -687,6 +704,7 @@ defItem(1256, 'PUMPKIN_SEEDS', { name: 'Graines de citrouille', tex: 'pumpkin_se
 defItem(1257, 'MELON_SEEDS', { name: 'Graines de pastèque', tex: 'melon_seeds', type: 'seeds', plant: 'MELON_STEM_0' });
 defItem(1258, 'GOLDEN_CARROT', { name: 'Carotte dorée', tex: 'golden_carrot', type: 'food', food: 6, sat: 14.4 });
 defItem(1259, 'BUCKET', { name: 'Seau', tex: 'bucket', stack: 16, type: 'bucket', desc: "Clic droit sur de l'eau pour la ramasser." });
+defItem(1261, 'LAVA_BUCKET', { name: 'Seau de lave', tex: 'lava_bucket', stack: 1, type: 'bucket', lava: true, desc: 'Clic droit pour verser la lave (attention, elle brûle !).' });
 defItem(1260, 'WATER_BUCKET', { name: "Seau d'eau", tex: 'water_bucket', stack: 1, type: 'bucket', water: true, desc: "Clic droit pour verser l'eau (pour irriguer un champ)." });
 CM.items[CM.I.SEEDS].plant = 'WHEAT_0';
 for (const it of CM.items) if (it && typeof it.plant === 'string') it.plant = CM.B[it.plant];
@@ -940,7 +958,7 @@ CM.itemInfo = function (id) {
   if (id < CM.ITEM_BASE) {
     const b = CM.blocks[id];
     if (!b) return null;
-    return { id, name: b.name, stack: 64, type: 'block', block: b, isBlock: true };
+    return { id, name: b.name, stack: 64, type: 'block', block: b, isBlock: true, fireproof: !!b.fireproof };
   }
   return CM.items[id] || null;
 };
@@ -997,6 +1015,10 @@ for (const w of CM.WOODS) CM.TAG_NAMES['logs_' + lc(w.key)] = (w.nether ? 'Tiges
 CM.tagMembers = (t) => (typeof t === 'string' ? CM.TAGS[t] : [t]);
 CM.ingName = (t) => (typeof t === 'string' ? CM.TAG_NAMES[t] : CM.itemName(t));
 CM.woodOf = (id) => CM.WOODS.find((w) => w.key === CM.blocks[id].wood) || null;
+
+// La netherite ne brûle ni dans le feu ni dans la lave.
+for (const it of Object.values(CM.items)) if (/NETHERITE/.test(it.key)) it.fireproof = true;
+CM.blocks[CM.B.NETHERITE_BLOCK].fireproof = CM.blocks[CM.B.ANCIENT_DEBRIS].fireproof = true;
 
 // ------------------------------------------------------------ Recettes ----
 // station: null (à la main), 'table' (établi à proximité), 'forge' (forge ou fourneau),

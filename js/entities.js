@@ -134,6 +134,8 @@
     ombre: { hw: 0.3, h: 1.95, hp: 16, speed: 3.4 },
     villager: { hw: 0.3, h: 1.95, hp: 20, speed: 1.1, passive: true },
     golem: { hw: 0.65, h: 2.6, hp: 100, speed: 0.9 },
+    // Ombre ardente (Nether) : insensible au feu et à la lave, n'a pas peur de la lumière, enflamme
+    ardent: { hw: 0.3, h: 1.95, hp: 20, speed: 3.2, fireproof: true, ignites: true },
   };
   // Élevage : la nourriture qui rend un animal amoureux (il suit aussi le joueur qui la tient).
   CM.BREED_FOOD = { mouflon: [I.WHEAT], boar: [I.CARROT, I.POTATO, I.BEETROOT] };
@@ -383,7 +385,7 @@
           m.hurt = Math.max(m.hurt, 0.35);
           // coup donné par quelqu'un d'autre : on l'entend aussi
           const p = this.game.player;
-          if (!(this.game.clock - (m.localHit || -9) < 0.6) && Math.hypot(p.x - x, p.z - z) < 20) CM.Audio.play(type === 'ombre' ? 'shadow_hurt' : 'hit');
+          if (!(this.game.clock - (m.localHit || -9) < 0.6) && Math.hypot(p.x - x, p.z - z) < 20) CM.Audio.play(type === 'ombre' || type === 'ardent' ? 'shadow_hurt' : 'hit');
         }
         m.hflag = fl & 1;
         m.ai.chasing = !!(fl & 2);
@@ -482,6 +484,7 @@
         if (m.baby <= 0) this.setBaby(m, 0);
       }
       // en feu (Aura de feu) : 1 point de dégât par seconde, l'eau l'éteint
+      if (m.fire > 0 && MOBS[m.type].fireproof) m.fire = 0;
       if (m.fire > 0) {
         m.fire -= dt;
         m.fireT = (m.fireT || 0) - dt;
@@ -498,8 +501,19 @@
       m.ai.attackCd = Math.max(0, m.ai.attackCd - dt);
       const fx = Math.floor(m.x), fz = Math.floor(m.z);
       const inWater = CM.isWater(w.get(fx, Math.floor(m.y + 0.4), fz));
-      // dans les flammes : la créature prend feu
-      if (w.get(fx, Math.floor(m.y + 0.2), fz) === B.FIRE && !(m.fire > 0)) m.fire = 8;
+      const inLava = CM.isLava(w.get(fx, Math.floor(m.y + 0.4), fz)) || CM.isLava(w.get(fx, Math.floor(m.y + 0.05), fz));
+      const fireproof = MOBS[m.type].fireproof;
+      // dans les flammes : la créature prend feu ; dans la lave, elle brûle vite
+      if (!fireproof && w.get(fx, Math.floor(m.y + 0.2), fz) === B.FIRE && !(m.fire > 0)) m.fire = 8;
+      if (inLava && !fireproof) {
+        m.fire = Math.max(m.fire || 0, 15);
+        m.lavaT = (m.lavaT || 0) - dt;
+        if (m.lavaT <= 0) {
+          m.lavaT = 0.5;
+          this.hurtMob(m, 4, null, false, m.fireBy);
+          if (m.dead) return;
+        }
+      }
       let tvx = 0, tvz = 0, jump = false;
       const def = MOBS[m.type];
       const dxp = p.x - m.x, dzp = p.z - m.z, dyp = p.y - m.y;
@@ -615,9 +629,10 @@
           }
         }
         if (distL < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
-      } else if (m.type === 'ombre') {
-        const bl = w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
-        const sky = w.skyAt(fx, Math.floor(m.y + 1.5), fz);
+      } else if (m.type === 'ombre' || m.type === 'ardent') {
+        const ardent = m.type === 'ardent';
+        const bl = ardent ? 0 : w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
+        const sky = ardent ? 0 : w.skyAt(fx, Math.floor(m.y + 1.5), fz);
         // brûle au soleil
         if (g.daylight > 0.45 && sky >= 12) {
           this.hurtMob(m, 4 * dt, null, true);
@@ -652,7 +667,7 @@
           let dx = -Math.sin(dir), dz = -Math.cos(dir);
           // refuse d'entrer dans une zone éclairée : contourne
           const ax = Math.floor(m.x + dx * 1.2), az = Math.floor(m.z + dz * 1.2);
-          if (m.ai.flee <= 0 && w.blockLightAt(ax, Math.floor(m.y + 0.5), az) >= 8) {
+          if (!ardent && m.ai.flee <= 0 && w.blockLightAt(ax, Math.floor(m.y + 0.5), az) >= 8) {
             const side = (Math.floor(m.age / 3) % 2 ? 1 : -1) * Math.PI / 2;
             dx = -Math.sin(dir + side);
             dz = -Math.cos(dir + side);
@@ -666,11 +681,12 @@
         const midSolid = w.solidAt(Math.floor((m.x + p.x) / 2), Math.floor(Math.max(m.y, p.y) + 1.2), Math.floor((m.z + p.z) / 2));
         if (p.alive && distP < 1.25 && dyp > -1.5 && dyp < 1.8 && m.ai.attackCd <= 0 && !midSolid) {
           m.ai.attackCd = 1.1;
-          this.hitPlayer(p, 3, m, 'Une Ombre');
+          this.hitPlayer(p, ardent ? 4 : 3, m, ardent ? 'Une Ombre ardente' : 'Une Ombre');
         }
         if (distL < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
+        if (ardent && distL < 40 && r() < dt * 10) this.flames(m);
         // la nuit, de petites étincelles violettes trahissent leur présence
-        if (g.daylight < 0.4 && distL < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
+        if (!ardent && g.daylight < 0.4 && distL < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
       }
 
       if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz)) jump = true;
@@ -679,17 +695,17 @@
         m.vx += (tvx - m.vx) * Math.min(1, acc * dt);
         m.vz += (tvz - m.vz) * Math.min(1, acc * dt);
       }
-      if (inWater) {
+      if (inWater || inLava) {
         const fv = CM.flowVector(w, fx, Math.floor(m.y + 0.4), fz);
         if (fv) {
-          m.vx += fv[0] * 6 * dt;
-          m.vz += fv[1] * 6 * dt;
+          m.vx += fv[0] * (inLava ? 2 : 6) * dt;
+          m.vz += fv[1] * (inLava ? 2 : 6) * dt;
         }
-        m.vy += 22 * dt;
+        m.vy += (inLava ? 18 : 22) * dt;
         m.vy = Math.min(m.vy, 2.5);
         m.vy -= 14 * dt;
-        m.vx *= 0.9;
-        m.vz *= 0.9;
+        m.vx *= inLava ? 0.8 : 0.9;
+        m.vz *= inLava ? 0.8 : 0.9;
       } else m.vy -= 28 * dt;
       m.vy = Math.max(m.vy, -40);
       if (jump) m.vy = 8.2;
@@ -717,7 +733,7 @@
         if (!silent) {
           m.hurt = 0.35;
           m.localHit = g.clock;
-          CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
+          CM.Audio.play(m.type === 'ombre' || m.type === 'ardent' ? 'shadow_hurt' : 'hit');
         }
         g.net.hitMob(m, dmg, opts);
         return;
@@ -755,7 +771,7 @@
             }
           }
         }
-        if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' ? 'shadow_hurt' : 'hit');
+        if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' || m.type === 'ardent' ? 'shadow_hurt' : 'hit');
         if (m.type === 'boar') m.ai.angry = 12;
         else if (MOBS[m.type].passive) m.ai.flee = 5;
         if (m.type === 'golem') CM.Audio.play('golem');
@@ -768,7 +784,7 @@
       const r = this.rand;
       const g = this.game;
       // expérience pour le joueur qui l'a tué (Ombre 5, animal 1 à 3)
-      const xp = m.type === 'ombre' ? 5 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
+      const xp = m.type === 'ombre' ? 5 : m.type === 'ardent' ? 8 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
       if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type, xp });
       else {
         g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
@@ -795,6 +811,10 @@
         if (r() < 0.6) this.addDrop(B.FLOWER, 1 + Math.floor(r() * 2), m.x, m.y + 1, m.z);
         // golem construit : il ne reviendra pas
         if (m.built && g.golemHomes) g.golemHomes = g.golemHomes.filter((h) => h[0] !== m.home[0] || h[2] !== m.home[1]);
+      } else if (m.type === 'ardent') {
+        this.addDrop(I.QUARTZ, 1 + Math.floor(r() * 2) + more(), m.x, m.y + 0.8, m.z);
+        if (r() < 0.35 + lo * 0.1) this.addDrop(I.GOLD_INGOT, 1, m.x, m.y + 0.8, m.z);
+        if (r() < 0.25) this.addDrop(I.GLOWSTONE_DUST, 1 + more(), m.x, m.y + 0.8, m.z);
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0) + more(), m.x, m.y + 0.8, m.z);
       }
@@ -808,7 +828,10 @@
       else if (type === 'boar') this.burst(L.boar_hide, x, y + 0.5, z, 14, { speed: 3 });
       else if (type === 'penguin' || type === 'villager') this.burst(L.white, x, y + 0.8, z, 14, { speed: 3, size: 0.06 });
       else if (type === 'golem') this.burst(L.golem_body, x, y + 1.3, z, 30, { speed: 4, size: 0.1 });
-      else {
+      else if (type === 'ardent') {
+        this.burst(L.smoke, x, y + 1, z, 18, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
+        this.burst(L.flame, x, y + 1, z, 16, { speed: 3, grav: -2, life: 0.7, size: 0.12, emissive: true });
+      } else {
         this.burst(L.smoke, x, y + 1, z, 22, { speed: 2.5, grav: -1.5, life: 1.2, size: 0.3 });
         this.burst(L.ombre_face, x, y + 1, z, 10, { speed: 4, emissive: true });
       }
@@ -822,8 +845,8 @@
       if (d.age > 600) d.dead = true;
       const cell = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z));
       const inWater = CM.isWater(cell);
-      // un objet tombé dans le feu brûle
-      if (cell === B.FIRE && d.age > 0.5) {
+      // un objet tombé dans le feu ou la lave brûle (sauf la netherite)
+      if ((cell === B.FIRE || CM.isLava(cell)) && d.age > 0.5 && !CM.itemInfo(d.id).fireproof) {
         d.dead = true;
         this.burst(CM.Textures.layer.smoke, d.x, d.y + 0.2, d.z, 4, { speed: 0.6, grav: -2, life: 0.8, size: 0.15 });
         return;
@@ -889,7 +912,7 @@
         }
       }
       // animaux d'élevage mis de côté : ils reviennent quand un joueur s'approche
-      const pen = g.animals || [];
+      const pen = w.nether ? [] : g.animals || []; // (les animaux restent dans le monde normal)
       for (let i = pen.length - 1; i >= 0; i--) {
         const a = pen[i];
         if (!w.loaded(a[1], a[3]) || !pls.some((q) => Math.hypot(a[1] - q.x, a[3] - q.z) < 90)) continue;
@@ -908,6 +931,7 @@
     // Apparitions autour d'un joueur (chaque joueur a son propre voisinage).
     spawnAround(p, w, r, nightfall) {
       const g = this.game;
+      if (w.nether) return this.spawnNether(p, w, r);
       const { H } = CM.WORLD;
       let nMouf = 0, nOmbre = 0;
       for (const m of this.mobs) {
@@ -971,6 +995,29 @@
       for (let n = 0; n < tries; n++) this.spawnOmbre(p, w, r);
     }
 
+    // Nether : des Ombres ardentes rôdent partout, de jour comme de nuit, même à la lumière.
+    spawnNether(p, w, r) {
+      const g = this.game;
+      if (g.difficulty === 'peaceful' || g.mode === 'creative' || !p.alive) return;
+      let n = 0;
+      for (const m of this.mobs) if (!m.dead && m.type === 'ardent' && Math.hypot(m.x - p.x, m.z - p.z) < 70) n++;
+      const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
+      if (n >= Math.round(5 * dif) || r() > 0.5) return;
+      for (let t = 0; t < 10; t++) {
+        const a = r() * Math.PI * 2, dd = 14 + r() * 24;
+        const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
+        if (!w.loaded(x, z)) continue;
+        for (let k = 0; k < 12; k++) {
+          const y = Math.floor(p.y) - 10 + Math.floor(r() * 20);
+          if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
+          if (CM.isFluid(w.get(x, y, z)) || CM.isFluid(w.get(x, y - 1, z)) || CM.isFluid(w.get(x, y + 1, z))) continue;
+          const m = this.addMob('ardent', x + 0.5, y, z + 0.5);
+          this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 10, { speed: 1.5, grav: -1, life: 1, size: 0.3 });
+          return;
+        }
+      }
+    }
+
     spawnOmbre(p, w, r) {
       const g = this.game;
       const { H } = CM.WORLD;
@@ -983,10 +1030,10 @@
         const surf = w.groundBelow(x, H - 1, z) + 1;
         const cands = [];
         if (Math.abs(surf - p.y) < 24) cands.push(surf);
-        for (let y = Math.min(H - 3, Math.floor(p.y) + 8); y > Math.max(2, Math.floor(p.y) - 16); y--) cands.push(y);
+        for (let y = Math.min(H - 3, Math.floor(p.y) + 8); y > Math.max(CM.WORLD.MINY + 1, Math.floor(p.y) - 16); y--) cands.push(y);
         for (const y of cands) {
           if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
-          if (CM.isWater(w.get(x, y, z)) || CM.isWater(w.get(x, y - 1, z))) continue;
+          if (CM.isFluid(w.get(x, y, z)) || CM.isFluid(w.get(x, y - 1, z))) continue;
           const bl = w.blockLightAt(x, y, z);
           const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
           if (bl < 4 && sky < 4) {
@@ -1031,8 +1078,12 @@
     }
     // Une créature frappe un joueur (local ou invité) ; elle est transmise pour les Épines.
     hitPlayer(p, n, m, cause) {
-      if (p === this.game.player) p.damage(n, m.x, m.z, cause, false, m);
-      else p.damage(n, m.x, m.z, cause, false, 0, m);
+      if (p === this.game.player) {
+        const h0 = p.health;
+        p.damage(n, m.x, m.z, cause, false, m);
+        // l'Ombre ardente met le feu (seulement si le coup a porté)
+        if (MOBS[m.type].ignites && p.health < h0) p.burning = Math.max(p.burning || 0, 4);
+      } else p.damage(n, m.x, m.z, cause, false, 0, m);
     }
 
     // ------------------------------------------------------- élevage --
@@ -1205,7 +1256,7 @@
           this.part(batch, this.M, 0, 1.45, 0, nod, [-0.23, 0, -0.23, 0.23, 0.56, 0.23], [vh, vh, vh, skin, vh, L.villager_face], l, flags);
           this.part(batch, this.M, 0, 1.45, 0, nod, [-0.05, 0.08, -0.34, 0.05, 0.3, -0.23], skin, l, flags);
         } else {
-          const body = L.ombre_body;
+          const body = m.type === 'ardent' ? L.ardent_body : L.ombre_body;
           this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);
           this.part(batch, this.M, -0.12, 0.8, 0, sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
           this.part(batch, this.M, 0.12, 0.8, 0, -sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
@@ -1213,7 +1264,7 @@
           this.part(batch, this.M, -0.34, 1.48, 0, armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
           this.part(batch, this.M, 0.34, 1.48, 0, m.ai.chasing ? armA : -armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
           const ff = [flags, flags, flags, flags, flags, flags ? 2 : 1];
-          this.part(batch, this.M, 0, 1.52, 0, 0, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], [body, body, body, body, body, L.ombre_face], l, flags, ff);
+          this.part(batch, this.M, 0, 1.52, 0, 0, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], [body, body, body, body, body, m.type === 'ardent' ? L.ardent_face : L.ombre_face], l, flags, ff);
         }
       }
       for (const t of this.tnts) {
