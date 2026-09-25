@@ -139,7 +139,8 @@
       container: true, slots: 2, tech: { k: 'use', use: 'efurnace', rate: 3 },
       place: (P) => CM.rsWith(CM.RSFAM.efurnace.base, { facing: OPP[P.lookH] }),
     }), { key: keyFn('ELECTRIC_FURNACE') });
-    // foreuse : casse le bloc devant elle ; ce qu'elle récolte va dans le conteneur derrière (ou tombe)
+    // foreuse : casse ce qu'il y a devant elle et avance (tunnel de 2 de haut), range sa récolte
+    // dans ses 9 cases et pose derrière elle les câbles qu'on lui donne ; fixe si un conteneur est derrière
     fam('drill', 'tech', [['facing', [2, 3, 0, 1, 4, 5]]], (st) => ({
       name: 'Foreuse', render: 'model',
       model: [
@@ -149,7 +150,8 @@
         CM.part6([7, 15, 7, 9, 16, 9], 'drill_bit', st.facing),
       ],
       tex: 'brass_casing', iconTex: 'drill_icon', solid: true, opaque: false, hardness: 3, tool: 'pickaxe', sound: 'metal', orient: st.facing,
-      tech: { k: 'use', use: 'drill', rate: 6 }, box: [0, 0, 0, 16, 16, 16],
+      tech: { k: 'use', use: 'drill', rate: 6 }, box: [0, 0, 0, 16, 16, 16], container: true, slots: 9,
+      desc: "Creuse devant elle et avance (tunnel de 2 blocs de haut). Clic droit : sa récolte ; mets-y des câbles pour qu'elle les pose derrière elle. Un coffre collé derrière la rend fixe.",
       place: (P) => CM.rsWith(CM.RSFAM.drill.base, { facing: P.look6 }),
     }), { key: keyFn('DRILL') });
     // tapis roulant : transporte objets, créatures et joueurs, et remplit le conteneur au bout

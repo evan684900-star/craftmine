@@ -13,6 +13,7 @@
   const DT = STEP / 20;
   const BELT = 2; // vitesse des tapis (blocs par seconde)
   const FAN_RANGE = 8;
+  const DRILL_RES = 1000; // réserve d'énergie d'une foreuse (elle continue loin du réseau)
 
   const S = (rs) => rs.techS || (rs.techS = { nets: [], of: new Map(), pow: new Set(), crank: new Map(), out: new Map(), movers: [] });
   // Données durables d'un bloc (charge, combustible, progression), sauvegardées avec la partie.
@@ -88,11 +89,8 @@
         const rec = s && CM.TECH_SMELT.get(s.id);
         return !!rec && s.count >= rec.k && fits(sl[1], rec.out, rec.n);
       }
-      case 'drill': {
-        const f = b.rs.facing, X = x + DV[f][0], Y = y + DV[f][1], Z = z + DV[f][2];
-        const id = rs.w.get(X, Y, Z), fb = blk(id);
-        return !!id && !CM.isFluid(id) && !fb.unbreakable && fb.hardness >= 0 && !fb.portal && Y > CM.WORLD.MINY;
-      }
+      case 'drill':
+        return drillPlan(rs, x, y, z, b).work;
       default:
         return true;
     }
@@ -198,14 +196,36 @@
         else if (e + stored >= n) {
           stored -= n - e;
           e = 0;
-        } else continue;
+        } else {
+          // foreuse : elle puise dans sa réserve quand le réseau ne suffit pas
+          if (u[4].tech.use === 'drill') {
+            const td = TD(g, u[0], u[1], u[2]);
+            if ((td.r || 0) >= n) {
+              td.r -= n;
+              pow.add(key(u[0], u[1], u[2]));
+            }
+          }
+          continue;
+        }
         used += n;
         pow.add(key(u[0], u[1], u[2]));
       }
       net.use = used / DT;
       net.need = need / DT;
-      stored = Math.min(net.cap, stored + e);
+      const total = stored + e;
+      stored = Math.min(net.cap, total);
       net.stored = stored;
+      // le surplus remplit la réserve des foreuses
+      let left = total - stored;
+      for (const [x, y, z, , b] of net.users) {
+        if (left <= 0) break;
+        if (b.tech.use !== 'drill') continue;
+        const td = TD(g, x, y, z), add = Math.min(left, DRILL_RES - (td.r || 0), 40 * DT);
+        if (add > 0) {
+          td.r = (td.r || 0) + add;
+          left -= add;
+        }
+      }
       // charge répartie entre les batteries (et niveau affiché)
       for (const [x, y, z, id] of net.bats) {
         const td = TD(g, x, y, z);
@@ -232,7 +252,7 @@
             if (on) work(rs, x, y, z, 2.5, () => smeltOne(g, x, y, z));
             break;
           case 'drill':
-            if (on) drillStep(rs, x, y, z, b);
+            if (on) drillStep(rs, x, y, z, id, b);
             break;
           case 'conveyor':
           case 'fan':
@@ -276,29 +296,106 @@
     take(sl, 0, rec.k);
     addTo(sl, 1, rec.out, rec.n);
   }
-  // Foreuse : casse le bloc devant, range la récolte derrière (conteneur) ou la laisse tomber.
-  function drillStep(rs, x, y, z, b) {
-    const g = rs.g, w = rs.w, f = b.rs.facing;
-    const X = x + DV[f][0], Y = y + DV[f][1], Z = z + DV[f][2];
-    const id = w.get(X, Y, Z), fb = blk(id);
-    const td = TD(g, x, y, z);
-    td.p = (td.p || 0) + DT / Math.max(0.5, fb.hardness * 0.75);
-    const p = g.player, near = p && Math.hypot(p.x - X, p.z - Z) < 16;
-    g.entities.blockParticles(id, X, Y, Z, 3);
-    if (near) CM.Audio.play('dig', { mat: fb.sound });
-    if (td.p < 1) return;
-    td.p = 0;
-    const drops = CM.blockDrops(id, Math.random);
-    // contenu d'un conteneur cassé : il tombe (géré par le jeu quand le bloc disparaît)
-    w.setBlock(X, Y, Z, 0);
-    if (near) CM.Audio.play('break', { mat: fb.sound });
+  // Foreuse : casse ce qu'il y a devant elle puis avance d'un bloc (tunnel de 2 blocs de haut
+  // à l'horizontale). Avec un conteneur collé derrière, elle reste fixe et le remplit.
+  const DRILL_AIR = 6; // blocs de vide traversés d'affilée (petites grottes) avant de s'arrêter
+  function drillPlan(rs, x, y, z, b) {
+    const w = rs.w, f = b.rs.facing;
     const bx = x - DV[f][0], by = y - DV[f][1], bz = z - DV[f][2];
-    const back = blk(w.get(bx, by, bz));
-    const dst = back.container ? (back.tech ? CM.Tech.inputSlots(rs, bx, by, bz) : g.chestAt(bx, by, bz)) : null;
-    for (const [did, n] of drops) {
-      const left = dst ? CM.insertStack(dst, { id: did, count: n }, true) : n;
-      if (left > 0) g.entities.addDrop(did, left, X + 0.5, Y + 0.3, Z + 0.5);
+    const fixed = !!blk(w.get(bx, by, bz)).container;
+    const X = x + DV[f][0], Y = y + DV[f][1], Z = z + DV[f][2];
+    const plan = { fixed, X, Y, Z, bx, by, bz, targets: [], move: false, work: false, why: '' };
+    if (Y <= CM.WORLD.MINY || Y >= CM.WORLD.H - 1 || !w.loaded(X, Z)) {
+      plan.why = 'bout du monde';
+      return plan;
     }
+    const cells = [[X, Y, Z]];
+    if (!fixed && f !== 2 && f !== 3) cells.push([X, Y + 1, Z]);
+    for (const [cx, cy, cz] of cells) {
+      const id = w.get(cx, cy, cz);
+      if (!id) continue;
+      const fb = blk(id);
+      const bad = CM.isFluid(id) ? 'liquide devant' : fb.unbreakable || fb.hardness < 0 || fb.portal ? 'bloc incassable devant' : '';
+      if (bad) {
+        if (cy === Y) {
+          plan.why = bad;
+          plan.targets.length = 0;
+          return plan;
+        }
+        continue;
+      }
+      plan.targets.push([cx, cy, cz, id]);
+    }
+    const air = TD(rs.g, x, y, z).air || 0;
+    plan.move = !plan.targets.length && !fixed && w.get(X, Y, Z) === 0 && air < DRILL_AIR;
+    plan.work = plan.targets.length > 0 || plan.move;
+    if (!plan.work) plan.why = fixed ? 'rien à creuser devant' : air >= DRILL_AIR ? 'plus rien à creuser' : 'bloquée';
+    return plan;
+  }
+  function drillStep(rs, x, y, z, id, b) {
+    const g = rs.g, w = rs.w, td = TD(g, x, y, z);
+    const plan = drillPlan(rs, x, y, z, b);
+    const p = g.player, near = p && Math.hypot(p.x - x, p.z - z) < 16;
+    if (plan.targets.length) {
+      const hard = Math.max(...plan.targets.map((t) => blk(t[3]).hardness));
+      td.p = (td.p || 0) + DT / Math.max(0.5, hard * 0.75);
+      const [tx, ty, tz, tid] = plan.targets[0];
+      g.entities.blockParticles(tid, tx, ty, tz, 3);
+      if (near) CM.Audio.play('dig', { mat: blk(tid).sound });
+      if (td.p < 1) return;
+      td.p = 0;
+      td.air = 0;
+      td.dug = true;
+      const back = blk(w.get(plan.bx, plan.by, plan.bz));
+      const dst = plan.fixed ? (back.tech ? CM.Tech.inputSlots(rs, plan.bx, plan.by, plan.bz) : g.chestAt(plan.bx, plan.by, plan.bz)) : g.chestAt(x, y, z);
+      for (const [cx, cy, cz, cid] of plan.targets) {
+        const cb = blk(cid);
+        // un coffre cassé laisse tomber son contenu
+        if (cb.container) {
+          g.chestAt(cx, cy, cz);
+          g.spillChest(cx, cy, cz);
+        }
+        const drops = CM.blockDrops(cid, Math.random);
+        w.setBlock(cx, cy, cz, 0);
+        if (near) CM.Audio.play('break', { mat: cb.sound });
+        for (const [did, n] of drops) {
+          const left = dst ? CM.insertStack(dst, { id: did, count: n }, true) : n;
+          if (left > 0) g.entities.addDrop(did, left, cx + 0.5, cy + 0.3, cz + 0.5);
+        }
+      }
+    } else if (plan.move) {
+      td.p = (td.p || 0) + DT / 0.5;
+      if (td.p < 1) return;
+      td.p = 0;
+      // avancer dans du vide (le bloc devant était déjà creusé) : compté
+      if (!td.dug) td.air = (td.air || 0) + 1;
+      td.dug = false;
+      drillMove(rs, x, y, z, id, plan);
+    }
+  }
+  // La foreuse avance d'un bloc : son inventaire et sa réserve la suivent ; si elle transporte
+  // des câbles, elle en pose un derrière elle (elle reste reliée au réseau).
+  function drillMove(rs, x, y, z, id, plan) {
+    const g = rs.g, w = rs.w, k = g.bkey(x, y, z);
+    if (g.net.locks.has(k) || g.soloChest === k) return; // quelqu'un regarde dans la foreuse
+    const { X, Y, Z } = plan, nk = g.bkey(X, Y, Z);
+    const inv = g.chestAt(x, y, z);
+    g.chests.delete(k);
+    g.chests.set(nk, inv);
+    if (g.techData[k]) {
+      g.techData[nk] = g.techData[k];
+      delete g.techData[k];
+    }
+    let trail = 0;
+    const ci = inv.findIndex((s) => s && s.id === CM.B.CABLE);
+    if (ci >= 0) {
+      take(inv, ci, 1);
+      trail = CM.B.CABLE;
+    }
+    w.setBlock(X, Y, Z, id);
+    w.setBlock(x, y, z, trail);
+    const p = g.player;
+    if (p && Math.hypot(p.x - X, p.z - Z) < 16) CM.Audio.play('piston', { out: true });
   }
 
   // ------------------------------------ tapis et ventilateurs (chaque tick) --
@@ -406,6 +503,10 @@
       if (n.need > n.use + 0.01) t += ' (il manque ' + f(n.need - n.use) + '/s)';
       if (n.cap) t += ' · batteries ' + Math.round((n.stored / n.cap) * 100) + ' % (' + Math.round(n.stored) + '/' + n.cap + ')';
       if (b.tech.k === 'gen' && b.tech.gen === 'coal') t += ' · combustible ' + Math.ceil(TD(g, x, y, z).f || 0) + ' s';
+      if (b.tech.use === 'drill') {
+        const plan = drillPlan(rs, x, y, z, b);
+        t += ' · réserve de la foreuse ' + Math.round(TD(g, x, y, z).r || 0) + '/' + DRILL_RES + (plan.fixed ? ' · fixe (conteneur derrière)' : '') + (plan.why ? ' · ' + plan.why : '');
+      }
       if (rs.powered(x, y, z) && b.tech.k === 'use') t += ' · arrêtée par la redstone';
       return t;
     },
