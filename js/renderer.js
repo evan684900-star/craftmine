@@ -92,7 +92,10 @@
         p.x += sw;
         p.z += sw * 0.6;
       }
-      vUV = vec3(u / 16.0, v / 16.0, aLayer);
+      // texture animée (feu, torches) : 8 images qui se suivent, 12 par seconde
+      float layer = aLayer;
+      if ((fl & 16) != 0) layer += mod(floor(uTime * 12.0), 8.0);
+      vUV = vec3(u / 16.0, v / 16.0, layer);
       vCol = aCol == 0u ? vec3(1.0, 0.82, 0.58) : vec3(float((aCol >> 11) & 31u) / 31.0, float((aCol >> 5) & 63u) / 63.0, float(aCol & 31u) / 31.0);
       vFlick = (fl & 8) != 0 ? 1.0 : 0.0;
       vLight = aData.xy / 255.0;

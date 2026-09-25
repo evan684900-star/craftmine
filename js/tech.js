@@ -63,6 +63,11 @@
       case 'wind':
         if (g.dim === 'nether' || w.skyAt(x, y + 1, z) < 15) return 0;
         return windOf(y);
+      case 'geo': {
+        let n = 0;
+        for (let d = 0; d < 6; d++) if (CM.isLava(w.get(x + DV[d][0], y + DV[d][1], z + DV[d][2]))) n++;
+        return Math.min(t.max, n * 4);
+      }
       default:
         return 0;
     }
@@ -91,9 +96,42 @@
       }
       case 'drill':
         return drillPlan(rs, x, y, z, b).work;
+      case 'charger': {
+        const it = g.chestAt(x, y, z)[0], info = it && CM.itemInfo(it.id);
+        return !!(info && info.charge && (it.xp || 0) > 0);
+      }
+      case 'tesla':
+        return !!teslaTarget(rs, x, y, z);
+      case 'vacuum':
+        return g.entities.drops.some((d) => !d.dead && Math.abs(d.x - x - 0.5) < 6.5 && Math.abs(d.y - y) < 6.5 && Math.abs(d.z - z - 0.5) < 6.5);
+      case 'harvester':
+        return !!harvestTarget(rs, x, y, z);
       default:
         return true;
     }
+  }
+  // Ombre la plus proche à portée d'une bobine Tesla.
+  function teslaTarget(rs, x, y, z) {
+    let best = null, bd = 8;
+    for (const m of rs.g.entities.mobs) {
+      if (m.dead || (m.type !== 'ombre' && m.type !== 'ardent')) continue;
+      const d = Math.hypot(m.x - x - 0.5, m.y + m.h / 2 - y - 1, m.z - z - 0.5);
+      if (d < bd) (bd = d), (best = m);
+    }
+    return best;
+  }
+  // Culture mûre (ou citrouille/pastèque près de sa tige) à 4 blocs d'une moissonneuse.
+  function harvestTarget(rs, x, y, z) {
+    const w = rs.w;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dz = -4; dz <= 4; dz++)
+        for (let dx = -4; dx <= 4; dx++) {
+          const X = x + dx, Y = y + dy, Z = z + dz, b = blk(w.get(X, Y, Z));
+          if (b.crop === 3 && !b.fruit) return [X, Y, Z];
+          if (b.id === CM.B.PUMPKIN || b.id === CM.B.MELON)
+            for (const d of CM.HDIRS) if (blk(w.get(X + DV[d][0], Y, Z + DV[d][2])).fruit === b.id) return [X, Y, Z];
+        }
+    return null;
   }
   function setState(rs, x, y, z, id, changes) {
     const nid = CM.rsWith(id, changes);
@@ -259,6 +297,27 @@
             setState(rs, x, y, z, id, { on });
             if (on) movers.push([x, y, z, b.tech.use, b.rs.facing]);
             break;
+          case 'charger':
+            setState(rs, x, y, z, id, { on });
+            if (on) {
+              const it = g.chestAt(x, y, z)[0];
+              if (it) it.xp = Math.max(0, (it.xp || 0) - b.tech.rate * DT);
+            }
+            break;
+          case 'tesla':
+            setState(rs, x, y, z, id, { on });
+            if (on) teslaStep(rs, x, y, z);
+            break;
+          case 'elevator':
+            setState(rs, x, y, z, id, { on });
+            break;
+          case 'vacuum':
+            if (on) vacuumStep(rs, x, y, z);
+            break;
+          case 'harvester':
+            setState(rs, x, y, z, id, { on });
+            if (on) work(rs, x, y, z, 1, () => harvestOne(rs, x, y, z));
+            break;
         }
       }
     s.movers = movers;
@@ -296,6 +355,64 @@
     take(sl, 0, rec.k);
     addTo(sl, 1, rec.out, rec.n);
   }
+  // Bobine Tesla : un éclair toutes les secondes sur l'Ombre la plus proche.
+  function teslaStep(rs, x, y, z) {
+    const g = rs.g, td = TD(g, x, y, z);
+    td.cd = (td.cd || 0) - DT;
+    if (td.cd > 0) return;
+    const m = teslaTarget(rs, x, y, z);
+    if (!m) return;
+    td.cd = 1;
+    g.entities.hurtMob(m, 6, [x + 0.5, z + 0.5]);
+    CM.Tech.zapFx(g, x + 0.5, y + 1, z + 0.5, m.x, m.y + m.h * 0.6, m.z);
+    if (g.net.isHost) g.net.fx({ k: 'zap', x: x + 0.5, y: y + 1, z: z + 0.5, t: [Math.round(m.x * 10) / 10, Math.round((m.y + m.h * 0.6) * 10) / 10, Math.round(m.z * 10) / 10] });
+  }
+  // Aspirateur : attire les objets proches et les range.
+  function vacuumStep(rs, x, y, z) {
+    const g = rs.g, slots = g.chestAt(x, y, z);
+    for (const d of g.entities.drops) {
+      if (d.dead) continue;
+      const dx = x + 0.5 - d.x, dy = y + 0.5 - d.y, dz = z + 0.5 - d.z, dist = Math.hypot(dx, dy, dz);
+      if (dist > 6.5) continue;
+      if (dist < 1.3) {
+        const left = CM.insertStack(slots, { id: d.id, count: d.count, extra: d.extra }, true);
+        if (left < d.count) {
+          d.count = left;
+          if (!left) d.dead = true;
+        }
+      } else {
+        d.vx = (dx / dist) * 6;
+        d.vy = (dy / dist) * 6 + 1;
+        d.vz = (dz / dist) * 6;
+      }
+    }
+  }
+  // Moissonneuse : récolte une culture mûre, la replante (avec une graine de la récolte).
+  function harvestOne(rs, x, y, z) {
+    const g = rs.g, w = rs.w, t = harvestTarget(rs, x, y, z);
+    if (!t) return;
+    const [X, Y, Z] = t, id = w.get(X, Y, Z), b = blk(id);
+    const drops = CM.blockDrops(id, Math.random);
+    let replant = 0;
+    if (b.crop === 3) {
+      replant = CM.B[b.key.replace(/_\d+$/, '_0')] || 0;
+      // une graine (ou une carotte, une pomme de terre…) de la récolte sert à replanter
+      const seed = drops.find(([did]) => CM.itemInfo(did) && CM.itemInfo(did).plant === replant);
+      if (seed) seed[1]--;
+    }
+    w.setBlock(X, Y, Z, replant);
+    if (replant) g.crops.add(X + ',' + Y + ',' + Z);
+    g.entities.blockParticles(id, X, Y, Z, 6);
+    const slots = g.chestAt(x, y, z);
+    for (const [did, n] of drops) {
+      if (n <= 0) continue;
+      const left = CM.insertStack(slots, { id: did, count: n }, true);
+      if (left > 0) g.entities.addDrop(did, left, x + 0.5, y + 1.2, z + 0.5);
+    }
+    const p = g.player;
+    if (p && Math.hypot(p.x - X, p.z - Z) < 16) CM.Audio.play('break', { mat: 'grass' });
+  }
+
   // Foreuse : casse ce qu'il y a devant elle puis avance d'un bloc (tunnel de 2 blocs de haut
   // à l'horizontale). Avec un conteneur collé derrière, elle reste fixe et le remplit.
   const DRILL_AIR = 6; // blocs de vide traversés d'affilée (petites grottes) avant de s'arrêter
@@ -545,12 +662,41 @@
       CM.Audio.play('rsclick', { pitch: 1.5 });
       return true;
     },
-    // Joueur de cet écran : tapis sous ses pieds, ventilateurs (hôte comme invité).
-    playerTick(g, p, dt) {
+    // Éclair de la bobine Tesla (points lumineux en zigzag entre la bobine et sa cible).
+    zapFx(g, x, y, z, tx, ty, tz) {
+      const L = CM.Textures.layer, n = Math.ceil(Math.hypot(tx - x, ty - y, tz - z) * 3);
+      for (let i = 0; i <= n; i++) {
+        const k = i / n, j = i && i < n ? 0.25 : 0;
+        g.entities.burst(L.zap, x + (tx - x) * k + (Math.random() - 0.5) * j, y + (ty - y) * k + (Math.random() - 0.5) * j, z + (tz - z) * k + (Math.random() - 0.5) * j, 1, { speed: 0.3, grav: 0, life: 0.25, size: 0.07, spread: 0.05, emissive: true });
+      }
+      const p = g.player;
+      if (p && Math.hypot(p.x - x, p.z - z) < 24) CM.Audio.play('zap');
+    },
+    // Joueur de cet écran : tapis sous ses pieds, ventilateurs, ascenseurs (hôte comme invité).
+    playerTick(g, p, dt, input) {
       if (!p.alive || p.flying || p.riding !== null && p.riding !== undefined) return;
       const w = g.world;
       const fx = Math.floor(p.x), fz = Math.floor(p.z);
       const under = blk(w.get(fx, Math.floor(p.y - 0.02), fz));
+      // ascenseur alimenté : sauter = monter au suivant, s'accroupir = descendre
+      if (under.rs && under.rs.fam === 'elevator' && under.rs.on && p.onGround && input) {
+        const K = g.binds, up = input.pressed[K.jump], down = input.pressed[K.sneak];
+        if (up || down) {
+          const y0 = Math.floor(p.y - 0.02);
+          for (let i = 1; i <= 32; i++) {
+            const y = up ? y0 + i : y0 - i;
+            const b = blk(w.get(fx, y, fz));
+            if (!(b.rs && b.rs.fam === 'elevator')) continue;
+            if (w.solidAt(fx, y + 1, fz) || w.solidAt(fx, y + 2, fz)) continue;
+            p.y = y + 1.001;
+            p.vy = 0;
+            p.fallStart = p.y;
+            CM.Audio.play('portal', { vol: 0.3 });
+            g.entities.burst(CM.Textures.layer.zap, p.x, p.y + 0.5, p.z, 12, { speed: 1.5, grav: 0, life: 0.4, size: 0.06, emissive: true });
+            break;
+          }
+        }
+      }
       if (under.rs && under.rs.fam === 'conveyor' && under.rs.on && p.onGround) {
         const f = under.rs.facing;
         CM.Physics.move(w, p, DV[f][0] * BELT * dt, 0, DV[f][2] * BELT * dt);

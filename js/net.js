@@ -168,6 +168,8 @@
       this.held = a[6] | 0;
       this.armor = a[7] | 0;
       this.dim = (a[8] | 0) === 1 ? 'nether' : 'overworld';
+      this.offhand = CM.itemInfo(a[9] | 0) ? a[9] | 0 : 0; // main secondaire
+      this.blocking = !!(this.flags & 64);
       this.alive = !!(this.flags & 4);
       if (this.flags & 8) this.swingT = 0.3;
       if (!this.seen || Math.hypot(this.x - this.rx, this.y - this.ry, this.z - this.rz) > 12) {
@@ -554,13 +556,14 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0);
       const held = g.inventory.held();
       let armor = 0;
       g.inventory.armor.forEach((s, k) => {
         if (s) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
       });
-      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0];
+      const off = g.inventory.offhand;
+      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0, off ? off.id : 0];
     }
     sendMyState(withInv) {
       const g = this.game;
@@ -670,7 +673,7 @@
       const all = [[0, ...this.stateOf(g.player)]];
       for (const e of this.links.values()) {
         const rp = e.rp;
-        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, rp.dim === 'nether' ? 1 : 0]);
+        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, rp.dim === 'nether' ? 1 : 0, rp.offhand || 0]);
       }
       for (const e of this.links.values()) e.link.send({ t: 'ps', p: all.filter((a) => a[0] !== e.pid) });
     }
@@ -932,6 +935,16 @@
           if (c) c.rider = null;
           break;
         }
+        case 'laser': {
+          // tir de pistolet laser d'un invité (portée 32 blocs)
+          const mob = g.entities.mobs.find((o) => o.uid === m.id);
+          if (mob && !mob.dead && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 40) g.entities.hurtMob(mob, Math.min(8, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
+          break;
+        }
+        case 'laserfx':
+          if (Array.isArray(m.p) && Array.isArray(m.q)) this.fx({ k: 'laser', x: num(m.p[0]), y: num(m.p[1]), z: num(m.p[2]), t: m.q.map(num) }, e.pid);
+          if (Array.isArray(m.p) && Array.isArray(m.q) && g.playerDim === rp.dim) g.player.laserFx(num(m.p[0]), num(m.p[1]), num(m.p[2]), num(m.q[0]), num(m.q[1]), num(m.q[2]));
+          break;
         case 'crank': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0;
           if (CM.Tech && Math.hypot(x + 0.5 - rp.x, z + 0.5 - rp.z) < 8 && CM.blocks[g.world.get(x, y, z)].tech) CM.Tech.crank(g, x, y, z);
@@ -1214,6 +1227,10 @@
         if (d < 24) CM.Audio.play('fuse');
       } else if (m.k === 'kill') {
         if (d < 48) e.killFx(m.ty, m.x, m.y, m.z);
+      } else if (m.k === 'zap' && Array.isArray(m.t)) {
+        if (d < 48 && CM.Tech) CM.Tech.zapFx(g, m.x, m.y, m.z, num(m.t[0]), num(m.t[1]), num(m.t[2]));
+      } else if (m.k === 'laser' && Array.isArray(m.t)) {
+        if (d < 64) g.player.laserFx(m.x, m.y, m.z, num(m.t[0]), num(m.t[1]), num(m.t[2]));
       } else if (m.k === 'love') {
         if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }
@@ -1465,7 +1482,7 @@
         // bras (le droit frappe, et avance un peu quand il tient quelque chose)
         const swing = rp.swingT > 0 ? 1.3 * Math.sin((1 - rp.swingT / 0.3) * Math.PI) : 0;
         const sy = ny - 0.02, sz = nz * 0.9;
-        const arms = [[-0.36, -sw * 0.6], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
+        const arms = [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0)], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
         for (const [ax, rot] of arms) {
           ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl);
           ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], L.skin, l, fl);
@@ -1486,6 +1503,23 @@
           if (boots) ents.part(batch, M, lx, 0.7, 0, rot, [-0.14, -0.71, -0.14, 0.14, -0.5, 0.14], boots, l, fl);
         }
         if (legs) ents.part(batch, M, 0, 0.7, 0, -lean, [-0.265, -0.02, -0.145, 0.265, 0.1, 0.145], legs, l, fl);
+        // main secondaire (gauche) : bouclier ou objet
+        const oinfo = rp.offhand ? CM.itemInfo(rp.offhand) : null;
+        if (oinfo && oinfo.type === 'shield') {
+          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], 0, 1);
+          mat4.multiply(this.R, M, this.P);
+          mat4.compose(this.P, -0.08, -0.5, -0.16, rp.blocking ? 0.2 : 1.45, -Math.PI / 2, 0, 1);
+          mat4.multiply(this.Q, this.R, this.P);
+          const e = L.shield_edge;
+          batch.box(this.Q, -0.24, -0.34, -0.03, 0.24, 0.34, 0.03, [e, e, e, e, L.shield_back, L.shield_face], l[0], l[1], 0);
+        } else if (oinfo) {
+          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], 0, 1);
+          mat4.multiply(this.R, M, this.P);
+          const layer = oinfo.isBlock ? CM.blockLayers[rp.offhand][0] : L[oinfo.tex];
+          mat4.compose(this.P, 0, -0.6, -0.02, -Math.PI * 0.75, Math.PI, Math.PI / 2, 1);
+          mat4.multiply(this.Q, this.R, this.P);
+          batch.box(this.Q, -0.22, -0.12, 0, 0.22, 0.5, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], oinfo.isBlock && oinfo.block.light ? 1 : 0);
+        }
         // objet tenu, dans la main droite
         const info = rp.held ? CM.itemInfo(rp.held) : null;
         if (info) {

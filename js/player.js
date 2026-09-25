@@ -7,6 +7,10 @@
 
   const GRAVITY = 28;
   const REACH = 5;
+  // objets dont le clic droit a déjà un usage (le bouclier ne se lève pas, la main secondaire attend)
+  const MAIN_USES = ['food', 'bucket', 'bow', 'grapple', 'cart', 'seeds', 'bonemeal', 'igniter', 'armor'];
+  // objets de la main secondaire utilisables quand la main principale n'a rien à faire
+  const OFF_USES = ['bucket', 'igniter', 'bonemeal', 'seeds', 'grapple', 'cart'];
   const GRAPPLE_RANGE = 34;
   const EAT_TIME = 1; // secondes pour manger n’importe quel aliment
   const MAX_AIR = 15; // secondes de souffle sous l'eau
@@ -75,6 +79,8 @@
       this.sleeping = null; // { x, y, z, t0 } : couché dans un lit
       this.riding = null; // wagonnet où l'on est assis (identifiant)
       this.bowT = 0; // arc bandé depuis (secondes)
+      this.blockT = 0; // bouclier levé depuis (secondes)
+      this.blocking = false; // bouclier levé (après 0,25 s)
     }
 
     get creative() {
@@ -225,6 +231,10 @@
         g.ui.toast('Trop faim pour courir : mange quelque chose !', 'warn', 'nosprint');
       }
       if (this.sneaking) speed = 1.6;
+      if (this.blocking) {
+        speed = Math.min(speed, 1.9);
+        this.sprinting = false;
+      }
       if (this.eating) {
         speed = Math.min(speed, 1.6);
         this.sprinting = false;
@@ -456,12 +466,96 @@
         this.portalT = Math.max(0, (this.portalT || 0) - dt * 2);
       }
 
+      // lampe torche allumée : elle se décharge doucement (une unité toutes les 3 s)
+      for (const fl of [g.inventory.held(), g.inventory.offhand]) {
+        if (!fl || CM.itemInfo(fl.id).type !== 'flashlight' || CM.chargeLeft(fl) <= 0) continue;
+        this.flashT = (this.flashT || 0) + dt;
+        if (this.flashT >= 3) {
+          this.flashT = 0;
+          fl.xp = (fl.xp || 0) + 1;
+          if (CM.chargeLeft(fl) <= 0) g.ui.toast('Lampe torche déchargée', 'warn', 'echarge');
+          g.inventory.changed();
+        }
+        break;
+      }
       // tapis roulants et ventilateurs (extension Électricité)
-      if (CM.Tech) CM.Tech.playerTick(g, this, dt);
+      if (CM.Tech) CM.Tech.playerTick(g, this, dt, input);
 
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
       this.updateActions(dt, input);
+    }
+
+    // Pistolet laser : rayon jusqu'à 32 blocs, arrêté par le premier bloc ou la première créature.
+    fireLaser(stack, info) {
+      const g = this.game;
+      if (this.laserCd > g.clock) return;
+      if (CM.chargeLeft(stack) < info.cost) {
+        g.ui.toast('Pistolet laser déchargé : recharge-le au Chargeur', 'warn', 'echarge');
+        return;
+      }
+      this.laserCd = g.clock + 0.45;
+      stack.xp = (stack.xp || 0) + info.cost;
+      g.inventory.changed();
+      const e = this.eye(), d = this.aim();
+      const bh = g.world.raycast(e[0], e[1], e[2], d[0], d[1], d[2], 32, (id) => !CM.isFluid(id) && CM.blocks[id].solid);
+      const range = bh ? bh.t : 32;
+      const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], range);
+      const t = mh ? mh.t : range;
+      const end = [e[0] + d[0] * t, e[1] + d[1] * t, e[2] + d[2] * t];
+      if (mh) {
+        if (g.net.isClient) g.net.send({ t: 'laser', id: mh.mob.uid, d: info.damage });
+        else g.entities.hurtMob(mh.mob, info.damage, [this.x, this.z], false, this);
+      }
+      this.laserFx(e[0] + d[0] * 0.6, e[1] + d[1] * 0.6 - 0.15, e[2] + d[2] * 0.6, end[0], end[1], end[2]);
+      if (g.net.isHost) g.net.fx({ k: 'laser', x: +e[0].toFixed(1), y: +e[1].toFixed(1), z: +e[2].toFixed(1), t: end.map((v) => +v.toFixed(1)) });
+      else if (g.net.isClient) g.net.send({ t: 'laserfx', p: [+e[0].toFixed(1), +e[1].toFixed(1), +e[2].toFixed(1)], q: end.map((v) => +v.toFixed(1)) });
+      this.swing = 1;
+    }
+    laserFx(x, y, z, tx, ty, tz) {
+      const g = this.game, L = CM.Textures.layer, n = Math.min(120, Math.ceil(Math.hypot(tx - x, ty - y, tz - z) * 4));
+      for (let i = 0; i <= n; i++) {
+        const k = i / n;
+        g.entities.burst(L.laser_beam, x + (tx - x) * k, y + (ty - y) * k, z + (tz - z) * k, 1, { speed: 0.05, grav: 0, life: 0.18, size: 0.05, spread: 0.02, emissive: true });
+      }
+      g.entities.burst(L.laser_beam, tx, ty, tz, 6, { speed: 1.5, grav: 4, life: 0.3, size: 0.05, emissive: true });
+      const p = g.player;
+      if (p && Math.hypot(p.x - x, p.z - z) < 32) CM.Audio.play('laser');
+    }
+    // Bouclier tenu (main secondaire d'abord, sinon main principale).
+    shieldStack() {
+      const inv = this.game.inventory, oh = inv.offhand, h = inv.held();
+      if (oh && CM.itemInfo(oh.id).type === 'shield') return { s: oh, off: true };
+      if (h && CM.itemInfo(h.id).type === 'shield') return { s: h, off: false };
+      return null;
+    }
+    // Coup arrêté par le bouclier : il s'use (et casse au bout du compte).
+    shieldHit(n) {
+      const g = this.game, inv = g.inventory, sh = this.shieldStack();
+      if (!sh) return;
+      sh.s.xp = (sh.s.xp || 0) + Math.max(1, Math.ceil(n));
+      if (sh.s.xp >= CM.itemInfo(sh.s.id).maxDur) {
+        if (sh.off) inv.offhand = null;
+        else inv.slots[inv.selected] = null;
+        CM.Audio.play('break', { mat: 'wood' });
+        g.ui.toast('Ton bouclier s’est cassé', 'warn', 'shieldbreak');
+        this.blocking = false;
+        this.blockT = 0;
+      }
+      inv.changed();
+    }
+    // Utilise l'objet de la main secondaire (le temps d'un clic, il passe dans la main principale).
+    useOffhand(input) {
+      const inv = this.game.inventory, sel = inv.selected;
+      const main = inv.slots[sel];
+      inv.slots[sel] = inv.offhand;
+      try {
+        this.use(input);
+      } finally {
+        inv.offhand = inv.slots[sel];
+        inv.slots[sel] = main;
+        inv.changed();
+      }
     }
 
     // Wagonnets : monter, descendre.
@@ -670,6 +764,10 @@
         const eff = CM.enchLevel(stack, 'efficiency');
         if (eff) speed += eff * eff + 1; // Efficacité (comme dans Minecraft)
         harvest = info.tier >= b.tier;
+      } else if (info && info.type === 'etool' && b.tool && info.tools.includes(b.tool) && CM.chargeLeft(stack) >= info.cost) {
+        // outil électrique chargé : très rapide
+        speed = info.speed;
+        harvest = info.tier >= b.tier;
       }
       let time = (b.hardness * 1.5) / speed;
       if (!harvest) time *= 3.3;
@@ -778,9 +876,26 @@
           if (this.feed(vm.mob)) return;
         }
       }
-      // utilisation (clic droit)
+      // bouclier : clic droit maintenu (si l'objet en main n'a pas d'autre usage)
+      const mainInfo = held ? CM.itemInfo(held.id) : null;
+      const mainBusy = !!mainInfo && mainInfo.type !== 'shield' && (mainInfo.isBlock || !!mainInfo.useOn || !!mainInfo.plant || !!mainInfo.places || MAIN_USES.includes(mainInfo.type));
+      const tb = this.target ? CM.blocks[this.target.id] : null;
+      const inter = !!tb && !!(tb.use || tb.station || tb.enchanter || tb.anvil || tb.door || tb.bed || tb.container || tb.note);
+      if (this.shieldStack() && input.mouse[2] && !mainBusy && !g.ui.invOpen && !(input.pressed.mouse2 && inter)) {
+        if (!this.blockT) CM.Audio.play('equip', { mat: 'iron' });
+        this.blockT += dt;
+        this.blocking = this.blockT >= 0.25;
+        this.mining = null;
+        return;
+      }
+      this.blockT = 0;
+      this.blocking = false;
+      // utilisation (clic droit) ; main vide ou outil : l'objet de la main secondaire (bloc, torche…)
       if (input.mouse[2] && (input.pressed.mouse2 || this.useCd <= 0)) {
-        this.use(input);
+        const off = g.inventory.offhand, offInfo = off && CM.itemInfo(off.id);
+        const offUsable = offInfo && offInfo.type !== 'shield' && offInfo.type !== 'food' && offInfo.type !== 'bow' && (offInfo.isBlock || !!offInfo.places || OFF_USES.includes(offInfo.type));
+        if (!mainBusy && offUsable && !(input.pressed.mouse2 && inter)) this.useOffhand(input);
+        else this.use(input);
       }
     }
 
@@ -1069,6 +1184,13 @@
       // maîtrise de l'outil
       const stack = g.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
+      if (info && info.type === 'etool' && b.tool && info.tools.includes(b.tool) && CM.chargeLeft(stack) >= info.cost) {
+        stack.xp = (stack.xp || 0) + info.cost;
+        if (CM.chargeLeft(stack) < info.cost) g.ui.toast(info.name + ' déchargée : recharge-la au Chargeur', 'warn', 'echarge');
+        g.inventory.changed();
+        const wood = CM.woodOf(id);
+        if (info.fells && wood && id === wood.log) this.fellTree(x, y, z, wood);
+      }
       if (info && info.type === 'tool' && info.toolType === b.tool) {
         this.gainXp(stack, b.ore ? 2 : 1);
         // pioche de cristal : minage de filon
@@ -1259,6 +1381,11 @@
       }
       if (info.type === 'grapple') {
         if (input.pressed.mouse2) this.fireHook();
+        return;
+      }
+      // pistolet laser
+      if (info.type === 'laser') {
+        if (input.pressed.mouse2) this.fireLaser(stack, info);
         return;
       }
       // wagonnet : se pose sur un rail
@@ -1457,6 +1584,26 @@
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
       if (this.invul > 0 && !bypass) return;
+      // bouclier levé : arrête les coups venus de devant (créatures, flèches, joueurs, explosions)
+      if (this.blocking && sx !== null && sx !== undefined && (!bypass || cause === 'Une explosion')) {
+        const dx = sx - this.x, dz = sz - this.z, l = Math.hypot(dx, dz);
+        const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+        if (l < 0.01 || (dx * fx + dz * fz) / l > 0.05) {
+          this.shieldHit(n);
+          CM.Audio.play('shield');
+          this.invul = Math.max(this.invul, 0.3);
+          // on recule un peu, l'assaillant aussi
+          if (l > 0.01) {
+            this.vx -= (dx / l) * 2.5;
+            this.vz -= (dz / l) * 2.5;
+            if (attacker && attacker.vx !== undefined && !attacker.dead) {
+              attacker.vx += (dx / l) * 6;
+              attacker.vz += (dz / l) * 6;
+            }
+          }
+          return;
+        }
+      }
       if (sx !== null && sx !== undefined) {
         // difficulté : dégâts des créatures
         n *= g.difficulty === 'easy' ? 0.6 : g.difficulty === 'hard' ? 1.4 : 1;
@@ -1553,6 +1700,8 @@
           if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, CM.stackExtra(s) || { xp: 0 });
           inv.armor[k] = null;
         });
+        if (inv.offhand) g.entities.addDrop(inv.offhand.id, inv.offhand.count, this.x, this.y + 1, this.z, CM.stackExtra(inv.offhand));
+        inv.offhand = null;
         inv.changed();
       }
       if (!g.keepInventory()) this.xpTotal = 0;
@@ -1594,7 +1743,7 @@
     // ------------------------------------------------- main à l'écran ----
     buildHand(batch, time) {
       if (!this.game.options.showHand) return;
-      const stack = this.game.inventory.held();
+      const inv = this.game.inventory, stack = inv.held(), off = inv.offhand;
       const l = [this.game.world.skyAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15,
         this.game.world.blockLightAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15];
       const sw = Math.sin(Math.min(1, 1 - this.swing) * Math.PI);
@@ -1604,6 +1753,13 @@
       const by = -Math.abs(Math.cos(this.bob)) * 0.03 * this.bobAmp * bobOn;
       const M = this.M;
       const L = CM.Textures.layer;
+      const raise = Math.min(1, this.blockT / 0.25);
+      // main secondaire (à gauche)
+      if (off) {
+        const oi = CM.itemInfo(off.id);
+        if (oi.type === 'shield') this.drawShield(batch, -1, raise, l, bx, by);
+        else this.drawHeld(batch, off, -1, 0, l, bx, by);
+      }
       if (!stack) {
         mat4.compose(M, 0.48 + bx - swingOn * 0.12, -0.44 + by + swingOn * 0.08, -0.62 - swingOn * 0.18, 0.3, -1.25 - swingOn * 0.5, 0, 1);
         batch.box(M, -0.07, -0.2, -0.07, 0.07, 0.2, 0.07, L.skin, l[0], l[1], 0);
@@ -1611,27 +1767,50 @@
         return;
       }
       const info = CM.itemInfo(stack.id);
+      if (info.type === 'shield') {
+        // bouclier dans la main principale : levé seulement si la main secondaire n'en a pas
+        this.drawShield(batch, 1, off && CM.itemInfo(off.id).type === 'shield' ? 0 : raise, l, bx, by);
+        return;
+      }
+      this.drawHeld(batch, stack, 1, swingOn, l, bx, by);
+    }
+    // Objet tenu : side = 1 (main droite) ou -1 (main gauche).
+    drawHeld(batch, stack, side, swingOn, l, bx, by) {
+      const M = this.M, L = CM.Textures.layer;
+      const info = CM.itemInfo(stack.id);
       const r = info.isBlock ? info.block.render : '';
       const cubeish = info.isBlock && (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet');
       if (cubeish) {
-        mat4.compose(M, 0.44 + bx - swingOn * 0.12, -0.38 + by + swingOn * 0.1, -0.7 - swingOn * 0.2, 0.75 + swingOn * 0.3, 0.12 - swingOn * 0.6, 0, 1);
+        mat4.compose(M, side * (0.44 + bx - swingOn * 0.12), -0.38 + by + swingOn * 0.1, -0.7 - swingOn * 0.2, side * (0.75 + swingOn * 0.3), 0.12 - swingOn * 0.6, 0, 1);
         const hh = 0.32 * Math.max(info.block.height, 0.1);
         batch.box(M, -0.16, -0.16, -0.16, 0.16, -0.16 + hh, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
       } else {
         const layer = info.isBlock ? CM.blockLayers[stack.id][0] : L[info.tex];
-        if (this.eating) {
+        if (this.eating && side === 1) {
           // porté à la bouche, petits mouvements de mastication
           const k = Math.min(1, this.eating.t / 0.15), chew = Math.abs(Math.sin(this.eating.t * 16)) * 0.035 * k;
           mat4.compose(M, 0.52 - 0.36 * k, -0.36 + 0.1 * k - chew, -0.72 + 0.2 * k, -0.55 + 0.4 * k, -0.2 + 0.25 * k, 0.3, 1);
-        } else mat4.compose(M, 0.52 + bx - swingOn * 0.1, -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, -0.55, -0.2 - swingOn * 1.1, 0.3, 1);
+        } else mat4.compose(M, side * (0.52 + bx - swingOn * 0.1), -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, side * -0.55, -0.2 - swingOn * 1.1, side * 0.3, 1);
         const emi = info.isBlock && info.block.light ? 1 : 0;
         batch.box(M, -0.2, -0.2, 0, 0.2, 0.2, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], emi);
       }
     }
+    // Bouclier en main ; raise (0-1) : levé devant soi.
+    drawShield(batch, side, raise, l, bx, by) {
+      const M = this.M, L = CM.Textures.layer;
+      const x = side * (0.5 - 0.3 * raise) + bx, y = -0.42 + 0.14 * raise + by, z = -0.68 + 0.1 * raise;
+      mat4.compose(M, x, y, z, side * (0.45 - 0.35 * raise), 0.05, 0, 1);
+      const e = L.shield_edge;
+      batch.box(M, -0.2, -0.32, -0.025, 0.2, 0.28, 0.025, [e, e, e, e, L.shield_back, L.shield_face], l[0], l[1], 0);
+    }
 
     // Lumière dynamique : tenir une torche ou une lanterne éclaire autour.
     heldLight() {
-      const s = this.game.inventory.held();
+      const inv = this.game.inventory;
+      return Math.max(this.lightOf(inv.held()), this.lightOf(inv.offhand));
+    }
+    lightOf(s) {
+      if (s && s.id >= CM.ITEM_BASE && CM.itemInfo(s.id).type === 'flashlight') return CM.chargeLeft(s) > 0 ? 1 : 0;
       if (!s || s.id >= CM.ITEM_BASE) return 0;
       const b = CM.blocks[s.id];
       if (!b) return 0;

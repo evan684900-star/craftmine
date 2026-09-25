@@ -97,6 +97,20 @@
       case 'hurt':
         tone(t, 0.18, 'square', 320, 110, 0.12);
         break;
+      case 'zap':
+        noise(t, 0.18, 'highpass', 2500, 0.7, 0.25);
+        tone(t, 0.15, 'sawtooth', 1400, 200, 0.08);
+        break;
+      case 'laser':
+        tone(t, 0.18, 'sawtooth', 1800, 300, 0.09);
+        tone(t, 0.12, 'square', 900, 1500, 0.04);
+        break;
+      case 'shield':
+        // coup arrêté par le bouclier : choc sourd de bois et de métal
+        noise(t, 0.12, 'lowpass', 700, 1, 0.35);
+        tone(t, 0.1, 'triangle', 220, 120, 0.2);
+        tone(t, 0.06, 'square', 900, 500, 0.05);
+        break;
       case 'hit':
         noise(t, 0.08, 'lowpass', 900, 1, 0.3);
         tone(t, 0.08, 'sine', 160, 70, 0.25);

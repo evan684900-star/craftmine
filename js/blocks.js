@@ -780,9 +780,14 @@ CM.armorOf = (piece, mat) => CM.I[piece + '_' + mat];
 // Objets qui portent une valeur « xp » : expérience (outils) ou usure (armures).
 CM.hasWear = (id) => {
   const t = CM.itemInfo(id);
-  return !!t && (t.type === 'tool' || t.type === 'armor');
+  return !!t && (t.type === 'tool' || t.type === 'armor' || t.type === 'shield' || !!t.charge);
 };
 CM.freshExtra = (id) => (CM.hasWear(id) ? { xp: 0 } : null);
+// Objets rechargeables (extension Électricité) : énergie restante.
+CM.chargeLeft = (s) => {
+  const t = s && CM.itemInfo(s.id);
+  return t && t.charge ? Math.max(0, t.charge - (s.xp || 0)) : 0;
+};
 
 // ------------------------------------------------------ Enchantements -----
 // Les plus importants de Minecraft, sur les mêmes objets. Niveau d'enchantement « modifié » minimal

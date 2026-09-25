@@ -71,6 +71,9 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .ability { white-space: nowrap; }
 
 #hotbar { display: flex; gap: 3px; padding: 4px; background: rgba(0, 0, 0, 0.55); border-radius: 8px; border: 1px solid var(--line); }
+#hotbar-row { position: relative; }
+#offhand-hud { position: absolute; right: calc(100% + 10px); bottom: 5px; background-color: rgba(0, 0, 0, 0.55); border-color: rgba(255, 255, 255, 0.18); pointer-events: auto; }
+.offhand-slot { outline: 1px dashed rgba(255, 255, 255, 0.25); outline-offset: -4px; }
 .slot {
   position: relative; width: 50px; height: 50px; border-radius: 6px; background: var(--slot);
   border: 2px solid rgba(255, 255, 255, 0.08);
@@ -279,7 +282,7 @@ input[type='text'], #seed {
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: repeat(9, 34px); }
-  .grid .slot, #hotbar .slot { width: 34px; height: 34px; }
+  .grid .slot, #hotbar .slot, #offhand-hud { width: 34px; height: 34px; }
   .logo { font-size: 40px; }
   #objective { max-width: 60vw; font-size: 12px; }
 }

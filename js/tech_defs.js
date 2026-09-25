@@ -172,8 +172,52 @@
       tech: { k: 'use', use: 'fan', rate: 1 }, anim: 'fan',
       place: (P) => CM.rsWith(CM.RSFAM.fan.base, { facing: P.look6 }),
     }), { key: keyFn('FAN') });
+    // ---- deuxième vague : chargeur, bobine Tesla, ascenseur, géothermie, aspirateur,
+    // moissonneuse, lampadaire, panneau solaire avancé
+    fam('charger', 'tech', [['on', [false, true]]], (st) => ({
+      name: 'Chargeur', tex: { top: st.on ? 'charger_top_on' : 'charger_top', bottom: 'alu_casing', side: 'charger_side' }, iconTex: 'charger_top_on',
+      hardness: 3, tool: 'pickaxe', sound: 'metal', light: st.on ? 6 : 0, lightColor: [120, 220, 255], container: true, slots: 1,
+      tech: { k: 'use', use: 'charger', rate: 20 },
+      desc: 'Recharge les outils électriques (perceuse, tronçonneuse, lampe torche, pistolet laser) : clic droit et pose l’objet dans sa case.',
+    }), { key: keyFn('CHARGER') });
+    fam('tesla', 'tech', [['on', [false, true]]], (st) => ({
+      name: 'Bobine Tesla', render: 'model',
+      model: [{ b: [3, 0, 3, 13, 3, 13], t: 'alu_casing' }, { b: [5, 3, 5, 11, 12, 11], t: st.on ? 'tesla_coil_on' : 'tesla_coil' }, { b: [4, 12, 4, 12, 16, 12], t: 'tesla_top' }],
+      tex: 'alu_casing', iconTex: 'tesla_icon', solid: true, opaque: false, hardness: 3, tool: 'pickaxe', sound: 'metal', light: st.on ? 9 : 0, lightColor: [150, 170, 255],
+      tech: { k: 'use', use: 'tesla', rate: 4 },
+      desc: 'Foudroie les Ombres à 8 blocs à la ronde (6 dégâts par seconde).',
+    }), { key: keyFn('TESLA_COIL') });
+    fam('elevator', 'tech', [['on', [false, true]]], (st) => ({
+      name: 'Ascenseur électrique', tex: { top: st.on ? 'elevator_top_on' : 'elevator_top', bottom: 'alu_casing', side: 'elevator_side' }, iconTex: 'elevator_top_on',
+      hardness: 3, tool: 'pickaxe', sound: 'metal', tech: { k: 'use', use: 'elevator', rate: 0.5 },
+      desc: 'Sur un ascenseur alimenté : saute pour monter jusqu’au suivant au-dessus, accroupis-toi pour descendre.',
+    }), { key: keyFn('ELEVATOR') });
+    nb('GEOTHERMAL', T({
+      name: 'Générateur géothermique', tex: { top: 'geo_top', bottom: 'brass_casing', side: 'geo_side' }, hardness: 3, tool: 'pickaxe', sound: 'metal',
+      tech: { k: 'gen', gen: 'geo', max: 16 }, desc: 'Produit 4 ⚡/s par bloc de lave qui le touche (16 au plus).',
+    }));
+    nb('VACUUM', T({
+      name: 'Aspirateur', tex: { top: 'vacuum_top', bottom: 'alu_casing', side: 'vacuum_side' }, hardness: 2, tool: 'pickaxe', sound: 'metal',
+      container: true, slots: 9, tech: { k: 'use', use: 'vacuum', rate: 1 }, desc: 'Aspire les objets au sol à 6 blocs à la ronde et les range.',
+    }));
+    fam('harvester', 'tech', [['on', [false, true]]], (st) => ({
+      name: 'Moissonneuse automatique', tex: { top: 'harvester_top', bottom: 'brass_casing', side: st.on ? 'harvester_side_on' : 'harvester_side' }, iconTex: 'harvester_side_on',
+      hardness: 3, tool: 'pickaxe', sound: 'metal', container: true, slots: 9, tech: { k: 'use', use: 'harvester', rate: 3 },
+      desc: 'Récolte les cultures mûres à 4 blocs autour (même hauteur), les replante et range la récolte.',
+    }), { key: keyFn('HARVESTER') });
+    fam('streetlamp', 'tech', [['on', [false, true]]], (st) => ({
+      name: 'Lampadaire électrique', render: 'model',
+      model: [{ b: [6, 0, 6, 10, 2, 10], t: 'alu_casing' }, { b: [7, 2, 7, 9, 11, 9], t: 'alu_casing' }, { b: [4, 11, 4, 12, 15, 12], t: st.on ? 'elamp_on' : 'elamp_off' }, { b: [3, 15, 3, 13, 16, 13], t: 'alu_casing' }],
+      tex: 'alu_casing', iconTex: 'streetlamp_icon', solid: true, opaque: false, hardness: 1, tool: 'pickaxe', sound: 'metal', light: st.on ? 15 : 0,
+      lightColor: [255, 236, 200], tech: { k: 'use', use: 'lamp', rate: 0.5 },
+    }), { key: keyFn('STREETLAMP') });
+    nb('SOLAR_PANEL_2', T({
+      name: 'Panneau solaire avancé', render: 'model', model: [{ b: [0, 0, 0, 16, 6, 16], t: ['solar_side', 'solar_side', 'solar2_top', 'alu_casing', 'solar_side', 'solar_side'] }],
+      tex: { top: 'solar2_top', bottom: 'alu_casing', side: 'solar_side' }, iconTex: 'solar2_top', solid: true, opaque: false, hardness: 2, tool: 'pickaxe', sound: 'metal',
+      tech: { k: 'gen', gen: 'solar', max: 8 },
+    }));
     // les états d'une famille électrique font partie de l'extension
-    for (const n of ['waterwheel', 'windmill', 'coalgen', 'battery', 'elamp', 'crusher', 'efurnace', 'drill', 'conveyor', 'fan'].concat(NEONS.map(([k]) => 'neon_' + k.toLowerCase())))
+    for (const n of ['waterwheel', 'windmill', 'coalgen', 'battery', 'elamp', 'crusher', 'efurnace', 'drill', 'conveyor', 'fan', 'charger', 'tesla', 'elevator', 'harvester', 'streetlamp'].concat(NEONS.map(([k]) => 'neon_' + k.toLowerCase())))
       for (const id of CM.RSFAM[n].ids) CM.blocks[id].ext = EXT;
   });
 
@@ -204,6 +248,15 @@
       useOn: (g, t) => (CM.Tech && CM.blocks[t.id].tech ? CM.Tech.meter(g, t.x, t.y, t.z) : false) }));
     defItem(1360, 'WRENCH', T({ name: 'Clé à molette', tex: 'wrench', stack: 1, desc: 'Clic droit sur une machine : la tourner. Accroupi : la démonter aussitôt.',
       useOn: (g, t, p) => (CM.Tech ? CM.Tech.wrench(g, t, p) : false) }));
+    // outils rechargeables : la charge utilisée est gardée dans « xp » (0 = pleine)
+    defItem(1361, 'ELECTRIC_DRILL', T({ name: 'Perceuse électrique', tex: 'edrill', stack: 1, type: 'etool', tools: ['pickaxe', 'shovel'], speed: 14, tier: 4, charge: 2000, cost: 4,
+      desc: 'Pioche et pelle à la fois, très rapide. Consomme 4 ⚡ par bloc ; se recharge au Chargeur.' }));
+    defItem(1362, 'CHAINSAW', T({ name: 'Tronçonneuse', tex: 'chainsaw', stack: 1, type: 'etool', tools: ['axe'], speed: 16, tier: 4, charge: 2000, cost: 4, fells: true,
+      desc: 'Coupe le bois très vite et abat l’arbre entier. Consomme 4 ⚡ par bloc ; se recharge au Chargeur.' }));
+    defItem(1363, 'FLASHLIGHT', T({ name: 'Lampe torche', tex: 'flashlight', stack: 1, type: 'flashlight', charge: 600,
+      desc: 'Éclaire fort (même dans la main secondaire). Environ 30 minutes de charge ; se recharge au Chargeur.' }));
+    defItem(1364, 'LASER_GUN', T({ name: 'Pistolet laser', tex: 'laser_gun', stack: 1, type: 'laser', charge: 1000, cost: 25, damage: 8,
+      desc: 'Clic droit : un rayon qui touche les créatures jusqu’à 32 blocs (8 dégâts). 25 ⚡ par tir ; se recharge au Chargeur.' }));
     const I = CM.I, B = CM.B;
     CM.blocks[B.DEEPSLATE_LITHIUM_ORE].drop = I.LITHIUM;
   });
@@ -266,6 +319,20 @@
       E(r(F.fan.base, 1, [[I.PROPELLER, 1], [I.MOTOR, 1], [B.ALU_CASING, 1]], 'atelier', 'tech')),
     );
     for (const [k, , , dye] of NEONS) R.push(E(r(F['neon_' + k.toLowerCase()].base, 4, [[B.GLASS, 4], [I.COPPER_WIRE, 1], [D[dye], 1]], 'atelier', 'tech')));
+    R.push(
+      E(r(F.charger.base, 1, [[B.ALU_CASING, 1], [I.CIRCUIT, 1], [I.COPPER_WIRE, 4]], 'atelier', 'tech')),
+      E(r(F.tesla.base, 1, [[B.COPPER_BLOCK, 1], [I.COPPER_WIRE, 8], [I.CIRCUIT, 1], [I.IRON_INGOT, 2]], 'atelier', 'tech')),
+      E(r(F.elevator.base, 2, [[B.ALU_CASING, 2], [I.MOTOR, 1], [I.CIRCUIT, 1]], 'atelier', 'tech')),
+      E(r(B.GEOTHERMAL, 1, [[B.BRASS_CASING, 1], [B.OBSIDIAN, 2], [I.COPPER_WIRE, 4], [I.IRON_INGOT, 2]], 'atelier', 'tech')),
+      E(r(B.VACUUM, 1, [[B.ALU_CASING, 1], [F.fan.base, 1], [F.hopper.base, 1]], 'atelier', 'tech')),
+      E(r(F.harvester.base, 1, [[B.BRASS_CASING, 1], [I.MOTOR, 1], [I.IRON_INGOT, 3]], 'atelier', 'tech')),
+      E(r(F.streetlamp.base, 2, [[I.IRON_INGOT, 2], [F.elamp.base, 1], [I.COPPER_WIRE, 1]], 'atelier', 'tech')),
+      E(r(B.SOLAR_PANEL_2, 1, [[B.SOLAR_PANEL, 2], [I.LITHIUM, 1], [I.CIRCUIT, 1]], 'atelier', 'tech')),
+      E(r(I.ELECTRIC_DRILL, 1, [[I.MOTOR, 1], [I.LITHIUM_CELL, 2], [I.DIAMOND, 2], [I.ALUMINIUM_INGOT, 3]], 'atelier', 'tech')),
+      E(r(I.CHAINSAW, 1, [[I.MOTOR, 1], [I.LITHIUM_CELL, 2], [I.IRON_INGOT, 3], [I.ALUMINIUM_INGOT, 2]], 'atelier', 'tech')),
+      E(r(I.FLASHLIGHT, 1, [[I.ALUMINIUM_INGOT, 2], [I.LITHIUM_CELL, 1], [B.GLASS, 1], [I.GLOWSTONE_DUST, 1]], 'atelier', 'tech')),
+      E(r(I.LASER_GUN, 1, [[I.ALUMINIUM_INGOT, 3], [I.LITHIUM_CELL, 2], [I.CIRCUIT, 2], [I.REDSTONE, 4], [I.DIAMOND, 1]], 'atelier', 'tech')),
+    );
     // Broyeur : minerai -> 2 poudres, pierre -> gravier -> sable…
     CM.TECH_CRUSH = new Map();
     const crush = (ins, out, n) => {
@@ -625,6 +692,129 @@
       for (const [x, y] of [[10, 3], [11, 3], [12, 4], [13, 5], [13, 6], [12, 7], [9, 4], [9, 5]]) put(d, x, y, BRASS);
       void r;
     });
+    // ---- deuxième vague ----
+    const charger = (on) => (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      rect(d, r, 3, 3, 13, 13, [40, 40, 46], 3);
+      const c = on ? [90, 220, 255] : [70, 90, 110];
+      for (const [x, y] of [[8, 4], [7, 5], [6, 6], [7, 7], [8, 7], [9, 8], [8, 9], [7, 10], [8, 11]]) put(d, x, y, c);
+    };
+    make('charger_top', charger(false));
+    make('charger_top_on', charger(true));
+    make('charger_side', (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      rect(d, r, 4, 6, 12, 10, [60, 60, 66], 4);
+      for (let x = 5; x < 11; x += 2) put(d, x, 8, [90, 220, 255]);
+    });
+    const coil = (on) => (d, r) => {
+      fill(d, r, [184, 106, 64], 10);
+      for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x++) put(d, x, y, on ? [230, 160, 110] : [140, 78, 46]);
+      if (on) for (let i = 0; i < 6; i++) put(d, Math.floor(r() * 16), Math.floor(r() * 16), [200, 220, 255]);
+    };
+    make('tesla_coil', coil(false));
+    make('tesla_coil_on', coil(true));
+    make('tesla_top', (d, r) => {
+      fill(d, r, [200, 204, 214], 8);
+      disc(d, 7.5, 7.5, 5, (x, y, q) => put(d, x, y, q < 2.5 ? [236, 240, 250] : [170, 176, 190]));
+    });
+    icon('tesla_icon', (d, r) => {
+      rect(d, r, 3, 13, 13, 16, ALU, 6);
+      rect(d, r, 6, 5, 10, 13, [184, 106, 64], 10);
+      for (let y = 5; y < 13; y += 2) for (let x = 6; x < 10; x++) put(d, x, y, [140, 78, 46]);
+      disc(d, 7.5, 3.5, 3.2, (x, y) => put(d, x, y, [210, 214, 224]));
+      line(d, 2, 1, 4, 4, [160, 190, 255]);
+      line(d, 13, 1, 11, 4, [160, 190, 255]);
+    });
+    const elevTop = (on) => (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      const c = on ? [120, 240, 130] : [90, 110, 96];
+      for (let k = 0; k < 4; k++) { put(d, 7 - k, 3 + k, c); put(d, 8 + k, 3 + k, c); put(d, 7 - k, 12 - k, c); put(d, 8 + k, 12 - k, c); }
+    };
+    make('elevator_top', elevTop(false));
+    make('elevator_top_on', elevTop(true));
+    make('elevator_side', (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      for (let y = 3; y < 13; y++) put(d, 7, y, [120, 126, 136]), put(d, 8, y, [120, 126, 136]);
+    });
+    make('geo_side', (d, r) => {
+      fill(d, r, BRASS, 8);
+      border(d, [236, 196, 110], BRASS_D);
+      rect(d, r, 4, 4, 12, 12, [60, 30, 20], 4);
+      for (let y = 5; y < 11; y += 2) for (let x = 5; x < 11; x++) put(d, x, y, [240, 110, 30]);
+    });
+    make('geo_top', (d, r) => {
+      fill(d, r, BRASS, 8);
+      border(d, [236, 196, 110], BRASS_D);
+      disc(d, 7.5, 7.5, 4, (x, y, q) => put(d, x, y, q < 2 ? [255, 200, 80] : [230, 90, 20]));
+    });
+    make('vacuum_top', (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      disc(d, 7.5, 7.5, 5.5, (x, y, q) => put(d, x, y, (Math.floor(q) % 2) ? [50, 50, 56] : [110, 116, 126]));
+    });
+    make('vacuum_side', (d, r) => {
+      fill(d, r, ALU, 6);
+      border(d, [230, 234, 240], ALU_D);
+      rect(d, r, 3, 5, 13, 11, [70, 110, 170], 8);
+    });
+    make('harvester_top', (d, r) => {
+      fill(d, r, BRASS, 8);
+      border(d, [236, 196, 110], BRASS_D);
+      for (let k = 0; k < 4; k++) line(d, 7, 7, [2, 13, 13, 2][k], [2, 2, 13, 13][k], [170, 174, 184]);
+    });
+    const harvSide = (on) => (d, r) => {
+      fill(d, r, BRASS, 8);
+      border(d, [236, 196, 110], BRASS_D);
+      for (let x = 2; x < 14; x += 3) for (let y = 9; y < 14; y++) put(d, x, y, [210, 190, 70]);
+      rect(d, r, 5, 3, 11, 6, on ? [90, 230, 100] : [60, 80, 60], 4);
+    };
+    make('harvester_side', harvSide(false));
+    make('harvester_side_on', harvSide(true));
+    icon('streetlamp_icon', (d, r) => {
+      rect(d, r, 7, 5, 9, 15, ALU_D, 4);
+      rect(d, r, 5, 15, 11, 16, ALU, 4);
+      rect(d, r, 4, 1, 12, 5, [255, 244, 210], 4);
+      rect(d, r, 3, 0, 13, 1, ALU, 4);
+    });
+    make('solar2_top', (d, r) => {
+      fill(d, r, [40, 24, 90], 8);
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          if (x % 4 === 0 || y % 4 === 0) put(d, x, y, [214, 190, 110]);
+          else if ((x * 3 + y) % 5 === 0) put(d, x, y, [120, 90, 220]);
+        }
+    });
+    // objets électriques
+    icon('edrill', (d, r) => {
+      rect(d, r, 2, 5, 10, 11, [200, 60, 40], 8);
+      rect(d, r, 4, 11, 7, 15, [60, 60, 66], 4);
+      for (let k = 0; k < 5; k++) rect(d, r, 10 + k, 6 + Math.floor(k / 2), 11 + k, 10 - Math.floor(k / 2), [170, 174, 184], 8);
+      put(d, 4, 7, [90, 220, 255]);
+    });
+    icon('chainsaw', (d, r) => {
+      rect(d, r, 1, 6, 7, 12, [230, 140, 30], 8);
+      rect(d, r, 7, 7, 15, 11, [170, 174, 184], 6);
+      for (let x = 7; x < 15; x += 2) put(d, x, 6, [80, 80, 86]), put(d, x + 1, 11, [80, 80, 86]);
+      rect(d, r, 2, 3, 6, 6, [60, 60, 66], 4);
+    });
+    icon('flashlight', (d, r) => {
+      rect(d, r, 2, 6, 11, 10, [60, 60, 70], 6);
+      rect(d, r, 11, 5, 14, 11, ALU, 6);
+      rect(d, r, 14, 6, 15, 10, [255, 250, 200], 2);
+      put(d, 6, 7, [90, 220, 255]);
+    });
+    icon('laser_gun', (d, r) => {
+      rect(d, r, 2, 5, 13, 9, [210, 214, 224], 6);
+      rect(d, r, 3, 9, 6, 14, [60, 60, 70], 4);
+      rect(d, r, 13, 6, 15, 8, [255, 60, 60], 4);
+      for (let x = 5; x < 12; x += 2) put(d, x, 6, [90, 220, 255]);
+    });
+    make('laser_beam', (d, r) => fill(d, r, [255, 70, 60], 20));
+    make('zap', (d, r) => fill(d, r, [190, 210, 255], 20));
     void copyFrom;
   });
 })();

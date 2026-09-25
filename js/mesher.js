@@ -160,6 +160,8 @@
         PF[i] = e.f ? 1 : 0;
       }
       for (const b of CM.blocks) if (b && b.light >= 6 && !b.portal && b.render !== 'water' && b.render !== 'lava') EMIT[b.id] = 1;
+      ANIM.fill(0);
+      for (const b of CM.blocks) if (b && b.animTex) ANIM[b.id] = 16;
       SPECIAL.dust = [L.rs_dust_line, L.rs_dust_dot, L.rs_dust_cross];
       SPECIAL.bedrock = [0, 0, 0, 0, 0, 0].map(() => L.bedrock);
       CM.blockLayers = LAYERS;
@@ -174,6 +176,7 @@
   const col4 = [0, 0, 0, 0], fk4 = [0, 0, 0, 0];
   const PR = new Float32Array(256).fill(1), PG = new Float32Array(256).fill(0.82), PB = new Float32Array(256).fill(0.58), PF = new Uint8Array(256);
   const EMIT = new Uint8Array(65536); // sources de lumière (halos, flammes)
+  const ANIM = new Uint8Array(65536); // textures animées (feu, torches) : drapeau 16
   let cr = 0, cg = 0, cb = 0, cw = 0, cf = 0;
   const colAdd = (q) => {
     const lb = padL[q] & 15;
@@ -486,7 +489,7 @@
               blk4[k] = 255;
               sh4[k] = 255;
             }
-            const layer = LAYERS[id][0], ff = waving ? 5 : 0;
+            const layer = LAYERS[id][0], ff = (waving ? 5 : 0) | ANIM[id];
             crossQuad(bx + 2, bz + 2, bx + 14, bz + 14, by, layer, ff);
             crossQuad(bx + 14, bz + 2, bx + 2, bz + 14, by, layer, ff);
             crossQuad(bx + 1, bz, bx + 1, bz + 16, by, layer, ff);
@@ -506,8 +509,8 @@
               // torche murale : pied contre le mur, penchée vers l'extérieur (sommet décalé de 4/16)
               const [dx, dz] = b.wall;
               const x0 = dx > 0 ? 0 : dx < 0 ? 14 : 7, z0 = dz > 0 ? 0 : dz < 0 ? 14 : 7;
-              boxQuads(opaqueBuf, LAYERS[id][0], bx + x0, by + 3, bz + z0, bx + x0 + 2, by + 13, bz + z0 + 2, 7, 6, 9, 16, dx * 4, dz * 4);
-            } else boxQuads(opaqueBuf, LAYERS[id][0], bx + 7, by, bz + 7, bx + 9, by + 10, bz + 9, 7, 6, 9, 16);
+              boxQuads(opaqueBuf, LAYERS[id][0], bx + x0, by + 3, bz + z0, bx + x0 + 2, by + 13, bz + z0 + 2, 7, 6, 9, 16, dx * 4, dz * 4, ANIM[id]);
+            } else boxQuads(opaqueBuf, LAYERS[id][0], bx + 7, by, bz + 7, bx + 9, by + 10, bz + 9, 7, 6, 9, 16, 0, 0, ANIM[id]);
           }
         }
     return {
@@ -710,7 +713,7 @@
 
   // Petite boîte (torche) avec coordonnées de texture personnalisées.
   // shx, shz : décalage du haut de la boîte (torche penchée) ; le dessous est alors visible.
-  function boxQuads(buf, layer, x0, y0, z0, x1, y1, z1, u0, v0, u1, v1, shx, shz) {
+  function boxQuads(buf, layer, x0, y0, z0, x1, y1, z1, u0, v0, u1, v1, shx, shz, flags) {
     const lean = !!(shx || shz);
     for (let fi = 0; fi < 6; fi++) {
       if (fi === 3 && !lean) continue;
@@ -723,7 +726,7 @@
         const top = v[1] ? 1 : 0;
         return [(v[0] ? x1 : x0) + (top ? shx || 0 : 0), v[1] ? y1 : y0, (v[2] ? z1 : z0) + (top ? shz || 0 : 0), u, vv];
       });
-      buf.quad(q, layer, sky4, blk4, sh4, 0);
+      buf.quad(q, layer, sky4, blk4, sh4, flags || 0);
     }
   }
 })();

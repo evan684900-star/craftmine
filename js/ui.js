@@ -36,10 +36,11 @@
     ['🕳 Profondeurs', "Le monde descend jusqu'à y = −64, comme dans Minecraft : sous y = 0, l'ardoise des abîmes remplace la pierre (plus longue à miner), avec de grandes cavernes, beaucoup de diamants et de redstone, du lapis, de l'or, du fer, du cristal et de rares débris antiques (netherite). Zones de sculk, géodes d'améthyste profondes, et du magma brûlant près du socle. Prends des torches !"],
     ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs (blé, carottes, pommes de terre, betteraves), forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
     ['🚪 Portes et lits', "Porte : 6 planches d'une même essence (chêne, sapin, bouleau, acacia) donnent 3 portes à l'Établi ; clic droit pour l'ouvrir ou la fermer. Lit : 3 laines + 3 planches. Clic droit sur un lit pour y placer ton point de réapparition ; la nuit, tu t'y couches et passes au matin (en multijoueur, quand tout le monde est couché). Pas de sommeil si des Ombres rôdent tout près !"],
+    ['✋ Deuxième main et 🛡 bouclier', "La case « main secondaire » est à côté des cases d'armure dans l'inventaire (X échange les deux mains ; elle apparaît à gauche de la barre d'objets, touche-la sur téléphone pour échanger). Une torche en main secondaire éclaire en permanence ; avec un outil ou une épée en main, le clic droit pose le bloc de la main secondaire (torches, blocs de construction…). Bouclier : 6 planches + 1 lingot de fer à l'Établi. Maintiens le clic droit pour le lever (on marche plus lentement) : il arrête tous les coups venus de devant — Ombres, sangliers, flèches, autres joueurs et même les explosions — et repousse l'assaillant. Il s'use à chaque coup arrêté (336 de durabilité)."],
     ['🔴 Redstone', "Comme dans Minecraft. La poudre de redstone se pose au sol et transporte le courant sur 15 blocs. Sources : levier, boutons (pierre 1 s, bois 1,5 s, aussi touché par une flèche), plaques de pression (pierre, bois, or et fer selon le poids), torche de redstone (inverseur), bloc de redstone, capteur de lumière du jour, crochet et fil de déclenchement, cible (plus la flèche est au centre, plus le signal est fort), capteur de sculk (pas de tous les joueurs et des créatures, blocs posés ou cassés ; pas accroupi : silencieux), coffre piégé (quand on l'ouvre), rail détecteur. Composants : répéteur (délai 1 à 4, clic droit ; verrouillable par le côté), comparateur (comparer / soustraire, lit le remplissage des coffres), observateur, pistons et pistons collants (12 blocs, slime et miel collent), distributeur (tire des flèches, pose l'eau, lance les wagonnets…), dropper, entonnoir, lampe, ampoule de cuivre (s'allume et s'éteint à chaque impulsion), portes et trappes en fer (seulement par la redstone), bloc musical, TNT. Recettes : catégorie Redstone."],
     ['🛤 Rails et wagonnets', "Pose des rails (ils tournent et montent tout seuls d'après leurs voisins). Wagonnet : clic droit sur un rail pour le poser, clic droit dessus pour monter, accroupi pour descendre, « avancer » pour le pousser un peu. Le rail de propulsion alimenté accélère (éteint, il freine), le rail détecteur émet un signal quand un wagonnet passe, le rail activateur fait exploser le wagonnet de TNT et descendre le passager. Wagonnets de stockage (27 cases) et à entonnoir (aspire objets et coffres au-dessus) ; frappe un wagonnet pour le récupérer."],
     ['🏹 Arc et flèches', "Arc : 3 bâtons + 3 ficelles (la ficelle vient des fibres). Maintiens le clic droit pour bander (1 s = pleine puissance), relâche pour tirer. Les flèches plantées se ramassent. Flèches : silex + bâton + plume."],
-    ['⚡ Électricité (extension)', "À cocher en créant le monde. Nouveaux minerais : zinc, étain, bauxite (aluminium) et lithium tout au fond. Fabrique un Établi d'ingénieur pour les recettes. Un réseau = des blocs électriques qui se touchent, reliés par des câbles. Générateurs : panneau solaire (le jour), éolienne (plus elle est haute, plus elle produit), roue à eau (de l'eau autour), générateur à charbon (charbon, bois, bâtons), manivelle (clic droit). Batterie : stocke l'énergie (5 niveaux). Machines : lampes et néons de 8 couleurs, broyeur (1 minerai → 2 poudres, pierre → gravier → sable), four électrique (sans charbon), foreuse (creuse un tunnel de 2 blocs de haut et avance toute seule ; clic droit pour vider sa récolte ; donne-lui des câbles et elle les pose derrière elle pour rester branchée ; sinon elle continue sur sa réserve d'énergie ; un coffre collé derrière la rend fixe), tapis roulant (transporte et remplit le coffre au bout), ventilateur (souffle jusqu'à 8 blocs, vers le haut il fait voler). Un signal de redstone arrête une machine. Multimètre : état du réseau ; clé à molette : tourner une machine, accroupi pour la démonter."],
+    ['⚡ Électricité (extension)', "À cocher en créant le monde. Nouveaux minerais : zinc, étain, bauxite (aluminium) et lithium tout au fond. Fabrique un Établi d'ingénieur pour les recettes. Un réseau = des blocs électriques qui se touchent, reliés par des câbles. Générateurs : panneau solaire (le jour), éolienne (plus elle est haute, plus elle produit), roue à eau (de l'eau autour), générateur à charbon (charbon, bois, bâtons), manivelle (clic droit). Batterie : stocke l'énergie (5 niveaux). Machines : lampes et néons de 8 couleurs, broyeur (1 minerai → 2 poudres, pierre → gravier → sable), four électrique (sans charbon), foreuse (creuse un tunnel de 2 blocs de haut et avance toute seule ; clic droit pour vider sa récolte ; donne-lui des câbles et elle les pose derrière elle pour rester branchée ; sinon elle continue sur sa réserve d'énergie ; un coffre collé derrière la rend fixe), tapis roulant (transporte et remplit le coffre au bout), ventilateur (souffle jusqu'à 8 blocs, vers le haut il fait voler). Un signal de redstone arrête une machine. Multimètre : état du réseau ; clé à molette : tourner une machine, accroupi pour la démonter. Et aussi : panneau solaire avancé (8 ⚡/s), générateur géothermique (4 ⚡/s par bloc de lave qui le touche), bobine Tesla (foudroie les Ombres à 8 blocs), ascenseur électrique (saute pour monter au suivant, accroupis-toi pour descendre), aspirateur (ramasse les objets à 6 blocs), moissonneuse automatique (récolte et replante les cultures mûres à 4 blocs), lampadaire. Outils rechargeables au Chargeur : perceuse électrique (pioche + pelle très rapides), tronçonneuse (abat l'arbre entier), lampe torche (éclaire fort, même en main secondaire), pistolet laser (clic droit, 32 blocs, 8 dégâts)."],
     ['💡 Lumière réaliste (extension)', "Chaque lumière a sa couleur : torches orangées, redstone rouge, néons colorés, lanternes des âmes bleues, lave, portail violet… Les flammes vacillent, les lampes ont un halo la nuit, les torches fument, et la lumière des torches s'ajoute à celle du jour (un coin sombre s'éclaire même en plein jour). Se désactive dans Options > Graphismes."],
     ['🗿 Golem de fer', "Il garde les villages et écrase les Ombres. Construis le tien : 2 blocs de fer l'un sur l'autre, 1 bloc de fer de chaque côté en haut (un T), puis une citrouille par-dessus. Il patrouille autour de l'endroit où tu l'as construit. Attention : il se venge si tu le frappes, lui ou un villageois."],
     ['🐗 Faune', "Mouflons dans les prairies (laine, viande), sangliers dans les forêts (cuir ; ils chargent si on les attaque !), pingouins sur la neige (plumes pour l'Amulette de plume)."],
@@ -164,7 +165,7 @@
   ];
   const BIND_LABELS = {
     forward: 'Avancer', back: 'Reculer', left: 'Aller à gauche', right: 'Aller à droite', jump: 'Sauter / nager / monter (vol)',
-    sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet",
+    sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet", swap: 'Échanger les deux mains',
   };
   const MODE_NAMES = { survival: 'Survie', creative: 'Créatif' };
   const DIFF_NAMES = { peaceful: 'Paisible', easy: 'Facile', normal: 'Normale', hard: 'Difficile' };
@@ -264,7 +265,11 @@
       if (s.ench) h += '<div class="glint" style="-webkit-mask-image:url(' + icon + ');mask-image:url(' + icon + ')"></div>';
       if (s.count > 1) h += '<span class="count">' + s.count + '</span>';
       const wi = s.xp !== undefined && CM.itemInfo(s.id);
-      if (wi && wi.type === 'armor') {
+      if (wi && wi.charge) {
+        // objet électrique : barre de charge bleue
+        const k = CM.chargeLeft(s) / wi.charge;
+        h += '<div class="dur"><div style="width:' + Math.round(k * 100) + '%;background:' + (k > 0.25 ? '#4fc3ff' : '#ff8a4f') + '"></div></div>';
+      } else if (wi && (wi.type === 'armor' || wi.type === 'shield')) {
         // armure : barre de durabilité (dès qu'elle est entamée), du vert au rouge
         if (s.xp > 0) {
           const k = Math.max(0, 1 - s.xp / wi.maxDur);
@@ -283,6 +288,9 @@
 
     renderHotbar() {
       const inv = this.game.inventory;
+      const oh = $('offhand-hud');
+      oh.classList.toggle('hidden', !inv.offhand);
+      if (inv.offhand) oh.innerHTML = this.slotHTML(inv.offhand);
       for (let i = 0; i < 9; i++) {
         this.hotSlots[i].innerHTML = this.slotHTML(inv.slots[i]);
         this.hotSlots[i].classList.toggle('sel', i === inv.selected);
@@ -319,7 +327,7 @@
         '<div>' + kn('dash') + ' ruée · ' + kn('inventory') + ' inventaire &amp; fabrication</div>' +
         '<div><b>Clic gauche</b> miner / frapper</div>' +
         '<div><b>Clic droit</b> poser / utiliser / manger</div>' +
-        '<div><b>1-9 / molette</b> barre rapide · <b>Échap</b> pause</div>';
+        '<div><b>1-9 / molette</b> barre rapide · ' + kn('swap') + ' changer de main · <b>Échap</b> pause</div>';
       if (this.game.player) this.lastHealth = this.lastFood = -1;
       if ($('options').classList.contains('hidden') === false) this.renderOptions();
     }
@@ -574,6 +582,16 @@
         ar.appendChild(s);
         this.armorSlots.push(s);
       }
+      // main secondaire (bouclier, torche, blocs…)
+      const oh = document.createElement('div');
+      oh.className = 'slot armor-slot offhand-slot';
+      oh.title = 'Main secondaire';
+      oh.addEventListener('pointerdown', (e) => this.offhandClick(e));
+      oh.addEventListener('mouseenter', (e) => this.showTip(this.game.inventory.offhand, e));
+      oh.addEventListener('mouseleave', () => this.hideTip());
+      ar.appendChild(oh);
+      this.offhandSlot = oh;
+      this.tapOrPress($('offhand-hud'), () => this.game.swapHands());
       const cg = $('chest-grid');
       this.chestSlots = [];
       for (let i = 0; i < 27; i++) {
@@ -868,6 +886,7 @@
         // case vide : silhouette de la pièce attendue
         this.armorSlots[k].innerHTML = s ? this.slotHTML(s) : '<div class="icon ph" style="background-image:url(' + CM.Textures.icons[CM.armorOf(CM.ARMOR_PIECES[k][0], 'IRON')] + ')"></div>';
       }
+      this.offhandSlot.innerHTML = inv.offhand ? this.slotHTML(inv.offhand) : '<div class="icon ph" style="background-image:url(' + CM.Textures.icons[CM.I.SHIELD] + ')"></div>';
       const pts = inv.armorPoints();
       $('inv-prot').innerHTML = '🛡 Protection <b>' + pts + '</b>/20' + (pts ? ' · environ −' + Math.round(pts * 4) + ' % de dégâts' : ' · aucune armure portée');
       if (this.chest)
@@ -1143,6 +1162,32 @@
     }
 
     // Clic sur une case d'armure : n'accepte que la pièce correspondante.
+    // Case de la main secondaire : n'importe quel objet (une pile).
+    offhandClick(e) {
+      e.preventDefault();
+      const inv = this.game.inventory, s = inv.offhand;
+      CM.Audio.play('click');
+      if ((e.shiftKey || this.quickMode) && s && !this.cursor) {
+        const left = inv.add(s.id, s.count, CM.stackExtra(s));
+        inv.offhand = left > 0 ? Object.assign({}, s, { count: left }) : null;
+      } else if (this.cursor) {
+        const c = this.cursor;
+        if (s && s.id === c.id && !CM.stackExtra(s) && !CM.stackExtra(c)) {
+          const max = CM.itemInfo(s.id).stack || 64, n = Math.min(max - s.count, c.count);
+          s.count += n;
+          c.count -= n;
+          this.cursor = c.count > 0 ? c : null;
+        } else {
+          inv.offhand = c;
+          this.cursor = s || null;
+        }
+      } else if (s) {
+        this.cursor = s;
+        inv.offhand = null;
+      }
+      inv.changed();
+      this.showTip(inv.offhand, e);
+    }
     armorClick(k, e) {
       e.preventDefault();
       const inv = this.game.inventory, s = inv.armor[k];
@@ -1250,6 +1295,13 @@
         for (const [ty, foods] of Object.entries(CM.BREED_FOOD)) if (foods.includes(info.id)) h += '<div class="tt-sub">Plaît aux ' + (ty === 'boar' ? 'sangliers' : 'mouflons') + ' (élevage).</div>';
       } else if (info.type === 'charm') {
         h += '<div class="tt-gold">' + info.desc + '</div>';
+      } else if (info.charge) {
+        h += '<div class="tt-gold">' + info.desc + '</div>';
+        h += '<div class="tt-sub">⚡ Charge ' + Math.round(CM.chargeLeft(s || { id, xp: 0 })) + '/' + info.charge + '</div>';
+      } else if (info.type === 'shield') {
+        const used = (s && s.xp) || 0, left = info.maxDur - used;
+        h += '<div class="tt-gold">' + info.desc + '</div>';
+        h += '<div class="tt-sub">Durabilité <span style="color:' + durColor(left / info.maxDur) + '">' + left + '/' + info.maxDur + '</span> · s’use à chaque coup arrêté · ' + esc(this.game.keyName(this.game.binds.swap)) + ' : changer de main</div>';
       } else if (info.type === 'grapple') {
         h += '<div class="tt-sub">Clic droit : s’accrocher à un bloc (34 blocs). Saut : se décrocher.</div>';
       } else if (info.type === 'seeds') {

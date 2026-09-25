@@ -5,6 +5,7 @@
     constructor() {
       this.slots = new Array(36).fill(null);
       this.armor = [null, null, null, null]; // casque, plastron, jambières, bottes
+      this.offhand = null; // main secondaire (bouclier, torche, blocs…)
       this.selected = 0;
       this.onChange = null;
     }
@@ -96,6 +97,13 @@
     held() {
       return this.slots[this.selected];
     }
+    // Échange l'objet en main et celui de la main secondaire.
+    swapHands() {
+      const s = this.slots[this.selected];
+      this.slots[this.selected] = this.offhand;
+      this.offhand = s;
+      this.changed();
+    }
     consumeHeld(n) {
       const s = this.slots[this.selected];
       if (!s) return;
@@ -121,7 +129,7 @@
 
     serialize() {
       const copy = (s) => (s ? Object.assign({}, s) : null);
-      return { slots: this.slots.map(copy), selected: this.selected, armor: this.armor.map(copy) };
+      return { slots: this.slots.map(copy), selected: this.selected, armor: this.armor.map(copy), offhand: copy(this.offhand) };
     }
     load(data, v) {
       if (!data || !Array.isArray(data.slots)) return;
@@ -136,6 +144,8 @@
         const info = s && CM.itemInfo(s.id);
         return info && info.type === 'armor' && info.slot === k ? Object.assign({ xp: 0 }, s, { count: 1 }) : null;
       });
+      const oh = data.offhand;
+      this.offhand = oh && CM.itemInfo(CM.migrateId(oh.id, v || 4)) ? Object.assign({}, oh, { id: CM.migrateId(oh.id, v || 4) }) : null;
       this.selected = data.selected || 0;
       this.changed();
     }

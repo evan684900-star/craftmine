@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -217,6 +217,7 @@
       this.techData = {}; // extension Électricité : charge des batteries, combustible, progression
       this.inventory.slots = new Array(36).fill(null);
       this.inventory.armor = [null, null, null, null];
+      this.inventory.offhand = null;
       this.inventory.selected = 0;
       const sp = save && save.player && isFinite(save.player.x) ? save.player : this.world.spawn;
       // génération des tronçons autour du point de départ
@@ -915,6 +916,7 @@
           if (n >= 1 && n <= 9) this.inventory.selected = n - 1;
         }
         if (c === K.drop) this.dropHeld(e.ctrlKey);
+        if (c === K.swap && !e.repeat && this.player.alive) this.swapHands();
         inp.keys[c] = true;
         if (!e.repeat) inp.pressed[c] = true;
       });
@@ -1824,6 +1826,16 @@
       };
     }
 
+    // Main principale <-> main secondaire.
+    swapHands() {
+      const p = this.player;
+      p.bowT = 0;
+      p.blockT = 0;
+      p.blocking = false;
+      if (p.eating) p.eating = null;
+      this.inventory.swapHands();
+      CM.Audio.play('equip', { mat: 'leather' });
+    }
     // Halos et fumée des torches (extension Lumière réaliste).
     glowQuads(right, up, cam) {
       const dt = Math.min(0.1, this.clock - (this.lastGlowClock || this.clock));
