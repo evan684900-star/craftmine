@@ -1401,6 +1401,7 @@ for (const b of CM.blocks) {
   if (b.render === 'none') sel = null; // l'eau garde une boîte pleine (pour le seau), jamais solide
   else if (b.box) sel = b.box.map((v) => v / 16);
   else if (b.boxes) sel = [0, 1, 2].map((a) => Math.min(...b.boxes.map((q) => q[a]))).concat([3, 4, 5].map((a) => Math.max(...b.boxes.map((q) => q[a])))).map((v) => v / 16);
+  else if (b.model) sel = [0, 1, 2].map((a) => Math.min(...b.model.map((q) => q.b[a]))).concat([3, 4, 5].map((a) => Math.max(...b.model.map((q) => q.b[a])))).map((v) => v / 16);
   else if (b.render === 'slab' || b.render === 'carpet') sel = [0, 0, 0, 1, b.height, 1];
   else if (b.render === 'torch') sel = b.wall ? CM.wallTorchBox(b.wall[0], b.wall[1]) : [6 / 16, 0, 6 / 16, 10 / 16, 10 / 16, 10 / 16];
   else if (b.render === 'cross') sel = [2 / 16, 0, 2 / 16, 14 / 16, 13 / 16, 14 / 16];

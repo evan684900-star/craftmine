@@ -764,6 +764,24 @@
       for (const a of ents.arrows || []) if (!a.dead) mark(a.x, a.y, a.z, 0.05, 'item');
       for (const c of ents.carts || []) if (!c.dead) mark(c.x, c.y, c.z, 0.45, 'cart');
       this.occ = occ;
+      // créatures qui marchent : vibrations pour les capteurs de sculk
+      if (this.watch.sculk.size) {
+        if (!this.steps) this.steps = new WeakMap();
+        for (const m of ents.mobs) {
+          if (m.dead || !m.onGround) continue;
+          const last = this.steps.get(m);
+          if (!last) {
+            this.steps.set(m, [m.x, m.z]);
+            continue;
+          }
+          const d = Math.hypot(m.x - last[0], m.z - last[1]);
+          if (d > 4) this.steps.set(m, [m.x, m.z]);
+          else if (d > 1.8) {
+            this.steps.set(m, [m.x, m.z]);
+            this.vibrate(m.x, m.y + 0.5, m.z);
+          }
+        }
+      }
       for (const [k, o] of occ) {
         const [x, y, z] = unkey(k);
         const id = w.get(x, y, z), rs = blk(id).rs;

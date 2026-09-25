@@ -2209,7 +2209,9 @@
       for (let i = 0; i < 512 && t <= maxDist; i++) {
         if (y >= MINY && y < H) {
           const id = this.get(x, y, z);
-          const s = id && filter(id) ? CM.blocks[id].sel : null;
+          const bd = id && filter(id) ? CM.blocks[id] : null;
+          // forme qui dépend des voisins (câble électrique…)
+          const s = bd ? (bd.selAt ? bd.selAt(this, x, y, z) : bd.sel) : null;
           if (s === CM.FULL_BOX) return { x, y, z, nx, ny, nz, t, id, box: s };
           if (s) {
             // bloc partiel (dalle, torche, plante, porte…) : le rayon doit toucher sa boîte

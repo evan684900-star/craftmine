@@ -60,6 +60,18 @@
     nb('CABLE', T({
       name: 'Câble électrique', render: 'cable', tex: 'cable', iconTex: 'cable_icon', solid: false, opaque: false, hardness: 0.3, sound: 'wool',
       box: [5, 5, 5, 11, 11, 11], tech: { k: 'cable' }, pushDestroy: true,
+      // boîte de visée : le nœud et ses bras vers les blocs électriques voisins
+      selAt: (w, x, y, z) => {
+        const b = [5, 5, 5, 11, 11, 11];
+        for (let d = 0; d < 6; d++) {
+          const v = CM.DIRV[d], nb = CM.blocks[w.get(x + v[0], y + v[1], z + v[2])];
+          if (!nb || !nb.tech) continue;
+          const a = d >> 1;
+          if (d & 1) b[a] = 0;
+          else b[a + 3] = 16;
+        }
+        return b.map((v) => v / 16);
+      },
     }));
 
     // ---- générateurs ----
@@ -154,7 +166,7 @@
       model: [
         CM.part6([0, 0, 0, 16, 12, 16], ['alu_casing', 'alu_casing', 'fan_front', 'alu_casing', 'alu_casing', 'alu_casing'], st.facing),
       ],
-      tex: 'alu_casing', iconTex: 'fan_icon', solid: true, opaque: false, hardness: 2, tool: 'pickaxe', sound: 'metal', orient: st.facing, box: [0, 0, 0, 16, 16, 16],
+      tex: 'alu_casing', iconTex: 'fan_icon', solid: true, opaque: false, hardness: 2, tool: 'pickaxe', sound: 'metal', orient: st.facing,
       tech: { k: 'use', use: 'fan', rate: 1 }, anim: 'fan',
       place: (P) => CM.rsWith(CM.RSFAM.fan.base, { facing: P.look6 }),
     }), { key: keyFn('FAN') });

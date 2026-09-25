@@ -1969,7 +1969,7 @@
         hand: this.hand,
         translucent: this.translucent,
         glow: env.real && this.options.halos !== false ? this.glowQuads(right, up, cam) : null,
-        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height } : null,
+        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box } : null,
       });
       this.net.updateTags(cam);
     }

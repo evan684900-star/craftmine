@@ -792,7 +792,19 @@
         case 'st':
           // (position envoyée avant un voyage : ignorée, l'hôte a déjà placé le joueur à l'arrivée)
           if (!Array.isArray(m.s) || ((m.s[8] | 0) === 1 ? 'nether' : 'overworld') !== rp.dim) break;
-          rp.setState(m.s);
+          {
+            const ox = rp.x, oy = rp.y, oz = rp.z, was = rp.seen;
+            rp.setState(m.s);
+            // les pas des invités font vibrer les capteurs de sculk (sauf accroupis ou en vol)
+            const moved = Math.hypot(rp.x - ox, rp.z - oz);
+            if (was && rp.alive && !(rp.flags & 3) && moved < 4 && Math.abs(rp.y - oy) < 0.6 && g.ticks.rs && g.world.solidAt(Math.floor(rp.x), Math.floor(rp.y - 0.05), Math.floor(rp.z))) {
+              rp.stepAcc = (rp.stepAcc || 0) + moved;
+              if (rp.stepAcc > 1.8) {
+                rp.stepAcc = 0;
+                g.ticks.rs.vibrate(rp.x, rp.y + 0.5, rp.z);
+              }
+            }
+          }
           if (Array.isArray(m.a)) {
             rp.free = !!m.a[0];
             rp.accept = m.a.slice(1);
