@@ -185,6 +185,7 @@
   };
 
   let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
+  CM.newUid = () => NEXT_UID++;
   const vilG = (w, p) => w.villageNear(p.x, p.z, 48);
   const NOBODY = { x: 1e9, y: 0, z: 1e9, alive: false, hw: 0.3, h: 1.8, damage() {} };
 
@@ -233,6 +234,8 @@
       this.drops.length = 0;
       this.particles.length = 0;
       this.tnts.length = 0;
+      if (this.arrows) this.arrows.length = 0;
+      if (this.carts) this.carts.length = 0;
     }
     // TNT allumée : tombe, clignote puis explose.
     addTnt(x, y, z, fuse) {
@@ -326,7 +329,9 @@
         for (const m of this.mobs) this.updateMob(m, dt);
         for (const d of this.drops) this.updateDrop(d, dt);
         this.updateTnts(dt);
+        this.updateExtra(dt);
       }
+      if (this.remote) this.updateExtraRemote(dt);
       for (const p of this.particles) {
         p.life -= dt;
         p.vy -= p.grav * dt;
@@ -417,6 +422,7 @@
         t.fuse = fuse;
         this.tnts.push(t);
       }
+      this.applyExtra(s);
     }
 
     // Invité : déplacements lissés vers les positions reçues + ambiance (sons, étincelles).
@@ -1276,6 +1282,7 @@
         mat4.compose(this.M, t.x, t.y, t.z, 0, 0, 0, sc);
         batch.box(this.M, -0.5, 0, -0.5, 0.5, 1, 0.5, CM.blockLayers[B.TNT], flash ? 1 : l[0], flash ? 1 : l[1], flash);
       }
+      this.renderExtra(batch);
       for (const d of this.drops) {
         if (!this.game.world.loaded(d.x, d.z)) continue;
         const l = this.lightAt(d.x, d.y + 0.2, d.z);

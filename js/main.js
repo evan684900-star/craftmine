@@ -14,7 +14,7 @@
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
-    renderDist: 8, fov: 75, dynFov: true, brightness: 30, clouds: true, smoothLight: true, waving: true,
+    renderDist: 8, fov: 75, dynFov: true, brightness: 30, clouds: true, smoothLight: true, waving: true, realLight: true, halos: true,
     particles: 2, viewBob: true, showHand: true, resolution: 100, maxFps: 0,
     // contrôles
     sens: 1, invertY: false, toggleSprint: false, autoJump: false, binds: null,
@@ -199,6 +199,8 @@
       if (this.dim === 'nether') this.worlds.nether = this.makeNether();
       // contexte de la dimension du joueur (monde, créatures, blocs qui évoluent)
       this.ctxs = {};
+      // wagonnets de chaque dimension (restaurés à l'ouverture de la dimension)
+      this.dimCarts = (!this.net.isClient && save && save.carts && typeof save.carts === 'object' && save.carts) || {};
       this.dimDrops = {};
       this.useCtx(this.openCtx(this.dim));
       this.playerDim = this.dim;
@@ -212,6 +214,7 @@
       this.victory = false;
       this.chests = new Map();
       this.noteBlocks = {};
+      this.techData = {}; // extension Électricité : charge des batteries, combustible, progression
       this.inventory.slots = new Array(36).fill(null);
       this.inventory.armor = [null, null, null, null];
       this.inventory.selected = 0;
@@ -251,6 +254,7 @@
         this.dawnHearts = save.dawnHearts || [];
         this.victory = !!save.victory;
         this.noteBlocks = save.noteBlocks || {};
+        this.techData = (save.tech && typeof save.tech === 'object' && save.tech) || {};
         for (const k in save.chests || {}) {
           this.chests.set(k, save.chests[k].map((s) => {
             if (!s) return null;
@@ -308,6 +312,14 @@
         ctx.entities.drops.push(...this.dimDrops[dim]);
         delete this.dimDrops[dim];
       }
+      if (!this.net.isClient && Array.isArray(this.dimCarts[dim])) {
+        for (const c of this.dimCarts[dim]) {
+          if (!c || !CM.CART_ITEMS[c.type] || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) continue;
+          const slots = Array.isArray(c.slots) ? c.slots.map((s) => (s && CM.itemInfo(s.id) ? s : null)) : undefined;
+          ctx.entities.addCart(c.type, c.x, c.y, c.z, { yaw: c.yaw || 0, slots });
+        }
+        delete this.dimCarts[dim];
+      }
       // repères tirés des modifications (pousses, cultures, terre labourée, tables d'enchantement)
       ctx.saplings = new Set();
       for (const id of CM.TAGS.saplings) for (const p of w.editedPositions(id)) ctx.saplings.add(p.join(','));
@@ -318,12 +330,16 @@
         return b.farmland || (b.crop !== undefined && (b.crop < 3 || b.fruit));
       })) (CM.blocks[p[3]].farmland ? ctx.farmland : ctx.crops).add(p[0] + ',' + p[1] + ',' + p[2]);
       ctx.enchTables = new Set(w.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      // pièces animées de l'extension Électricité (roues, éoliennes, ventilateurs…)
+      ctx.techAnim = new Set(w.editedWhere((id) => !!CM.blocks[id].anim).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
       // liquides qui coulent et feu
       ctx.ticks.reset();
       w.onEdit = (x, y, z, id) => {
         const k = x + ',' + y + ',' + z;
         if (id === B.ENCHANTING_TABLE) ctx.enchTables.add(k);
         else if (ctx.enchTables.size) ctx.enchTables.delete(k);
+        if (CM.blocks[id].anim) ctx.techAnim.add(k);
+        else if (ctx.techAnim.size) ctx.techAnim.delete(k);
         ctx.ticks.onEdit(x, y, z, id);
       };
       this.ctxs[dim] = ctx;
@@ -338,6 +354,7 @@
       if (!this.net.isClient) {
         if (dim === 'overworld') this.animals = ctx.entities.tameList();
         this.dimDrops[dim] = ctx.entities.drops.filter((d) => !d.dead);
+        this.dimCarts[dim] = ctx.entities.cartList();
       }
       const w = ctx.world;
       w.onEdit = null;
@@ -358,6 +375,7 @@
       this.crops = ctx.crops;
       this.farmland = ctx.farmland;
       this.enchTables = ctx.enchTables;
+      this.techAnim = ctx.techAnim;
       this.growTimer = ctx.growTimer;
     }
     // Exécute fn dans une autre dimension (sans son ni effet pour le joueur de cet écran).
@@ -686,8 +704,10 @@
         victory: this.victory,
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
+        tech: this.techData,
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
+        carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
         guests: this.net.guests,
         savedAt: new Date().toISOString(),
       };
@@ -1193,7 +1213,7 @@
     // ------------------------------------------------ utilitaires jeu ----
     nearbyStations() {
       const p = this.player, w = this.world;
-      const out = { table: false, forge: false, smithing: false };
+      const out = { table: false, forge: false, smithing: false, atelier: false };
       const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
       for (let dy = -3; dy <= 4; dy++)
         for (let dz = -4; dz <= 4; dz++)
@@ -1201,7 +1221,7 @@
             const st = CM.blocks[w.get(px + dx, py + dy, pz + dz)].station;
             if (st) out[st] = true;
           }
-      if (this.mode === 'creative') out.table = out.forge = out.smithing = true;
+      if (this.mode === 'creative') out.table = out.forge = out.smithing = out.atelier = true;
       return out;
     }
     dropNearPlayer(id, count, extra) {
@@ -1227,13 +1247,52 @@
     }
     openChestAt(x, y, z, title) {
       if (this.net.active) this.net.openChest(x, y, z, title);
-      else this.ui.openChest(this.chestAt(x, y, z), title);
+      else {
+        this.ui.openChest(this.chestAt(x, y, z), title);
+        this.soloChest = this.bkey(x, y, z);
+        this.chestViewers(this.soloChest, 1);
+      }
+    }
+    // Coffre d'un wagonnet (clé « C » + identifiant du wagonnet).
+    openCartChest(c) {
+      const title = c.type === 'hopper' ? 'Wagonnet à entonnoir' : 'Wagonnet avec coffre';
+      if (this.net.active) this.net.openChest(null, null, null, title, 'C' + c.uid);
+      else if (c.slots) {
+        this.ui.openChest(c.slots, title);
+        this.soloChest = 'C' + c.uid;
+      }
+    }
+    // Contenu d'un conteneur d'après sa clé (bloc ou wagonnet de la dimension simulée).
+    containerByKey(k) {
+      if (k[0] === 'C') {
+        const c = this.entities.cartByUid(Number(k.slice(1)));
+        return c && c.slots ? c.slots : null;
+      }
+      return this.chests.get(k) || null;
+    }
+    // Coffre piégé : le nombre de joueurs qui regardent dedans alimente la redstone.
+    chestViewers(k, n) {
+      if (!k || k[0] === 'C') return;
+      const dim = k[0] === 'N' ? 'nether' : 'overworld';
+      const [x, y, z] = (dim === 'nether' ? k.slice(1) : k).split(',').map(Number);
+      if (dim !== this.dim && !this.ctxs[dim]) return;
+      this.withDim(dim, () => {
+        if (this.ticks.rs) this.ticks.rs.setViewers(x, y, z, n);
+      });
+    }
+    chestClosed() {
+      if (this.soloChest) {
+        this.chestViewers(this.soloChest, 0);
+        this.soloChest = null;
+      }
+      this.net.chestClosed();
     }
     chestAt(x, y, z) {
       if (this.net.isClient) return new Array(27).fill(null); // les coffres sont chez l'hôte
       const k = this.bkey(x, y, z);
       if (!this.chests.has(k)) {
-        const slots = new Array(27).fill(null);
+        // 27 cases (coffre), 9 (distributeur, dropper), 5 (entonnoir)…
+        const slots = new Array(CM.blocks[this.world.get(x, y, z)].slots || 27).fill(null);
         if (this.world.isNaturalChest(x, y, z)) this.fillLoot(slots, x, y, z);
         this.chests.set(k, slots);
       }
@@ -1464,11 +1523,21 @@
 
     // --------------------------------------------------------- portes ---
     toggleDoor(x, y, z) {
+      const b = CM.blocks[this.world.get(x, y, z)];
+      if (!b.door) return;
+      if (b.door.iron) {
+        this.ui.toast('Une porte en fer ne s’ouvre qu’avec la redstone (bouton, levier…)', 'info', 'irondoor');
+        return;
+      }
+      this.setDoorOpen(x, y, z, !b.door.open);
+    }
+    // Ouvre ou ferme une porte (les deux moitiés).
+    setDoorOpen(x, y, z, open) {
       const w = this.world, b = CM.blocks[w.get(x, y, z)];
       if (!b.door) return;
       const y0 = b.door.half ? y - 1 : y;
-      const { set, axis, open } = b.door;
-      const n = open ? 0 : 1;
+      const { set, axis } = b.door;
+      const n = open ? 1 : 0;
       const same = (id) => CM.blocks[id].door && CM.blocks[id].door.set === set;
       if (same(w.get(x, y0, z))) w.setBlock(x, y0, z, set[axis * 2 + n]);
       if (same(w.get(x, y0 + 1, z))) w.setBlock(x, y0 + 1, z, set[4 + axis * 2 + n]);
@@ -1748,7 +1817,18 @@
         ambient,
         held: [cam[0], cam[1], cam[2], p.heldLight()],
         cam,
+        // extension Lumière réaliste : couleurs des lumières
+        real: CM.Light.on(this),
+        heldCol: CM.Light.heldColor(this),
+        handCol: CM.Light.colorAt(this.world, Math.floor(cam[0]), Math.floor(cam[1]), Math.floor(cam[2])),
       };
+    }
+
+    // Halos et fumée des torches (extension Lumière réaliste).
+    glowQuads(right, up, cam) {
+      const dt = Math.min(0.1, this.clock - (this.lastGlowClock || this.clock));
+      this.lastGlowClock = this.clock;
+      return CM.Light.glow(this, right, up, cam, dt);
     }
 
     // ---------------------------------------------------------- boucle ---
@@ -1843,6 +1923,7 @@
         const rdt = Math.min(0.1, this.clock - (this.lastRenderClock || this.clock));
         this.renderEnchantTables(rdt);
       }
+      if (this.techAnim && this.techAnim.size && CM.Tech) CM.Tech.render(this, this.batch);
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // corde du grappin
@@ -1875,7 +1956,7 @@
       if (p.alive) p.buildHand(this.hand, this.clock);
       const t = p.target;
       const dyn = this.options.dynFov;
-      const targetFov = this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0);
+      const targetFov = this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0);
       this.fovCur += (targetFov - (this.fovCur || this.options.fov)) * 0.2;
       this.renderer.render({
         env,
@@ -1887,6 +1968,7 @@
         overlay: this.overlay,
         hand: this.hand,
         translucent: this.translucent,
+        glow: env.real && this.options.halos !== false ? this.glowQuads(right, up, cam) : null,
         target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height } : null,
       });
       this.net.updateTags(cam);
@@ -1916,7 +1998,7 @@
         game.autostart = true;
         const v = params.get('autostart');
         const mode = params.get('mode') === 'creative' ? 'creative' : 'survival';
-        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal' });
+        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal', ext: { tech: params.get('tech') !== '0', light: params.get('light') !== '0' } });
       }
     } catch (err) {
       console.error(err);

@@ -169,6 +169,8 @@
             <button data-f="blocs">Blocs</button>
             <button data-f="deco">Déco</button>
             <button data-f="objets">Objets</button>
+            <button data-f="redstone">Redstone</button>
+            <button data-f="tech" class="ext-tech">⚡ Électricité</button>
             <button data-f="nourriture">Nourriture</button>
             <label><input type="checkbox" id="only-can" /> Réalisables</label>
             <input id="recipe-search" type="search" placeholder="Rechercher une recette…" />
@@ -186,6 +188,8 @@
               <option value="ores">Minerais et métaux</option>
               <option value="deco">Utilitaires et lumières</option>
               <option value="items">Objets, outils et armures</option>
+              <option value="redstone">Redstone et wagonnets</option>
+              <option value="tech" class="ext-tech">⚡ Électricité</option>
             </select>
             <input id="creative-search" type="search" placeholder="Rechercher un bloc ou un objet…" />
           </div>
@@ -261,6 +265,11 @@
         <input id="nw-bonus" type="checkbox" />
         <label for="nw-daycycle">Cycle jour/nuit</label>
         <input id="nw-daycycle" type="checkbox" checked />
+      </div>
+      <div class="nw-ext">
+        <div class="nw-ext-title">Extensions</div>
+        <label class="nw-ext-row"><input id="nw-ext-tech" type="checkbox" checked /> <span><b>⚡ Électricité</b> — nouveaux minerais (zinc, étain, bauxite, lithium), câbles, générateurs (solaire, éolienne, roue à eau, charbon), batteries, lampes et néons, broyeur, four électrique, foreuse, tapis roulants, ventilateurs.</span></label>
+        <label class="nw-ext-row"><input id="nw-ext-light" type="checkbox" checked /> <span><b>💡 Lumière réaliste</b> — lumières colorées (torches orangées, néons, redstone, lave…), flammes qui vacillent, halos la nuit, torches qui éclairent aussi les coins sombres en plein jour.</span></label>
       </div>
       <div id="nw-desc" class="small-note"></div>
       <div class="row2">
@@ -398,15 +407,21 @@
 
   <script src="js/util.js"></script>
   <script src="js/zip.js"></script>
+  <script src="js/rs_defs.js"></script>
+  <script src="js/tech_defs.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
+  <script src="js/light.js"></script>
   <script src="js/world.js"></script>
   <script src="js/blockticks.js"></script>
+  <script src="js/redstone.js"></script>
+  <script src="js/tech.js"></script>
   <script src="js/mesher.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/inventory.js"></script>
   <script src="js/entities.js"></script>
+  <script src="js/carts.js"></script>
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>
   <script src="js/net.js"></script>

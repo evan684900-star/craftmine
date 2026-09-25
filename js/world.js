@@ -58,6 +58,7 @@
       this.z0 = cz * 16;
       this.blocks = new Uint16Array(CVOL);
       this.light = new Uint8Array(CVOL);
+      this.lcol = new Uint8Array(CVOL); // couleur de la lumière des blocs (palette CM.LIGHT_PAL)
       this.top = new Int16Array(256);
       this.nb = [null, null, null, null];
     }
@@ -278,6 +279,7 @@
       // mares en surface dans les terres volcaniques (mondes récents seulement)
       this.lavaLakes = true;
       this.lavaPools = (this.settings.gen || 2) >= 5;
+      this.techOres = !!(this.settings.ext && this.settings.ext.tech); // extension Électricité : zinc, étain, bauxite, lithium
       this.villageCache = new Map();
       // Nether : pas de villages ni d'îles, un autre générateur (voir generateNether)
       this.nether = this.type === 'nether';
@@ -941,6 +943,31 @@
             }
           });
         }
+      // filons de l'extension Électricité (même principe, autre tirage)
+      if (this.techOres && CM.TECH_VEINS)
+        for (let ocz = cz - 1; ocz <= cz + 1; ocz++)
+          for (let ocx = cx - 1; ocx <= cx + 1; ocx++)
+            CM.TECH_VEINS.forEach(([id, per, ymin, ymax, size, deep], t) => {
+              const rand = CM.rng((CM.hash3(ocx, t + 300, ocz, seed) * 4294967296) >>> 0);
+              const count = Math.floor(per + rand());
+              for (let k = 0; k < count; k++) {
+                let x = ocx * 16 + Math.floor(rand() * 16);
+                let y = ymin + Math.floor(rand() * (ymax - ymin));
+                let z = ocz * 16 + Math.floor(rand() * 16);
+                for (let s = 0; s < size; s++) {
+                  const lx = x - x0, lz = z - z0;
+                  if (lx >= 0 && lx < 16 && lz >= 0 && lz < 16 && y > MINY && y < H) {
+                    const i = lidx(lx, y, lz);
+                    const cur = blocks[i];
+                    if (ROCK[cur] && cur !== Bk.NETHERRACK && cur !== Bk.BLACKSTONE && cur !== Bk.BASALT) blocks[i] = (cur === Bk.DEEPSTONE || cur === Bk.TUFF) && deep ? deep : id;
+                  }
+                  const r = rand();
+                  if (r < 0.33) x += rand() < 0.5 ? -1 : 1;
+                  else if (r < 0.66) z += rand() < 0.5 ? -1 : 1;
+                  else y += rand() < 0.5 ? -1 : 1;
+                }
+              }
+            });
 
       // 4) plantes (colonnes de ce tronçon sans arbre), coraux, neige
       for (let lz = 0; lz < 16; lz++)
@@ -1943,10 +1970,12 @@
       this.propagate(SKY);
       // blocs lumineux
       qh = qt = 0;
+      const LC = c.lcol;
       for (let i = 0; i < CVOL; i++) {
         const e = defs[blocks[i]].light;
         if (e) {
           L[i] = (L[i] & 0xf0) | e;
+          LC[i] = defs[blocks[i]].lci || 0;
           push(c, i);
         }
       }
@@ -1993,6 +2022,7 @@
           if (ch === SKY && dir === 4 && lv === 15 && b.atten === 0) nl = 15;
           if (nl > getL(nc.light, n, ch)) {
             setL(nc.light, n, ch, nl);
+            if (ch === BLK) nc.lcol[n] = c.lcol[i];
             push(nc, n);
             if (track || nc !== gen) this.markCell(nc, n);
           }
@@ -2026,6 +2056,7 @@
               const e = defs[nc.blocks[n]].light;
               if (e) {
                 setL(nc.light, n, ch, e);
+                nc.lcol[n] = defs[nc.blocks[n]].lci || 0;
                 push(nc, n);
               }
             }
@@ -2071,6 +2102,7 @@
       const em = CM.blocks[id].light;
       if (em) {
         setL(c.light, i, BLK, em);
+        c.lcol[i] = CM.blocks[id].lci || 0;
         push(c, i);
       }
       for (let dir = 0; dir < 6; dir++) {

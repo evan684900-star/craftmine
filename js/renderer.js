@@ -6,14 +6,30 @@
 
   const LIGHT_FN = `
     float curve(float l) { return pow(0.8, (1.0 - l) * 15.0); }
-    vec3 shadeLight(vec2 lv, vec3 pos) {
+    // bcol : couleur de la lumière des blocs ; flick : lumière de flammes (vacille)
+    vec3 shadeLight(vec2 lv, vec3 pos, vec3 bcol, float flick) {
       float sky = curve(lv.x) * uDay;
       float blk = curve(lv.y);
       float d = distance(pos, uHeld.xyz);
       float held = uHeld.w * curve(clamp((14.5 - d) / 15.0, 0.0, 1.0));
-      blk = max(blk, held);
-      // (Nether : lueur ambiante rougeâtre, il n'y a pas de ciel)
-      vec3 l = max(max(uSkyTint * sky, vec3(1.0, 0.82, 0.58) * blk), uAmbient);
+      vec3 warm = vec3(1.0, 0.82, 0.58);
+      vec3 l;
+      if (uReal > 0.5) {
+        // Lumière réaliste : couleurs des sources, flammes qui vacillent, portée un peu plus
+        // grande, et lumière des blocs qui s'ajoute à celle du jour (une torche éclaire aussi
+        // un coin sombre en plein jour)
+        blk = pow(0.85, (1.0 - lv.y) * 15.0);
+        if (flick > 0.5) blk *= 0.9 + 0.1 * sin(uLTime * 11.0 + pos.x * 1.7 + pos.z * 1.3) * sin(uLTime * 7.3 + pos.y * 2.1 + pos.x);
+        blk *= 1.0 + 0.3 * pow(lv.y, 8.0);
+        float hf = 0.93 + 0.07 * sin(uLTime * 9.0) * sin(uLTime * 5.3);
+        vec3 bl = max(bcol * blk, uHeldCol * held * hf);
+        vec3 sl = uSkyTint * sky;
+        l = max(sl + bl * (1.0 - 0.4 * min(sl, vec3(1.0))), uAmbient);
+      } else {
+        blk = max(blk, held);
+        // (Nether : lueur ambiante rougeâtre, il n'y a pas de ciel)
+        l = max(max(uSkyTint * sky, warm * blk), uAmbient);
+      }
       // luminosité (option) : courbe gamma + lumière ambiante minimale
       l = pow(l, vec3(1.15 - uBright * 0.5));
       return clamp(l + vec3(0.03, 0.03, 0.045) * (0.6 + uBright * 1.4), 0.0, 1.1);
@@ -30,6 +46,9 @@
     uniform vec3 uSkyTint;
     uniform vec3 uAmbient;
     uniform vec4 uHeld;
+    uniform vec3 uHeldCol;
+    uniform float uReal;
+    uniform float uLTime;
     uniform vec3 uFogColor;
     uniform vec2 uFog;
     uniform vec3 uCam;
@@ -40,6 +59,7 @@
     layout(location=0) in ivec4 aPos;
     layout(location=1) in float aLayer;
     layout(location=2) in vec4 aData;
+    layout(location=3) in uint aCol;
     uniform mat4 uViewProj;
     uniform vec3 uOffset;
     uniform float uTime;
@@ -50,6 +70,8 @@
     out float vShade;
     out vec3 vPos;
     out float vIsWater;
+    out vec3 vCol;
+    out float vFlick;
     void main() {
       vec3 p = vec3(aPos.xyz) / 16.0 + uOffset;
       float uvp = float(aPos.w);
@@ -71,6 +93,8 @@
         p.z += sw * 0.6;
       }
       vUV = vec3(u / 16.0, v / 16.0, aLayer);
+      vCol = aCol == 0u ? vec3(1.0, 0.82, 0.58) : vec3(float((aCol >> 11) & 31u) / 31.0, float((aCol >> 5) & 63u) / 63.0, float(aCol & 31u) / 31.0);
+      vFlick = (fl & 8) != 0 ? 1.0 : 0.0;
       vLight = aData.xy / 255.0;
       vShade = aData.z / 255.0;
       vPos = p;
@@ -88,6 +112,8 @@
     in float vShade;
     in vec3 vPos;
     in float vIsWater;
+    in vec3 vCol;
+    in float vFlick;
     out vec4 outColor;
     ${LIGHT_FN}
     void main() {
@@ -95,7 +121,7 @@
       if (vIsWater > 0.5) uv += vec2(uTime * 0.015, uTime * 0.03);
       vec4 tex = texture(uTex, vec3(uv, vUV.z));
       if (uWater < 0.5 && tex.a < 0.5) discard;
-      vec3 col = tex.rgb * shadeLight(vLight, vPos) * vShade;
+      vec3 col = tex.rgb * shadeLight(vLight, vPos, vCol, vFlick) * vShade;
       col = applyFog(col, vPos);
       outColor = vec4(col, uWater > 0.5 ? (vIsWater > 0.5 ? 0.78 : tex.a) : 1.0);
     }`;
@@ -122,6 +148,7 @@
     uniform vec2 uScroll;
     uniform float uAlphaMul;
     uniform float uNoFog;
+    uniform vec3 uEntCol;
     ${COMMON_UNIFORMS}
     in vec3 vUV;
     in vec4 vL;
@@ -134,10 +161,36 @@
       float flags = vL.w;
       vec3 col;
       if (flags > 0.5 && flags < 1.5) col = tex.rgb;             // émissif
-      else col = tex.rgb * shadeLight(vL.xy, vPos) * vL.z;
+      else col = tex.rgb * shadeLight(vL.xy, vPos, uEntCol, 0.0) * vL.z;
       if (flags > 1.5 && flags < 2.5) col = mix(col, vec3(1.0, 0.15, 0.1), 0.55); // blessé
       if (uNoFog < 0.5) col = applyFog(col, vPos);
       outColor = vec4(col, tex.a * uAlphaMul);
+    }`;
+
+  // Halos des sources de lumière (extension Lumière réaliste) : disques additifs face caméra.
+  const GLOW_VS = `#version 300 es
+    precision highp float;
+    layout(location=0) in vec3 aPos;
+    layout(location=1) in vec2 aUV;
+    layout(location=2) in vec4 aCol;
+    uniform mat4 uViewProj;
+    out vec2 vUV;
+    out vec4 vCol;
+    void main() {
+      vUV = aUV;
+      vCol = aCol;
+      gl_Position = uViewProj * vec4(aPos, 1.0);
+    }`;
+  const GLOW_FS = `#version 300 es
+    precision highp float;
+    in vec2 vUV;
+    in vec4 vCol;
+    out vec4 outColor;
+    void main() {
+      float d = length(vUV);
+      if (d > 1.0) discard;
+      float a = (0.55 * pow(1.0 - d, 4.0) + 0.45 * pow(1.0 - d, 1.6)) * vCol.a;
+      outColor = vec4(vCol.rgb * a, a);
     }`;
 
   const SKY_VS = `#version 300 es
@@ -313,6 +366,7 @@
       this.gl = gl;
       this.chunk = compile(gl, CHUNK_VS, CHUNK_FS);
       this.ent = compile(gl, ENT_VS, ENT_FS);
+      this.glowProg = compile(gl, GLOW_VS, GLOW_FS);
       this.sky = compile(gl, SKY_VS, SKY_FS);
       this.line = compile(gl, LINE_VS, LINE_FS);
       this.proj = mat4.create();
@@ -373,6 +427,19 @@
       gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 40, 24);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
       gl.bindVertexArray(null);
+      // halos
+      this.glowVbo = gl.createBuffer();
+      this.glowVao = gl.createVertexArray();
+      gl.bindVertexArray(this.glowVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.glowVbo);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 36, 12);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 36, 20);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+      gl.bindVertexArray(null);
       // lignes
       this.lineVbo = gl.createBuffer();
       this.lineVao = gl.createVertexArray();
@@ -419,6 +486,8 @@
       gl.vertexAttribPointer(1, 1, gl.UNSIGNED_SHORT, false, S, 8);
       gl.enableVertexAttribArray(2);
       gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, false, S, 10);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribIPointer(3, 1, gl.UNSIGNED_SHORT, S, 14);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
       gl.bindVertexArray(null);
       return { vao, vbo, quads: mesh.quads };
@@ -444,6 +513,7 @@
       this.sections.set(k, {
         opaque: m.opaque ? this.makeMesh(m.opaque) : null,
         water: m.water ? this.makeMesh(m.water) : null,
+        emit: m.emit || null,
         cx, sy, cz,
       });
       world.dirty.delete(k);
@@ -507,6 +577,10 @@
       gl.uniform3fv(u.uSkyTint, env.skyTint);
       if (u.uAmbient) gl.uniform3fv(u.uAmbient, env.ambient || [0, 0, 0]);
       gl.uniform4fv(u.uHeld, env.held);
+      if (u.uHeldCol) gl.uniform3fv(u.uHeldCol, env.heldCol || [1, 0.82, 0.58]);
+      if (u.uReal) gl.uniform1f(u.uReal, env.real ? 1 : 0);
+      if (u.uLTime) gl.uniform1f(u.uLTime, env.time || 0);
+      if (u.uEntCol) gl.uniform3fv(u.uEntCol, env.real && env.entCol ? env.entCol : [1, 0.82, 0.58]);
       gl.uniform3fv(u.uFogColor, env.fogColor);
       gl.uniform2fv(u.uFog, env.fog);
       gl.uniform3fv(u.uCam, env.cam);
@@ -649,6 +723,20 @@
       gl.bindVertexArray(null);
       gl.disable(gl.CULL_FACE);
       if (state.translucent && state.translucent.n) this.drawBatch(state.translucent, this.viewProj, env, { alpha: 0.85 });
+      // halos : lumière additive, sans écrire la profondeur
+      if (state.glow && state.glow.quads) {
+        const gp = this.glowProg;
+        this.ensureIndices(state.glow.quads);
+        gl.useProgram(gp.p);
+        gl.uniformMatrix4fv(gp.u.uViewProj, false, this.viewProj);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.bindVertexArray(this.glowVao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.glowVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, state.glow.data.subarray(0, state.glow.quads * 36), gl.STREAM_DRAW);
+        gl.drawElements(gl.TRIANGLES, state.glow.quads * 6, gl.UNSIGNED_INT, 0);
+        gl.bindVertexArray(null);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      }
       gl.depthMask(true);
 
       // Main / objet tenu
@@ -656,7 +744,7 @@
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.disable(gl.BLEND);
         mat4.perspective(this.tmp, (70 * Math.PI) / 180, aspect, 0.01, 10);
-        this.drawBatch(state.hand, this.tmp, Object.assign({}, env, { held: [0, 0, 0, env.held[3]] }), { noFog: true });
+        this.drawBatch(state.hand, this.tmp, Object.assign({}, env, { held: [0, 0, 0, env.held[3]], entCol: env.handCol }), { noFog: true });
       }
       gl.disable(gl.BLEND);
     }

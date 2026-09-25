@@ -196,6 +196,31 @@
       case 'bounce':
         tone(t, 0.2, 'sine', 180, 520, 0.2);
         break;
+      case 'rsclick':
+        // levier, bouton, plaque : petit clic mécanique
+        tone(t, 0.05, 'square', 1500 * pitch, 900 * pitch, 0.08);
+        noise(t, 0.04, 'highpass', 2500, 1, 0.1);
+        break;
+      case 'piston':
+        // piston : souffle et choc de bois
+        noise(t, opt.out ? 0.18 : 0.14, 'bandpass', opt.out ? 700 : 500, 1.2, 0.3, opt.out ? 1400 : 300);
+        tone(t, 0.08, 'triangle', opt.out ? 180 : 140, opt.out ? 120 : 90, 0.15);
+        break;
+      case 'dispense':
+        tone(t, 0.06, 'square', 1200, 1100, 0.06);
+        noise(t + 0.02, 0.08, 'bandpass', 1800, 2, 0.1);
+        break;
+      case 'bow':
+        tone(t, 0.18, 'triangle', 420 * pitch, 180 * pitch, 0.12);
+        noise(t, 0.15, 'bandpass', 900, 1.5, 0.12, 400);
+        break;
+      case 'arrowhit':
+        noise(t, 0.06, 'bandpass', 2200, 3, 0.18);
+        tone(t, 0.05, 'square', 600, 300, 0.05);
+        break;
+      case 'cart':
+        noise(t, 0.3, 'lowpass', 500 * pitch, 0.7, 0.12 * (opt.vol || 1));
+        break;
       case 'portal':
         // portail : bourdonnement qui monte en tournoyant
         tone(t, 1.8, 'sine', 70, 240, 0.14, 0.5);

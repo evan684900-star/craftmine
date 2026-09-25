@@ -44,7 +44,8 @@
         this.u8[o8 + 10] = sky[k];
         this.u8[o8 + 11] = blk[k];
         this.u8[o8 + 12] = shade[k];
-        this.u8[o8 + 13] = flags || 0;
+        this.u8[o8 + 13] = (flags || 0) | fk4[k];
+        this.u16[o16 + 7] = col4[k];
       }
       this.n++;
     }
@@ -88,7 +89,43 @@
   const OPQ = new Uint8Array(65536); // cube plein opaque (cache les faces voisines)
   const SHAPE_H = new Uint8Array(65536); // hauteur (1/16) des blocs partiels opaques (dalles, tapis)
   const WAVE = new Uint8Array(65536); // ondule au vent
+  const ORIENT = new Uint8Array(65536); // orientation (+1) des blocs tournés : textures pivotées
   let LAYERS = null; // couches de texture par bloc et par face
+  // Rotation des coordonnées de texture (quarts de tour autour du centre).
+  const rotUV = (t, k) => {
+    const u = t[3], v = t[4];
+    if (k === 1) { t[3] = 16 - v; t[4] = u; } else if (k === 2) { t[3] = 16 - u; t[4] = 16 - v; } else if (k === 3) { t[3] = v; t[4] = 16 - u; }
+  };
+  // ROTK[face * 6 + d] : quarts de tour pour que le « haut » de la texture pointe vers d
+  // (faces perpendiculaires à d ; les faces avant et arrière gardent leur sens).
+  const ROTK = new Uint8Array(36);
+  {
+    const DV = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (let fi = 0; fi < 6; fi++) {
+      const f = FACES[fi];
+      for (let d = 0; d < 6; d++) {
+        if (Math.abs(f.n[0] * DV[d][0] + f.n[1] * DV[d][1] + f.n[2] * DV[d][2]) === 1) continue;
+        for (let k = 0; k < 4; k++) {
+          const uv = f.v.map((v) => {
+            const t = [0, 0, 0, v[3], v[4]];
+            rotUV(t, k);
+            return t;
+          });
+          let dir = null;
+          for (let a = 0; a < 4 && !dir; a++)
+            for (let c = 0; c < 4; c++)
+              if (a !== c && uv[a][3] === uv[c][3] && uv[a][4] < uv[c][4]) {
+                dir = [f.v[a][0] - f.v[c][0], f.v[a][1] - f.v[c][1], f.v[a][2] - f.v[c][2]];
+                break;
+              }
+          if (dir && dir[0] === DV[d][0] && dir[1] === DV[d][1] && dir[2] === DV[d][2]) {
+            ROTK[fi * 6 + d] = k;
+            break;
+          }
+        }
+      }
+    }
+  }
   const opts = { smoothLight: true, waving: true };
   CM.Mesher = {
     opts,
@@ -105,8 +142,26 @@
         OPQ[id] = b.opaque && b.render === 'cube' ? 1 : 0;
         if ((b.render === 'slab' || b.render === 'carpet') && b.opaque) SHAPE_H[id] = Math.round(b.height * 16);
         WAVE[id] = b.wave ? 1 : 0;
-        if (b.tex) LAYERS[id] = [L[b.tex.side], L[b.tex.side], L[b.tex.top], L[b.tex.bottom], L[b.tex.front], L[b.tex.back || b.tex.side]];
+        ORIENT[id] = b.orient !== undefined ? b.orient + 1 : 0;
+        const lay = (n) => {
+          if (L[n] === undefined) console.warn('Texture manquante : ' + n + ' (' + b.key + ')');
+          return L[n] === undefined ? L.stone : L[n];
+        };
+        if (b.tex) LAYERS[id] = b.faces ? b.faces.map(lay) : [L[b.tex.side], L[b.tex.side], L[b.tex.top], L[b.tex.bottom], L[b.tex.front], L[b.tex.back || b.tex.side]];
+        // modèles : boîtes avec leurs textures (une ou six)
+        if (b.model) b._parts = b.model.map((q) => ({ b: q.b, L: typeof q.t === 'string' ? [0, 0, 0, 0, 0, 0].map(() => lay(q.t)) : q.t.map(lay) }));
       }
+      // palette des couleurs de lumière (extension Lumière réaliste, voir light.js)
+      EMIT.fill(0);
+      for (const [i, e] of (CM.LIGHT_PAL || []).entries()) {
+        PR[i] = e.c[0];
+        PG[i] = e.c[1];
+        PB[i] = e.c[2];
+        PF[i] = e.f ? 1 : 0;
+      }
+      for (const b of CM.blocks) if (b && b.light >= 6 && !b.portal && b.render !== 'water' && b.render !== 'lava') EMIT[b.id] = 1;
+      SPECIAL.dust = [L.rs_dust_line, L.rs_dust_dot, L.rs_dust_cross];
+      SPECIAL.bedrock = [0, 0, 0, 0, 0, 0].map(() => L.bedrock);
       CM.blockLayers = LAYERS;
     },
     build,
@@ -114,6 +169,40 @@
 
   const padId = new Uint16Array(P * P * P);
   const padL = new Uint8Array(P * P * P);
+  const padC = new Uint8Array(P * P * P); // couleur de la lumière des blocs (index de palette)
+  // Couleur de la lumière par sommet (RGB565, 0 = teinte chaude par défaut) et vacillement (drapeau 8)
+  const col4 = [0, 0, 0, 0], fk4 = [0, 0, 0, 0];
+  const PR = new Float32Array(256).fill(1), PG = new Float32Array(256).fill(0.82), PB = new Float32Array(256).fill(0.58), PF = new Uint8Array(256);
+  const EMIT = new Uint8Array(65536); // sources de lumière (halos, flammes)
+  let cr = 0, cg = 0, cb = 0, cw = 0, cf = 0;
+  const colAdd = (q) => {
+    const lb = padL[q] & 15;
+    if (!lb) return;
+    const w = lb * lb * lb, ci = padC[q];
+    cr += PR[ci] * w;
+    cg += PG[ci] * w;
+    cb += PB[ci] * w;
+    cf += PF[ci] * w;
+    cw += w;
+  };
+  const colOut = (k) => {
+    if (!cw) {
+      col4[k] = 0;
+      fk4[k] = 0;
+    } else {
+      const r = Math.min(31, Math.round((cr / cw) * 31)), g = Math.min(63, Math.round((cg / cw) * 63)), b = Math.min(31, Math.round((cb / cw) * 31));
+      col4[k] = (r << 11) | (g << 5) | b || 1;
+      fk4[k] = cf / cw > 0.5 ? 8 : 0;
+    }
+    cr = cg = cb = cw = cf = 0;
+  };
+  function setColFlat(q) {
+    colAdd(q);
+    colOut(0);
+    col4[1] = col4[2] = col4[3] = col4[0];
+    fk4[1] = fk4[2] = fk4[3] = fk4[0];
+  }
+  const SPECIAL = {}; // couches utiles aux rendus particuliers (fil de redstone…)
   const opaqueBuf = new QuadBuf(4096);
   const waterBuf = new QuadBuf(1024);
   const vs = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
@@ -140,6 +229,7 @@
       for (let pz = 0; pz < P; pz++) {
         const cz3 = PADC[pz] * 3, lz = PADL[pz];
         for (let px = 0; px < P; px++, p++) {
+          padC[p] = 0;
           if (y < MINY) {
             padId[p] = BORDER;
             padL[p] = 0;
@@ -160,6 +250,7 @@
           const id = c.blocks[i];
           padId[p] = id;
           padL[p] = c.light[i];
+          padC[p] = c.lcol[i];
           if (id && px > 0 && px < 17 && py > 0 && py < 17 && pz > 0 && pz < 17) solidCount++;
         }
       }
@@ -175,20 +266,23 @@
     for (let k = 0; k < 4; k++) {
       const [s1, s2, c] = f.ao[k];
       let ls = padL[n] >> 4, lb = padL[n] & 15;
+      colAdd(n);
       if (!smooth || self) {
         ao4[k] = 3;
         sky4[k] = Math.round(ls * 17);
         blk4[k] = Math.round(lb * 17);
+        colOut(k);
         continue;
       }
       const o1 = OPQ[padId[p + s1]], o2 = OPQ[padId[p + s2]], oc = OPQ[padId[p + c]];
       ao4[k] = smoothAO ? (o1 && o2 ? 0 : 3 - o1 - o2 - oc) : 3;
       let cnt = 1;
-      if (!o1) { cnt++; ls += padL[p + s1] >> 4; lb += padL[p + s1] & 15; }
-      if (!o2) { cnt++; ls += padL[p + s2] >> 4; lb += padL[p + s2] & 15; }
-      if (!oc && !(o1 && o2)) { cnt++; ls += padL[p + c] >> 4; lb += padL[p + c] & 15; }
+      if (!o1) { cnt++; ls += padL[p + s1] >> 4; lb += padL[p + s1] & 15; colAdd(p + s1); }
+      if (!o2) { cnt++; ls += padL[p + s2] >> 4; lb += padL[p + s2] & 15; colAdd(p + s2); }
+      if (!oc && !(o1 && o2)) { cnt++; ls += padL[p + c] >> 4; lb += padL[p + c] & 15; colAdd(p + c); }
       sky4[k] = Math.round((ls / cnt) * 17);
       blk4[k] = Math.round((lb / cnt) * 17);
+      colOut(k);
     }
   }
 
@@ -210,7 +304,8 @@
     opaqueBuf.reset();
     waterBuf.reset();
     const count = fillPad(world, cx, sy, cz);
-    if (count === 0) return { opaque: null, water: null };
+    if (count === 0) return { opaque: null, water: null, emit: null };
+    const emit = [];
     const defs = CM.blocks;
     const WATERY = CM.WATERY;
     const waving = opts.waving;
@@ -230,6 +325,8 @@
           if (id === 0) continue;
           const b = defs[id];
           const bx = lx * 16, by = ly * 16, bz = lz * 16;
+          col4[0] = col4[1] = col4[2] = col4[3] = fk4[0] = fk4[1] = fk4[2] = fk4[3] = 0;
+          if (EMIT[id] && emit.length < 256) emit.push(cx * 16 + lx, MINY + sy * 16 + ly, cz * 16 + lz, id);
           const r = b.render;
           const wflag = waving && WAVE[id] ? 1 : 0;
           if (r === 'cube' || r === 'glass') {
@@ -240,6 +337,10 @@
               if (OPQ[nid] || (nid === id && r === 'glass')) continue;
               faceLighting(p, f, true, false);
               setVerts(f, bx, by, bz, FACE_SHADE[fi], 16, true);
+              if (ORIENT[id]) {
+                const k = ROTK[fi * 6 + ORIENT[id] - 1];
+                if (k) for (let q = 0; q < 4; q++) rotUV(vs[q], k);
+              }
               emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3], wflag);
             }
           } else if (r === 'slab' || r === 'carpet') {
@@ -335,6 +436,7 @@
             }
           } else if (r === 'cross') {
             const l = padL[p];
+            setColFlat(p);
             const s = Math.round((l >> 4) * 17), bl = Math.round((l & 15) * 17);
             for (let k = 0; k < 4; k++) {
               sky4[k] = s;
@@ -350,6 +452,33 @@
             solidBox(opaqueBuf, LAYERS[id], bx, by, bz, b.box, p);
           } else if (r === 'boxes') {
             for (const q of b.boxes) solidBox(opaqueBuf, LAYERS[id], bx, by, bz, q, p);
+          } else if (r === 'model') {
+            const o = ORIENT[id];
+            for (const q of b._parts) solidBox(opaqueBuf, q.L, bx, by, bz, q.b, p, o);
+          } else if (r === 'rsdiode') {
+            // répéteur, comparateur : un répéteur alimenté par le côté est verrouillé (barre)
+            const o = ORIENT[id], rs = b.rs;
+            let locked = false;
+            if (rs.k === 'repeater') {
+              for (const s of rs.facing === 0 || rs.facing === 1 ? [4, 5] : [0, 1]) {
+                const nb = defs[padId[p + NOFF[s]]];
+                const nr = nb && nb.rs;
+                if (nr && (nr.k === 'repeater' || nr.k === 'comparator') && nr.facing === OPP6[s] && nr.on) locked = true;
+              }
+            }
+            for (let i = 0; i < b._parts.length; i++) if (!(locked && i === b.lockPart)) solidBox(opaqueBuf, b._parts[i].L, bx, by, bz, b._parts[i].b, p, o);
+            if (locked) solidBox(opaqueBuf, SPECIAL.bedrock, bx, by, bz, b.lockBar, p, o);
+          } else if (r === 'cable') {
+            // câble électrique : un nœud et un bras vers chaque bloc électrique voisin
+            solidBox(opaqueBuf, LAYERS[id], bx, by, bz, [5, 5, 5, 11, 11, 11], p);
+            for (let d = 0; d < 6; d++) {
+              const nb = defs[padId[p + NOFF[d]]];
+              if (nb && nb.tech) solidBox(opaqueBuf, LAYERS[id], bx, by, bz, CABLE_ARM[d], p);
+            }
+          } else if (r === 'wire' || r === 'tripwire') {
+            meshWire(b, id, p, bx, by, bz, r === 'wire');
+          } else if (r === 'rail') {
+            meshRail(b, id, p, bx, by, bz);
           } else if (r === 'fire') {
             // flammes : deux plans en croix et quatre plans près des bords, toujours lumineux
             for (let k = 0; k < 4; k++) {
@@ -365,10 +494,13 @@
             crossQuad(bx, bz + 1, bx + 16, bz + 1, by, layer, ff);
             crossQuad(bx, bz + 15, bx + 16, bz + 15, by, layer, ff);
           } else if (r === 'torch') {
+            // torche allumée : pleine lumière ; torche de redstone éteinte : lumière de la case
+            const l = padL[p];
+            setColFlat(p);
             for (let k = 0; k < 4; k++) {
-              sky4[k] = 255;
-              blk4[k] = 255;
-              sh4[k] = 255;
+              sky4[k] = b.light ? 255 : Math.round((l >> 4) * 17);
+              blk4[k] = b.light ? 255 : Math.round((l & 15) * 17);
+              sh4[k] = b.light ? 255 : 230;
             }
             if (b.wall) {
               // torche murale : pied contre le mur, penchée vers l'extérieur (sommet décalé de 4/16)
@@ -379,6 +511,7 @@
           }
         }
     return {
+      emit: emit.length ? emit : null,
       opaque: opaqueBuf.n ? opaqueBuf.result() : null,
       water: waterBuf.n ? waterBuf.result() : null,
     };
@@ -391,6 +524,9 @@
       sky4[0] = sky4[1]; sky4[1] = sky4[2]; sky4[2] = sky4[3]; sky4[3] = s0;
       blk4[0] = blk4[1]; blk4[1] = blk4[2]; blk4[2] = blk4[3]; blk4[3] = b0;
       sh4[0] = sh4[1]; sh4[1] = sh4[2]; sh4[2] = sh4[3]; sh4[3] = h0;
+      const c0 = col4[0], f0 = fk4[0];
+      col4[0] = col4[1]; col4[1] = col4[2]; col4[2] = col4[3]; col4[3] = c0;
+      fk4[0] = fk4[1]; fk4[1] = fk4[2]; fk4[2] = fk4[3]; fk4[3] = f0;
       buf.quad(vtmp, layer, sky4, blk4, sh4, flags);
     } else buf.quad(vs, layer, sky4, blk4, sh4, flags);
   }
@@ -405,8 +541,9 @@
 
   // Boîte pleine (porte) dans la case : box = [x0, y0, z0, x1, y1, z1] en 1/16 de bloc.
   // Texture calée sur la grille du bloc, éclairage de la case elle-même.
-  function solidBox(buf, layers, bx, by, bz, box, p) {
+  function solidBox(buf, layers, bx, by, bz, box, p, orient) {
     const l = padL[p];
+    setColFlat(p);
     const s = Math.round((l >> 4) * 17), bl = Math.round((l & 15) * 17);
     const [x0, y0, z0, x1, y1, z1] = box;
     for (let fi = 0; fi < 6; fi++) {
@@ -433,8 +570,142 @@
         blk4[k] = bl;
         sh4[k] = sh;
       }
+      if (orient) {
+        const k = ROTK[fi * 6 + orient - 1];
+        if (k) for (let q = 0; q < 4; q++) rotUV(vs[q], k);
+      }
       buf.quad(vs, layers[fi], sky4, blk4, sh4, 0);
     }
+  }
+
+  // ---- fil de redstone et ficelle : lignes à plat, reliées aux voisins ----
+  const NOFF = [padOff(1, 0, 0), padOff(-1, 0, 0), padOff(0, 1, 0), padOff(0, -1, 0), padOff(0, 0, 1), padOff(0, 0, -1)];
+  const OPP6 = [1, 0, 3, 2, 5, 4];
+  const CABLE_ARM = [[11, 6, 6, 16, 10, 10], [0, 6, 6, 5, 10, 10], [6, 11, 6, 10, 16, 10], [6, 0, 6, 10, 5, 10], [6, 6, 11, 10, 10, 16], [6, 6, 0, 10, 10, 5]];
+  const HD4 = [0, 1, 4, 5];
+  let wireP = 0;
+  const wireGet = (dx, dy, dz) => {
+    const id = padId[wireP + padOff(dx, dy, dz)];
+    return id === BORDER ? 0 : id;
+  };
+  // Quad horizontal (dessus) entre (x0, z0) et (x1, z1) à la hauteur y ; uv : 0 texture droite, 1 tournée.
+  function flatQuad(x0, z0, x1, z1, y, layer, rot, flags) {
+    const q = [[x0, z1], [x1, z1], [x1, z0], [x0, z0]];
+    for (let k = 0; k < 4; k++) {
+      const t = vs[k];
+      t[0] = q[k][0];
+      t[1] = y;
+      t[2] = q[k][1];
+      // coordonnées de texture d'après la position dans la case
+      const lx = t[0] - flatQuad.bx, lz = t[2] - flatQuad.bz;
+      if (rot) {
+        t[3] = lz;
+        t[4] = lx;
+      } else {
+        t[3] = lx;
+        t[4] = lz;
+      }
+    }
+    opaqueBuf.quad(vs, layer, sky4, blk4, sh4, flags || 0);
+  }
+  function meshWire(b, id, p, bx, by, bz, isDust) {
+    wireP = p;
+    const l = padL[p];
+    setColFlat(p);
+    let sky = Math.round((l >> 4) * 17), bl = Math.round((l & 15) * 17), sh = 235;
+    let layers, sides, up = 0;
+    if (isDust) {
+      const c = CM.RSX.wireConn(wireGet);
+      sides = c.sides;
+      up = c.up;
+      const lv = b.rs.level;
+      sh = Math.round(255 * (0.32 + 0.68 * (lv / 15)));
+      bl = Math.max(bl, lv * 9);
+      layers = SPECIAL.dust;
+    } else {
+      sides = CM.RSX.tripConn(wireGet);
+      layers = [LAYERS[id][0], LAYERS[id][0], LAYERS[id][0]];
+    }
+    for (let k = 0; k < 4; k++) {
+      sky4[k] = sky;
+      blk4[k] = bl;
+      sh4[k] = sh;
+    }
+    flatQuad.bx = bx;
+    flatQuad.bz = bz;
+    const y = by + 1;
+    const E = sides & 1, W = sides & 2, S = sides & 4, N = sides & 8;
+    const cnt = (E ? 1 : 0) + (W ? 1 : 0) + (S ? 1 : 0) + (N ? 1 : 0);
+    if (cnt === 0) {
+      if (isDust) flatQuad(bx, bz, bx + 16, bz + 16, y, layers[2], 0);
+      else flatQuad(bx, bz, bx + 16, bz + 16, y, layers[0], 0);
+    } else if (!(E || W)) flatQuad(bx, bz, bx + 16, bz + 16, y, layers[0], 0); // nord-sud
+    else if (!(S || N)) flatQuad(bx, bz, bx + 16, bz + 16, y, layers[0], 1); // est-ouest
+    else {
+      if (isDust) flatQuad(bx + 4, bz + 4, bx + 12, bz + 12, y, layers[1], 0);
+      if (E) flatQuad(bx + 8, bz, bx + 16, bz + 16, y, layers[0], 1);
+      if (W) flatQuad(bx, bz, bx + 8, bz + 16, y, layers[0], 1);
+      if (S) flatQuad(bx, bz + 8, bx + 16, bz + 16, y, layers[0], 0);
+      if (N) flatQuad(bx, bz, bx + 16, bz + 8, y, layers[0], 0);
+    }
+    // le fil grimpe sur le flanc du bloc voisin
+    if (up) {
+      for (let k = 0; k < 4; k++) {
+        if (!(up & (1 << k))) continue;
+        const d = HD4[k];
+        const xa = d === 0 ? bx + 15 : d === 1 ? bx + 1 : bx, xb = d === 0 ? bx + 15 : d === 1 ? bx + 1 : bx + 16;
+        const za = d === 4 ? bz + 15 : d === 5 ? bz + 1 : bz, zb = d === 4 ? bz + 15 : d === 5 ? bz + 1 : bz + 16;
+        const q = [[xa, by, za, 0, 16], [xb, by, zb, 16, 16], [xb, by + 16, zb, 16, 0], [xa, by + 16, za, 0, 0]];
+        for (let i = 0; i < 4; i++) {
+          const t = vs[i];
+          t[0] = q[i][0];
+          t[1] = q[i][1];
+          t[2] = q[i][2];
+          // ligne verticale : u à travers la face, v le long de la hauteur
+          t[3] = q[i][3];
+          t[4] = q[i][4];
+        }
+        opaqueBuf.quad(vs, layers[0], sky4, blk4, sh4, 0);
+        vtmp[0] = vs[3]; vtmp[1] = vs[2]; vtmp[2] = vs[1]; vtmp[3] = vs[0];
+        opaqueBuf.quad(vtmp, layers[0], sky4, blk4, sh4, 0);
+      }
+    }
+  }
+  // ---- rails : à plat, en montée ou en virage ----
+  function meshRail(b, id, p, bx, by, bz) {
+    const l = padL[p];
+    setColFlat(p);
+    const sky = Math.round((l >> 4) * 17), bl = Math.round((l & 15) * 17);
+    for (let k = 0; k < 4; k++) {
+      sky4[k] = sky;
+      blk4[k] = bl;
+      sh4[k] = 235;
+    }
+    const s = b.rs.shape, layer = LAYERS[id][0];
+    // coins (0,0) (16,0) (16,16) (0,16) : hauteurs selon la montée
+    const h = [1, 1, 1, 1];
+    if (s === 2) { h[1] = h[2] = 17; } // monte vers l'est (+x)
+    else if (s === 3) { h[0] = h[3] = 17; } // vers l'ouest
+    else if (s === 4) { h[2] = h[3] = 17; } // vers le sud (+z)
+    else if (s === 5) { h[0] = h[1] = 17; } // vers le nord
+    const cx = [0, 16, 16, 0], cz = [0, 0, 16, 16];
+    // rotation de la texture : rails droits dessinés nord-sud, virage dessiné sud-est
+    // (un quart de tour de rotUV fait tourner la texture dans le sens inverse des aiguilles d'une montre)
+    const rot = s === 1 || s === 2 || s === 3 ? 1 : s === 7 ? 3 : s === 8 ? 2 : s === 9 ? 1 : 0;
+    const order = [3, 2, 1, 0];
+    for (let i = 0; i < 4; i++) {
+      const c = order[i];
+      const t = vs[i];
+      t[0] = bx + cx[c];
+      t[1] = by + h[c];
+      t[2] = bz + cz[c];
+      t[3] = cx[c];
+      t[4] = cz[c];
+      if (rot) rotUV(t, rot);
+    }
+    opaqueBuf.quad(vs, layer, sky4, blk4, sh4, 0);
+    vtmp[0] = vs[3]; vtmp[1] = vs[2]; vtmp[2] = vs[1]; vtmp[3] = vs[0];
+    opaqueBuf.quad(vtmp, layer, sky4, blk4, sh4, 0);
   }
 
   // Petite boîte (torche) avec coordonnées de texture personnalisées.

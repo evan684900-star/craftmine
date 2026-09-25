@@ -73,6 +73,8 @@
       this.eyeOffset = 0;
       this.aimDir = null; // écran tactile : direction du doigt (sinon, le centre de l'écran)
       this.sleeping = null; // { x, y, z, t0 } : couché dans un lit
+      this.riding = null; // wagonnet où l'on est assis (identifiant)
+      this.bowT = 0; // arc bandé depuis (secondes)
     }
 
     get creative() {
@@ -178,6 +180,34 @@
 
       const under = CM.blocks[w.get(fx, Math.floor(this.y - 0.05), fz)];
       this.sneaking = !this.flying && !!k[K.sneak] && !this.inFluid;
+      // assis dans un wagonnet : on suit le wagonnet (s'accroupir pour descendre)
+      if (this.riding !== null && this.riding !== undefined) {
+        const c = (g.entities.carts || []).find((o) => o.uid === this.riding && !o.dead);
+        if (!c || (!g.net.isClient && c.rider !== 'local') || input.pressed[K.sneak]) this.leaveCart(c);
+        else {
+          this.x = c.x;
+          this.y = c.y + 0.25;
+          this.z = c.z;
+          this.vx = this.vy = this.vz = 0;
+          this.fallStart = this.y;
+          this.onGround = true;
+          this.flying = this.sneaking = this.sprinting = false;
+          this.eyeOffset = 0.3;
+          this.cartPush = wl > 0 && f > 0 ? [wx, wz] : null;
+          if (g.net.isClient) {
+            this.cpushT = (this.cpushT || 0) - dt;
+            if (this.cpushT <= 0 && (this.cartPush || this.cpushSent)) {
+              this.cpushT = 0.2;
+              this.cpushSent = !!this.cartPush;
+              g.net.send({ t: 'cpush', v: this.cartPush ? [Math.round(wx * 100) / 100, Math.round(wz * 100) / 100] : [0, 0] });
+            }
+          }
+          this.updateVitals(dt, wasHeadIn);
+          this.updateTarget();
+          this.updateActions(dt, input);
+          return;
+        }
+      }
       this.eyeOffset += ((this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
       // course : maintenir ou basculer (option)
       const sprintKey = !!k[K.sprint];
@@ -379,6 +409,8 @@
         if (this.stepDist > (this.sprinting ? 2.2 : 1.8)) {
           this.stepDist = 0;
           CM.Audio.play('step', { mat: this.matUnder() });
+          // les pas font vibrer les capteurs de sculk (sauf accroupi, comme dans Minecraft)
+          if (!this.sneaking && g.ticks.rs && !g.net.isClient && g.dim === g.playerDim) g.ticks.rs.vibrate(this.x, this.y + 0.5, this.z);
         }
       } else this.bobAmp = Math.max(0, this.bobAmp - dt * 4);
 
@@ -424,9 +456,44 @@
         this.portalT = Math.max(0, (this.portalT || 0) - dt * 2);
       }
 
+      // tapis roulants et ventilateurs (extension Électricité)
+      if (CM.Tech) CM.Tech.playerTick(g, this, dt);
+
       // ----- visée, minage, combat, utilisation
       this.updateTarget();
       this.updateActions(dt, input);
+    }
+
+    // Wagonnets : monter, descendre.
+    rideCart(c) {
+      const g = this.game;
+      if (c.type !== 'cart' || (c.rider !== null && c.rider !== undefined)) return false;
+      if (g.net.isClient) g.net.send({ t: 'ride', id: c.uid });
+      else if (!g.entities.mount(c, 'local')) return false;
+      this.riding = c.uid;
+      this.mining = null;
+      return true;
+    }
+    leaveCart(c) {
+      const g = this.game;
+      this.riding = null;
+      this.cartPush = null;
+      this.eyeOffset = 0;
+      if (g.net.isClient) g.net.send({ t: 'unride' });
+      else if (c && c.rider === 'local') c.rider = null;
+      if (c) this.y = c.y + 0.1;
+      this.fallStart = this.y;
+    }
+    // Arc : la flèche part d'autant plus vite que l'arc a été bandé longtemps (1 s = pleine puissance).
+    shootBow() {
+      const g = this.game, f = Math.min(1, this.bowT);
+      const power = Math.min(1, (f * f + 2 * f) / 3);
+      if (power < 0.1) return;
+      if (!this.creative && !g.inventory.remove(CM.I.ARROW, 1)) return;
+      const e = this.eye(), d = this.aim(), sp = power * 55;
+      g.entities.shootArrow(e[0] + d[0] * 0.4, e[1] + d[1] * 0.4 - 0.1, e[2] + d[2] * 0.4, d[0] * sp + this.vx * 0.5, d[1] * sp, d[2] * sp + this.vz * 0.5, this);
+      if (g.net.isClient) CM.Audio.play('bow', { pitch: 0.9 + Math.random() * 0.2 });
+      this.swing = 1;
     }
 
     // Tourne la vitesse horizontale vers (tx, tz) sans changer sa valeur. k : part du virage (0-1).
@@ -622,6 +689,15 @@
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
+        // wagonnet : quelques coups le cassent (il rend son objet)
+        const ch = g.entities.raycastCart(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
+        if (ch && ch.cart.uid !== this.riding && (!mh || ch.t < mh.t) && (!this.target || ch.t < this.target.t)) {
+          g.entities.hitCart(ch.cart, 2);
+          this.swing = 1;
+          this.attackCd = 0.25;
+          this.mining = null;
+          return;
+        }
         // autre joueur (combats entre joueurs autorisés par l'hôte)
         const ph = g.net.active ? g.net.raycastPlayer(e, d, 3.6) : null;
         if (ph && (!mh || ph.t < mh.t) && (!this.target || ph.t < this.target.t)) {
@@ -670,6 +746,27 @@
         }
       } else this.mining = null;
 
+      // arc : maintenir le clic droit pour bander, relâcher pour tirer
+      const held = g.inventory.held();
+      if (held && held.id === CM.I.BOW) {
+        if (input.mouse[2] && !g.ui.invOpen && (this.creative || g.inventory.has(CM.I.ARROW))) {
+          this.bowT = (this.bowT || 0) + dt;
+          return;
+        }
+        if (this.bowT > 0) this.shootBow();
+        this.bowT = 0;
+      } else this.bowT = 0;
+      // clic droit sur un wagonnet : on monte dedans, ou on ouvre son coffre
+      if (input.pressed.mouse2) {
+        const ch = g.entities.raycastCart(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
+        if (ch && ch.cart.uid !== this.riding && (!this.target || ch.t < this.target.t)) {
+          const c = ch.cart;
+          if (c.type === 'chest' || c.type === 'hopper') g.openCartChest(c);
+          else if (c.type === 'cart' && (this.riding === null || this.riding === undefined)) this.rideCart(c);
+          this.swing = 1;
+          return;
+        }
+      }
       // clic droit sur un villageois : échanges ; sur un animal avec sa nourriture : élevage
       if (input.pressed.mouse2) {
         const vm = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
@@ -1080,8 +1177,18 @@
       this.useCd = 0.22;
       const sneak = this.sneaking;
       const tb = t ? CM.blocks[t.id] : null;
+      // objet qui agit sur le bloc visé (multimètre, clé à molette…)
+      if (input.pressed.mouse2 && t && info && info.useOn && info.useOn(g, t, this)) {
+        this.swing = 1;
+        return;
+      }
       // interactions avec le bloc visé (accroupi : on pose un bloc à la place)
       if (input.pressed.mouse2 && t && !(info && info.isBlock && sneak)) {
+        // bloc qui réagit au clic droit (levier, bouton, répéteur, trappe…)
+        if (tb.use && tb.use(g, t, this)) {
+          this.swing = 1;
+          return;
+        }
         if (tb.station) {
           g.ui.openInventory();
           return;
@@ -1154,6 +1261,20 @@
         if (input.pressed.mouse2) this.fireHook();
         return;
       }
+      // wagonnet : se pose sur un rail
+      if (info.type === 'cart') {
+        if (!input.pressed.mouse2 || !t) return;
+        const rs = tb.rs;
+        if (!rs || rs.k !== 'rail') {
+          g.ui.toast('Les wagonnets se posent sur des rails', 'info', 'cartrail');
+          return;
+        }
+        g.entities.addCart(info.cart, t.x + 0.5, t.y + 1 / 16, t.z + 0.5);
+        this.consume(1);
+        CM.Audio.play('place', { mat: 'metal' });
+        this.swing = 1;
+        return;
+      }
       if (!t) return;
       // outils utilisés sur un bloc
       if (info.type === 'tool') {
@@ -1215,8 +1336,10 @@
         this.swing = 1;
         return;
       }
-      if (!info.isBlock || !t) return;
-      const b = info.block;
+      // bloc à poser (un objet peut en poser un : poudre de redstone, ficelle…)
+      const pid = info.isBlock ? stack.id : info.places;
+      if (!pid || !t) return;
+      const b = CM.blocks[pid];
       // dalle posée sur une dalle identique : bloc plein
       if (b.render === 'slab' && b.full && t.id === stack.id && t.ny === 1) {
         w.setBlock(t.x, t.y, t.z, b.full);
@@ -1257,12 +1380,12 @@
         if (CM.isFluid(cur)) return;
         const full = (x, y, z) => w.colBox(x, y, z) === CM.FULL_BOX;
         let tid = 0;
-        if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) tid = CM.wallTorch(stack.id, t.nx, t.nz);
-        else if (full(px, py - 1, pz)) tid = stack.id;
+        if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) tid = CM.wallTorch(pid, t.nx, t.nz);
+        else if (full(px, py - 1, pz)) tid = pid;
         else {
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             if (full(px - dx, py, pz - dz)) {
-              tid = CM.wallTorch(stack.id, dx, dz);
+              tid = CM.wallTorch(pid, dx, dz);
               break;
             }
           }
@@ -1296,12 +1419,20 @@
         for (const m of g.entities.mobs) if (hit(m.x, m.y, m.z, m.hw, m.h)) return;
         for (const rp of g.net.remotes.values()) if (rp.seen && rp.alive && rp.dim === g.playerDim && hit(rp.x, rp.y, rp.z, rp.hw, rp.h)) return;
       }
-      let place = stack.id;
+      let place = pid;
+      // blocs orientés ou soumis à une règle de pose (redstone, rails, trappes…)
+      if (b.place) {
+        const e = this.eye(), d = this.aim();
+        place = b.place({ w, x: px, y: py, z: pz, t, look6: CM.lookDir6(d[0], d[1], d[2]), lookH: CM.lookDirH(d[0], d[2]), hitY: e[1] + d[1] * t.t, player: this });
+        if (!place) return;
+      }
       // enclume : tournée selon le regard
       if (b.anvil) place = CM.ANVILS[Math.abs(Math.cos(this.yaw)) >= Math.abs(Math.sin(this.yaw)) ? 0 : 1];
       // poudre de béton au contact de l'eau : béton
       if (b.becomes && [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => CM.isWater(w.get(px + dx, py + dy, pz + dz)))) place = b.becomes;
       w.setBlock(px, py, pz, place);
+      // un rail se relie aux rails voisins
+      if (CM.blocks[place].rs && CM.blocks[place].rs.k === 'rail') CM.railFixNeighbors(w, px, py, pz);
       this.afterPlace(b, stack.id, px, py, pz);
     }
 

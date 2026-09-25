@@ -6,7 +6,7 @@
 // Chaque invité gère lui-même ses déplacements, son inventaire, sa faim et sa santé.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const PROTO = 3; // 3 : chacun dans sa dimension (Nether)
+  const PROTO = 4; // 3 : chacun dans sa dimension (Nether) ; 4 : redstone, wagonnets, électricité
   const PREFIX = 'craftmine16-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const MAX_PLAYERS = 8;
@@ -690,7 +690,8 @@
         }
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z)]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
-        e.link.send({ t: 'ent', m, d, tn });
+        const x = ents.snapExtra(near);
+        e.link.send({ t: 'ent', m, d, tn, ar: x.ar, ca: x.ca });
       }
     }
     // Hôte : zones à garder chargées autour des invités.
@@ -770,7 +771,7 @@
       if (!this.isHost || e.pid < 0 || !this.links.has(e.pid)) return;
       this.links.delete(e.pid);
       this.remotes.delete(e.pid);
-      for (const [k, pid] of [...this.locks]) if (pid === e.pid) this.locks.delete(k);
+      for (const [k, pid] of [...this.locks]) if (pid === e.pid) this.lockDel(k);
       if (e.link) e.link.close();
       this.broadcast({ t: 'leave', pid: e.pid });
       this.sys(e.name + (why === 'lost' ? ' a perdu la connexion' : ' a quitté la partie'));
@@ -843,13 +844,14 @@
           this.fx({ k: 'fuse', x: num(m.x), y: num(m.y), z: num(m.z) }, e.pid);
           break;
         case 'co':
-          this.chestOpen(e, m.x | 0, m.y | 0, m.z | 0);
+          if (typeof m.k === 'string') this.cartChestOpen(e, m.k);
+          else this.chestOpen(e, m.x | 0, m.y | 0, m.z | 0);
           break;
         case 'cs':
           this.chestSet(e, m.k, m.s);
           break;
         case 'cc':
-          if (this.locks.get(m.k) === e.pid) this.locks.delete(m.k);
+          if (this.locks.get(m.k) === e.pid) this.lockDel(m.k);
           break;
         case 'note': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0, n = (m.n | 0) % 25;
@@ -888,6 +890,53 @@
           if (Math.hypot(x - rp.x, z - rp.z) < 16) g.spawnBuiltGolem(x, y, z);
           break;
         }
+        case 'arrow': {
+          // flèche tirée par un invité (arc)
+          if (!Array.isArray(m.p) || !Array.isArray(m.v)) break;
+          const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
+          if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > 4) break;
+          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp);
+          break;
+        }
+        case 'cart': {
+          if (!CM.CART_ITEMS[m.ty] || !Array.isArray(m.p)) break;
+          const [x, y, z] = m.p.map(num);
+          if (Math.hypot(x - rp.x, z - rp.z) < 10) g.entities.addCart(m.ty, x, y, z);
+          break;
+        }
+        case 'hitcart': {
+          const c = g.entities.cartByUid(m.id);
+          if (c && Math.hypot(c.x - rp.x, c.z - rp.z) < 8) g.entities.hitCart(c, Math.min(20, Math.max(0, num(m.d))));
+          break;
+        }
+        case 'ride': {
+          const c = g.entities.cartByUid(m.id);
+          if (c && Math.hypot(c.x - rp.x, c.z - rp.z) < 8 && g.entities.mount(c, e.pid)) break;
+          e.link.send({ t: 'unride' });
+          break;
+        }
+        case 'unride': {
+          const c = (g.entities.carts || []).find((o) => o.rider === e.pid);
+          if (c) c.rider = null;
+          break;
+        }
+        case 'crank': {
+          const x = m.x | 0, y = m.y | 0, z = m.z | 0;
+          if (CM.Tech && Math.hypot(x + 0.5 - rp.x, z + 0.5 - rp.z) < 8 && CM.blocks[g.world.get(x, y, z)].tech) CM.Tech.crank(g, x, y, z);
+          break;
+        }
+        case 'meter': {
+          const x = m.x | 0, y = m.y | 0, z = m.z | 0;
+          const s = CM.Tech && Math.hypot(x + 0.5 - rp.x, z + 0.5 - rp.z) < 10 ? CM.Tech.info(g, x, y, z) : null;
+          if (s) e.link.send({ t: 'meter', s });
+          break;
+        }
+        case 'cpush': {
+          // le passager invité pousse son wagonnet
+          const c = (g.entities.carts || []).find((o) => o.rider === e.pid);
+          if (c && Array.isArray(m.v)) c.push = [Math.max(-1, Math.min(1, num(m.v[0]))), Math.max(-1, Math.min(1, num(m.v[1])))];
+          break;
+        }
         case 'bye':
           this.dropClient(e, 'left');
           break;
@@ -920,15 +969,26 @@
         e.link.send({ t: 'cbusy', n: by === 0 ? this.name : (this.links.get(by) || {}).name || '?' });
         return;
       }
-      this.locks.set(k, e.pid);
+      this.lockSet(k, e.pid);
       e.link.send({ t: 'chest', k, s: g.chestAt(x, y, z) });
+    }
+    cartChestOpen(e, k) {
+      const g = this.game, c = g.entities.cartByUid(Number(k.slice(1)));
+      if (k[0] !== 'C' || !c || !c.slots || Math.hypot(c.x - e.rp.x, c.z - e.rp.z) > 8) return;
+      const by = this.locks.get(k);
+      if (by !== undefined && by !== e.pid) {
+        e.link.send({ t: 'cbusy', n: by === 0 ? this.name : (this.links.get(by) || {}).name || '?' });
+        return;
+      }
+      this.lockSet(k, e.pid);
+      e.link.send({ t: 'chest', k, s: c.slots });
     }
     chestSet(e, k, s) {
       const g = this.game;
       if (this.locks.get(k) !== e.pid || !Array.isArray(s)) return;
-      const arr = g.chests.get(k);
+      const arr = g.containerByKey(k);
       if (!arr) return;
-      for (let i = 0; i < 27; i++) {
+      for (let i = 0; i < arr.length; i++) {
         const it = s[i];
         const id = it ? it.id | 0 : 0;
         if (!it || !CM.itemInfo(id) || !(it.count > 0)) arr[i] = null;
@@ -1035,6 +1095,21 @@
         case 'fx':
           this.onFx(m);
           break;
+        case 'push':
+          // poussé par un piston de l'hôte
+          if (p && p.alive && Array.isArray(m.v)) {
+            p.x += num(m.v[0]);
+            p.y += num(m.v[1]) + (m.v[1] > 0 ? 0.05 : 0);
+            p.z += num(m.v[2]);
+            if (m.v[1] > 0) p.vy = Math.max(p.vy, 0);
+          }
+          break;
+        case 'unride':
+          if (p) p.riding = null;
+          break;
+        case 'meter':
+          if (typeof m.s === 'string') g.ui.toast(m.s.slice(0, 300), 'info', 'meter');
+          break;
         case 'dim': {
           // l'hôte nous envoie dans l'autre dimension (portail, ou réapparition après une mort)
           if (m.to !== 'nether' && m.to !== 'overworld') break;
@@ -1070,8 +1145,11 @@
             break;
           }
           this.chestKey = m.k;
-          g.ui.openChest(Array.isArray(m.s) ? m.s.slice(0, 27).map((s) => (s && CM.itemInfo(s.id) ? s : null)) : new Array(27).fill(null), this.chestTitle);
-          while (g.ui.chest.length < 27) g.ui.chest.push(null);
+          {
+            const n = Array.isArray(m.s) ? Math.min(27, Math.max(1, m.s.length)) : 27;
+            g.ui.openChest(Array.isArray(m.s) ? m.s.slice(0, n).map((s) => (s && CM.itemInfo(s.id) ? s : null)) : new Array(n).fill(null), this.chestTitle);
+            while (g.ui.chest.length < n) g.ui.chest.push(null);
+          }
           break;
         case 'cbusy':
           g.ui.toast('Ce coffre est déjà ouvert par ' + m.n, 'warn', 'cbusy');
@@ -1200,11 +1278,12 @@
     }
 
     // Ouvre un coffre partagé.
-    openChest(x, y, z, title) {
-      const g = this.game, k = g.bkey(x, y, z);
+    // (ck : clé d'un coffre de wagonnet, à la place des coordonnées)
+    openChest(x, y, z, title, ck) {
+      const g = this.game, k = ck || g.bkey(x, y, z);
       if (this.isClient) {
         this.chestTitle = title;
-        this.send({ t: 'co', x, y, z });
+        this.send(ck ? { t: 'co', k: ck } : { t: 'co', x, y, z });
         return;
       }
       const by = this.locks.get(k);
@@ -1212,9 +1291,20 @@
         g.ui.toast('Ce coffre est déjà ouvert par ' + ((this.links.get(by) || {}).name || '?'), 'warn', 'cbusy');
         return;
       }
-      this.locks.set(k, 0);
+      const slots = ck ? g.containerByKey(ck) : g.chestAt(x, y, z);
+      if (!slots) return;
+      this.lockSet(k, 0);
       this.chestKey = k;
-      g.ui.openChest(g.chestAt(x, y, z), title);
+      g.ui.openChest(slots, title);
+    }
+    lockSet(k, pid) {
+      this.locks.set(k, pid);
+      this.game.chestViewers(k, 1);
+    }
+    lockDel(k) {
+      if (!this.locks.has(k)) return;
+      this.locks.delete(k);
+      this.game.chestViewers(k, 0);
     }
     chestChanged() {
       if (this.isClient && this.chestKey) this.chestDirty = true;
@@ -1224,7 +1314,7 @@
       if (this.isClient) {
         if (this.game.ui.chest) this.send({ t: 'cs', k: this.chestKey, s: this.game.ui.chest });
         this.send({ t: 'cc', k: this.chestKey });
-      } else if (this.isHost && this.locks.get(this.chestKey) === 0) this.locks.delete(this.chestKey);
+      } else if (this.isHost && this.locks.get(this.chestKey) === 0) this.lockDel(this.chestKey);
       this.chestKey = null;
       this.chestDirty = false;
     }

@@ -119,6 +119,11 @@ Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
 | 🌑 **Les Ombres** | La nuit et dans les grottes sombres. Une vague apparaît à la tombée de la nuit ; leur nombre dépend de la difficulté et des jours passés. Elles brûlent au soleil et refusent d'entrer dans la lumière des torches. |
 | 🎨 **Mode créatif** | Vol, blocs infinis, minage instantané, onglet *Créatif* avec tous les blocs et objets (recherche + catégories). Changeable en pause > Options > Jeu. |
 | 💥 **TNT** | S'allume au briquet (ou avec une torche) et explose en réaction en chaîne. |
+| 🔴 **Redstone** | Tout comme dans Minecraft, simulé à 20 ticks par seconde : poudre (15 blocs), torches (inverseurs, grillent si on les fait clignoter trop vite), leviers, boutons, plaques de pression (4 sortes), répéteurs (délai, verrouillage), comparateurs (comparer / soustraire, lecture des conteneurs), observateurs, pistons et pistons collants (12 blocs, slime et miel), distributeurs, droppers, entonnoirs, lampes, ampoules de cuivre, capteurs de lumière du jour, crochets et fils de déclenchement, cibles, capteurs de sculk, coffres piégés, portes et trappes en fer, bloc musical et TNT. |
+| 🛤 **Rails et wagonnets** | Rails qui se raccordent tout seuls (virages, montées), rails de propulsion, détecteurs et activateurs ; wagonnets (on monte dedans), de stockage, de TNT et à entonnoir. Les entonnoirs et les comparateurs communiquent avec les wagonnets. |
+| 🏹 **Arc et flèches** | Arc à bander (1 s pour la pleine puissance), flèches qui se plantent et se ramassent, qui activent les cibles et les boutons en bois ; les distributeurs tirent aussi des flèches. |
+| ⚡ **Extension Électricité** | À cocher en créant le monde (inspirée du mod Create, en plus simple). Minerais de zinc, d'étain, de bauxite et de lithium ; laiton, bronze, silicium, circuits, moteurs. Câbles, panneaux solaires, éoliennes (plus hautes = plus de vent), roues à eau, générateurs à charbon, manivelle, batteries, lampes électriques et néons de 8 couleurs, broyeur (double les minerais), four électrique, foreuse, tapis roulants, ventilateurs (ascenseurs à air vers le haut), multimètre et clé à molette. Un signal de redstone arrête les machines. |
+| 💡 **Extension Lumière réaliste** | Lumière colorée (torches orangées, redstone rouge, néons, lanternes des âmes…), flammes qui vacillent, halos la nuit, fumée des torches, lumière des torches qui s'ajoute à celle du jour, lumière tenue en main colorée. Cochée par défaut à la création du monde, désactivable dans les Options. |
 | ☀ **Objectif final** | Forger le **Cœur d'aube** (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et le poser : il chasse définitivement les Ombres alentour. |
 
 Un **journal de quêtes** guide la progression ; on le masque (et on le remet) avec le bouton « Masquer le guide » du menu Pause, la croix du panneau ou les Options :
@@ -126,7 +131,7 @@ bois → établi → pioche → pierre → torches → forge → fer → grappin
 
 ## Contenu
 
-- **503 blocs**, 98 objets et 413 recettes, dont :
+- **576 blocs**, 158 objets et 533 recettes (dont 34 blocs et 52 recettes de l’extension Électricité), dont :
   - 16 couleurs de laine, tapis, béton, poudre de béton (devient du béton au contact de l'eau), terre cuite, terre cuite émaillée et verre teinté ;
   - 12 essences de bois (chêne, bouleau, sapin, acacia, acajou, saule, bois cristallin, chêne noir, cerisier, palétuvier, carmin, biscornu) avec bûches écorcées, bois, planches, feuilles et pousses, plus le bambou ;
   - pierres : pierre lisse, taillée, fissurée, sculptée, granite/diorite/andésite polis, ardoise des abîmes (et ses briques, tuiles…), tuf, calcite, spéléothème, pierre noire, basalte, obsidienne ;

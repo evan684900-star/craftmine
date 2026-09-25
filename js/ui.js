@@ -36,6 +36,11 @@
     ['🕳 Profondeurs', "Le monde descend jusqu'à y = −64, comme dans Minecraft : sous y = 0, l'ardoise des abîmes remplace la pierre (plus longue à miner), avec de grandes cavernes, beaucoup de diamants et de redstone, du lapis, de l'or, du fer, du cristal et de rares débris antiques (netherite). Zones de sculk, géodes d'améthyste profondes, et du magma brûlant près du socle. Prends des torches !"],
     ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs (blé, carottes, pommes de terre, betteraves), forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
     ['🚪 Portes et lits', "Porte : 6 planches d'une même essence (chêne, sapin, bouleau, acacia) donnent 3 portes à l'Établi ; clic droit pour l'ouvrir ou la fermer. Lit : 3 laines + 3 planches. Clic droit sur un lit pour y placer ton point de réapparition ; la nuit, tu t'y couches et passes au matin (en multijoueur, quand tout le monde est couché). Pas de sommeil si des Ombres rôdent tout près !"],
+    ['🔴 Redstone', "Comme dans Minecraft. La poudre de redstone se pose au sol et transporte le courant sur 15 blocs. Sources : levier, boutons (pierre 1 s, bois 1,5 s, aussi touché par une flèche), plaques de pression (pierre, bois, or et fer selon le poids), torche de redstone (inverseur), bloc de redstone, capteur de lumière du jour, crochet et fil de déclenchement, cible (plus la flèche est au centre, plus le signal est fort), capteur de sculk (vibrations des pas et des blocs), coffre piégé (quand on l'ouvre), rail détecteur. Composants : répéteur (délai 1 à 4, clic droit ; verrouillable par le côté), comparateur (comparer / soustraire, lit le remplissage des coffres), observateur, pistons et pistons collants (12 blocs, slime et miel collent), distributeur (tire des flèches, pose l'eau, lance les wagonnets…), dropper, entonnoir, lampe, ampoule de cuivre (s'allume et s'éteint à chaque impulsion), portes et trappes en fer (seulement par la redstone), bloc musical, TNT. Recettes : catégorie Redstone."],
+    ['🛤 Rails et wagonnets', "Pose des rails (ils tournent et montent tout seuls d'après leurs voisins). Wagonnet : clic droit sur un rail pour le poser, clic droit dessus pour monter, accroupi pour descendre, « avancer » pour le pousser un peu. Le rail de propulsion alimenté accélère (éteint, il freine), le rail détecteur émet un signal quand un wagonnet passe, le rail activateur fait exploser le wagonnet de TNT et descendre le passager. Wagonnets de stockage (27 cases) et à entonnoir (aspire objets et coffres au-dessus) ; frappe un wagonnet pour le récupérer."],
+    ['🏹 Arc et flèches', "Arc : 3 bâtons + 3 ficelles (la ficelle vient des fibres). Maintiens le clic droit pour bander (1 s = pleine puissance), relâche pour tirer. Les flèches plantées se ramassent. Flèches : silex + bâton + plume."],
+    ['⚡ Électricité (extension)', "À cocher en créant le monde. Nouveaux minerais : zinc, étain, bauxite (aluminium) et lithium tout au fond. Fabrique un Établi d'ingénieur pour les recettes. Un réseau = des blocs électriques qui se touchent, reliés par des câbles. Générateurs : panneau solaire (le jour), éolienne (plus elle est haute, plus elle produit), roue à eau (de l'eau autour), générateur à charbon (charbon, bois, bâtons), manivelle (clic droit). Batterie : stocke l'énergie (5 niveaux). Machines : lampes et néons de 8 couleurs, broyeur (1 minerai → 2 poudres, pierre → gravier → sable), four électrique (sans charbon), foreuse (casse le bloc devant, range derrière), tapis roulant (transporte et remplit le coffre au bout), ventilateur (souffle jusqu'à 8 blocs, vers le haut il fait voler). Un signal de redstone arrête une machine. Multimètre : état du réseau ; clé à molette : tourner une machine, accroupi pour la démonter."],
+    ['💡 Lumière réaliste (extension)', "Chaque lumière a sa couleur : torches orangées, redstone rouge, néons colorés, lanternes des âmes bleues, lave, portail violet… Les flammes vacillent, les lampes ont un halo la nuit, les torches fument, et la lumière des torches s'ajoute à celle du jour (un coin sombre s'éclaire même en plein jour). Se désactive dans Options > Graphismes."],
     ['🗿 Golem de fer', "Il garde les villages et écrase les Ombres. Construis le tien : 2 blocs de fer l'un sur l'autre, 1 bloc de fer de chaque côté en haut (un T), puis une citrouille par-dessus. Il patrouille autour de l'endroit où tu l'as construit. Attention : il se venge si tu le frappes, lui ou un villageois."],
     ['🐗 Faune', "Mouflons dans les prairies (laine, viande), sangliers dans les forêts (cuir ; ils chargent si on les attaque !), pingouins sur la neige (plumes pour l'Amulette de plume)."],
     ["☀ Le Cœur d'aube", "Le but final : forge le Cœur d'aube (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et pose-le. Il chasse les Ombres alentour pour toujours."],
@@ -103,6 +108,8 @@
       { k: 'maxFps', t: 'select', label: 'Images par seconde max', opts: [[0, 'Illimitées'], [30, '30'], [60, '60'], [120, '120']] },
       { k: 'particles', t: 'select', label: 'Particules', opts: [[2, 'Toutes'], [1, 'Réduites'], [0, 'Aucune']] },
       { k: 'smoothLight', t: 'check', label: 'Éclairage doux et ombres dans les coins' },
+      { k: 'realLight', t: 'check', label: 'Lumière réaliste (couleurs, flammes qui vacillent, halos)', note: 'Extension Lumière réaliste : sans effet dans un monde créé avec l’extension décochée.' },
+      { k: 'halos', t: 'check', label: 'Halos autour des lampes et des torches (lumière réaliste)' },
       { k: 'waving', t: 'check', label: 'Feuillage et plantes qui ondulent au vent' },
       { k: 'clouds', t: 'check', label: 'Nuages' },
       { k: 'viewBob', t: 'check', label: 'Balancement de la vue en marchant' },
@@ -165,8 +172,12 @@
 
   // Catégorie d'un bloc/objet pour l'inventaire créatif.
   function creativeCat(id) {
-    if (id >= CM.ITEM_BASE) return 'items';
+    const info = CM.itemInfo(id);
+    if (info && info.ext === 'tech') return 'tech';
+    if (id >= CM.ITEM_BASE) return info && (info.type === 'cart' || info.id === CM.I.STRING) ? 'redstone' : 'items';
     const b = CM.blocks[id];
+    if (b.ext === 'tech') return 'tech';
+    if (b.rs && b.rs.k !== 'door' && b.rs.k !== 'note' && b.rs.k !== 'tnt') return 'redstone';
     for (const f of Object.keys(CM.COLOR)) if (Object.values(CM.COLOR[f]).includes(id)) return 'color';
     if (b.plant || b.wood && b.id === CM.woodOf(id).leaves || b.soil || b.farmland || /CORAL|SNOW|ICE|MUSHROOM|CACTUS|MELON|PUMPKIN|SAND|GRAVEL|CLAY|MUD|MOSS|DIRT/.test(b.key) && !/SANDSTONE|BRICK/.test(b.key)) return 'nature';
     if (b.ore || /_BLOCK$/.test(b.key) && /IRON|GOLD|COPPER|DIAMOND|EMERALD|LAPIS|REDSTONE|NETHERITE|RUBY|CRYSTAL|COAL|AMETHYST|RAW/.test(b.key) || /COPPER/.test(b.key)) return 'ores';
@@ -293,6 +304,9 @@
       this.optionsChanged();
       const creative = this.game.mode === 'creative';
       $('tab-btn-creative').classList.toggle('hidden', !creative);
+      // extensions du monde : catégories visibles seulement si elles sont actives
+      for (const el of document.querySelectorAll('.ext-tech')) el.classList.toggle('hidden', !CM.extOn('tech'));
+      if (!CM.extOn('tech') && this.filter === 'tech') this.filter = 'tout';
       if (!creative && this.tab === 'creative') this.setTab('craft');
       if (creative && this.tab === 'craft') this.setTab('creative');
     }
@@ -644,7 +658,8 @@
         el.addEventListener('mouseenter', (e) => this.showTip({ id, count: 1, xp: CM.hasWear(id) ? 0 : undefined }, e));
         el.addEventListener('mouseleave', () => this.hideTip());
         grid.appendChild(el);
-        this.creativeEls.set(id, { el, cat: creativeCat(id), name: norm(CM.itemName(id)) });
+        const info = CM.itemInfo(id);
+        this.creativeEls.set(id, { el, cat: creativeCat(id), name: norm(CM.itemName(id)), ext: (info && info.ext) || null });
       }
     }
 
@@ -670,7 +685,7 @@
     renderCreative() {
       let n = 0;
       for (const [, o] of this.creativeEls) {
-        const show = (this.cCat === 'all' || o.cat === this.cCat) && (!this.cSearch || o.name.includes(this.cSearch));
+        const show = (this.cCat === 'all' || o.cat === this.cCat) && (!this.cSearch || o.name.includes(this.cSearch)) && (!o.ext || CM.extOn(o.ext));
         o.el.classList.toggle('hidden', !show);
         if (show) n++;
       }
@@ -816,7 +831,7 @@
         }
       }
       this.anvil = null;
-      this.game.net.chestClosed();
+      this.game.chestClosed();
       this.chest = null;
       this.trade = null;
       $('cursor-stack').classList.add('hidden');
@@ -838,10 +853,10 @@
 
     refreshStations() {
       const st = this.game.nearbyStations();
-      const changed = st.table !== this.stations.table || st.forge !== this.stations.forge || st.smithing !== this.stations.smithing;
+      const changed = st.table !== this.stations.table || st.forge !== this.stations.forge || st.smithing !== this.stations.smithing || st.atelier !== this.stations.atelier;
       this.stations = st;
       const one = (k, n) => '<span class="station ' + (st[k] ? 'on' : '') + '">' + (st[k] ? '✔' : '✖') + ' ' + n + '</span>';
-      $('stations').innerHTML = one('table', 'Établi') + one('forge', 'Forge / fourneau') + one('smithing', 'Table de forgeron');
+      $('stations').innerHTML = one('table', 'Établi') + one('forge', 'Forge / fourneau') + one('smithing', 'Table de forgeron') + (CM.extOn('tech') ? one('atelier', "Établi d'ingénieur") : '');
       if (changed && this.invOpen) this.renderRecipes();
     }
 
@@ -855,7 +870,11 @@
       }
       const pts = inv.armorPoints();
       $('inv-prot').innerHTML = '🛡 Protection <b>' + pts + '</b>/20' + (pts ? ' · environ −' + Math.round(pts * 4) + ' % de dégâts' : ' · aucune armure portée');
-      if (this.chest) for (let i = 0; i < 27; i++) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
+      if (this.chest)
+        for (let i = 0; i < 27; i++) {
+          this.chestSlots[i].style.display = i < this.chest.length ? '' : 'none';
+          if (i < this.chest.length) this.chestSlots[i].innerHTML = this.slotHTML(this.chest[i]);
+        }
       if (this.trade) this.renderTrade();
       if (this.ench) this.renderEnchant();
       if (this.anvil) this.renderAnvil();
@@ -922,7 +941,7 @@
           return;
         }
         if (kind === 'chest') this.stowInto(s, inv.slots, 0, 36);
-        else if (this.chest) this.stowInto(s, this.chest, 0, 27);
+        else if (this.chest) this.stowInto(s, this.chest, 0, this.chest.length);
         else if (i >= 9) this.stowInto(s, inv.slots, 0, 9);
         else this.stowInto(s, inv.slots, 9, 36);
         if (s.count <= 0) slots[i] = null;
@@ -1253,7 +1272,7 @@
         const bits = [];
         if (b.light) bits.push('Lumineux (' + b.light + ')');
         if (b.station) bits.push('Station de fabrication');
-        if (b.container) bits.push('Rangement (27 cases)');
+        if (b.container) bits.push('Rangement (' + (b.slots || 27) + ' cases)');
         if (b.bounce) bits.push('Rebondissant');
         if (CM.TAGS.saplings.includes(b.id)) bits.push('Pose-la au soleil : un arbre poussera');
         if (b.slip) bits.push('Glissant');
@@ -1275,7 +1294,7 @@
       const creative = g.mode === 'creative';
       const list = CM.recipes
         .map((r, i) => ({ r, i, can: creative || inv.canCraft(r, st) }))
-        .filter((o) => (this.filter === 'tout' || o.r.cat === this.filter) && (!this.onlyCan || o.can))
+        .filter((o) => (!o.r.ext || CM.extOn(o.r.ext)) && (this.filter === 'tout' || o.r.cat === this.filter) && (!this.onlyCan || o.can))
         .filter((o) => !this.search || norm(CM.itemName(o.r.out)).includes(this.search) || o.r.ing.some(([id]) => norm(CM.ingName(id)).includes(this.search)));
       list.sort((a, b) => (b.can ? 1 : 0) - (a.can ? 1 : 0));
       $('recipe-count').textContent = list.length + ' recette' + (list.length > 1 ? 's' : '') + (list.length ? ' — fais défiler la liste pour tout voir' : '');
@@ -1398,6 +1417,7 @@
         biomeSize: $('nw-biome').value,
         bonusChest: $('nw-bonus').checked,
         dayCycle: $('nw-daycycle').checked,
+        ext: { tech: $('nw-ext-tech').checked, light: $('nw-ext-light').checked },
       };
     }
     refreshPause() {

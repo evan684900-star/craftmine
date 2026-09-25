@@ -2560,6 +2560,10 @@
     return data;
   };
 
+  // ---- textures ajoutées par d'autres fichiers (redstone, extensions) ----
+  const KIT = { make, put, get, fill, speckle, line, disc, copyFrom, art, vary, mul, border, shade, T };
+  for (const f of (CM.MORE && CM.MORE.textures) || []) f(KIT);
+
   // ----------------------------------------- boîtes de sélection des plantes --
   // D'après les pixels visibles de la texture : une fleur basse a une petite boîte.
   // Les deux plans en croix vont de (2, 2) à (14, 14) : la colonne u est à 2 + 0,75 u.

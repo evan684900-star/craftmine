@@ -297,6 +297,11 @@ input[type='text'], #seed {
 .bind button.wait { border-color: var(--gold); color: var(--gold); }
 .nw-grid { display: grid; grid-template-columns: 170px 1fr; gap: 10px 14px; align-items: center; text-align: left; margin-bottom: 14px; }
 .nw-grid label { color: var(--muted); font-size: 14px; }
+.nw-ext { text-align: left; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(0, 0, 0, 0.25); }
+.nw-ext-title { font-weight: 700; margin-bottom: 6px; }
+.nw-ext-row { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 6px 0; cursor: pointer; }
+.nw-ext-row input { margin-top: 3px; flex: none; width: 18px; height: 18px; accent-color: var(--gold); }
+.nw-ext-row b { color: var(--text); }
 .nw-grid input[type='checkbox'] { justify-self: start; width: 18px; height: 18px; accent-color: var(--gold); }
 #nw-desc { min-height: 38px; }
 .inv-vitals { margin-top: 8px; font-size: 13px; color: var(--muted); }

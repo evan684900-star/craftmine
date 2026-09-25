@@ -621,6 +621,8 @@ CM.PORTALS = [0, 1].map((ax) =>
     box: ax ? [6, 0, 0, 10, 16, 16] : [0, 0, 6, 16, 16, 10],
   }).id,
 );
+// Blocs ajoutés par d'autres fichiers (redstone, extensions), toujours à la suite.
+for (const f of (CM.MORE && CM.MORE.blocks) || []) f({ nb, tx, defBlock });
 CM.BLOCK_COUNT = NEXT;
 // Recherche rapide : est-ce de l'eau ? (source, courant ou chute)
 CM.WATERY = new Uint8Array(CM.BLOCK_COUNT);
@@ -954,6 +956,9 @@ CM.cleanEnch = (o) => {
 };
 
 // Informations unifiées pour n'importe quel identifiant (bloc ou objet).
+// Objets ajoutés par d'autres fichiers.
+for (const f of (CM.MORE && CM.MORE.items) || []) f({ defItem });
+
 CM.itemInfo = function (id) {
   if (id < CM.ITEM_BASE) {
     const b = CM.blocks[id];
@@ -1375,6 +1380,9 @@ CM.blockDrops = function (id, rand) {
   }
 };
 
+// Recettes ajoutées par d'autres fichiers.
+for (const f of (CM.MORE && CM.MORE.recipes) || []) f({ r });
+
 // ------------------------------------------------------ boîtes des blocs --
 // sel : boîte de sélection (visée, contour, fissures) ; col : boîte de collision (null : on traverse).
 // En blocs, relatives à la case : [x0, y0, z0, x1, y1, z1]. Les plantes affinent la leur
@@ -1400,6 +1408,8 @@ for (const b of CM.blocks) {
   // une porte ouverte garde son battant solide (on passe à côté, pas à travers)
   b.col = b.solid || b.door ? sel : null;
 }
+// Conducteurs de redstone : les cubes pleins opaques (sauf composants : lampes, pistons, observateurs…)
+for (const b of CM.blocks) if (b) b.conductor = b.lightOpaque && !b.nc;
 // Inflammabilité (comme dans Minecraft) : [propagation vers ce bloc, chance qu'il brûle].
 for (const b of CM.blocks) {
   if (!b) continue;
