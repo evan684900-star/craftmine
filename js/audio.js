@@ -97,6 +97,10 @@
       case 'hurt':
         tone(t, 0.18, 'square', 320, 110, 0.12);
         break;
+      case 'fizz':
+        // flamme éteinte : petit souffle
+        noise(t, 0.25, 'highpass', 1800, 0.6, 0.22, 700);
+        break;
       case 'zap':
         noise(t, 0.18, 'highpass', 2500, 0.7, 0.25);
         tone(t, 0.15, 'sawtooth', 1400, 200, 0.08);

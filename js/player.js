@@ -486,6 +486,24 @@
       this.updateActions(dt, input);
     }
 
+    // Éteint le feu visé ; adjacent : aussi celui posé sur la face visée d'un bloc (comme dans Minecraft).
+    putOutFire(t, adjacent) {
+      const g = this.game, w = g.world;
+      let x = t.x, y = t.y, z = t.z;
+      if (!CM.blocks[t.id].fire) {
+        if (!adjacent) return false;
+        x += t.nx;
+        y += t.ny;
+        z += t.nz;
+        if (!CM.blocks[w.get(x, y, z)].fire) return false;
+      }
+      w.setBlock(x, y, z, 0);
+      CM.Audio.play('fizz');
+      g.entities.burst(CM.Textures.layer.smoke, x + 0.5, y + 0.3, z + 0.5, 8, { speed: 0.7, grav: -1.6, life: 0.8, size: 0.1 });
+      this.swing = 1;
+      this.attackCd = 0.2;
+      return true;
+    }
     // Pistolet laser : rayon jusqu'à 32 blocs, arrêté par le premier bloc ou la première créature.
     fireLaser(stack, info) {
       const g = this.game;
@@ -809,6 +827,11 @@
           return;
         }
         this.swing = 1;
+      }
+      // clic gauche sur une flamme (ou sur le bloc qui brûle, face en feu) : on l'éteint
+      if (input.pressed.mouse0 && this.target && this.putOutFire(this.target, true)) {
+        this.mining = null;
+        return;
       }
       // choisir le bloc visé (clic molette)
       if (input.pressed.mouse1 && this.target) this.pickBlock(this.target.id);
@@ -1299,6 +1322,8 @@
       this.useCd = 0.22;
       const sneak = this.sneaking;
       const tb = t ? CM.blocks[t.id] : null;
+      // toucher / clic droit sur une flamme : on l'éteint
+      if (input.pressed.mouse2 && t && this.putOutFire(t, false)) return;
       // objet qui agit sur le bloc visé (multimètre, clé à molette…)
       if (input.pressed.mouse2 && t && info && info.useOn && info.useOn(g, t, this)) {
         this.swing = 1;
