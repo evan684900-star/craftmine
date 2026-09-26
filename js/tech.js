@@ -114,7 +114,7 @@
   function teslaTarget(rs, x, y, z) {
     let best = null, bd = 8;
     for (const m of rs.g.entities.mobs) {
-      if (m.dead || (m.type !== 'ombre' && m.type !== 'ardent')) continue;
+      if (m.dead || !CM.MOBS[m.type].hostile) continue;
       const d = Math.hypot(m.x - x - 0.5, m.y + m.h / 2 - y - 1, m.z - z - 0.5);
       if (d < bd) (bd = d), (best = m);
     }

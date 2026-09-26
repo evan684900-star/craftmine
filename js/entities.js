@@ -139,8 +139,13 @@
     // Ombre ardente (Nether) : insensible au feu et à la lave, n'a pas peur de la lumière, enflamme
     ardent: { hw: 0.3, h: 1.95, hp: 20, speed: 3.2, fireproof: true, ignites: true },
   };
+  MOBS.ombre.hostile = MOBS.ardent.hostile = true;
+  // créatures ajoutées par d'autres fichiers (mob_defs.js)
+  for (const [k, d] of Object.entries((CM.MORE && CM.MORE.mobs) || {})) MOBS[k] = d;
+  CM.MOBS = MOBS;
   // Élevage : la nourriture qui rend un animal amoureux (il suit aussi le joueur qui la tient).
   CM.BREED_FOOD = { mouflon: [I.WHEAT], boar: [I.CARROT, I.POTATO, I.BEETROOT] };
+  for (const [k, d] of Object.entries(MOBS)) if (d.breed) CM.BREED_FOOD[k] = d.breed.map((key) => (I[key] !== undefined ? I[key] : CM.B[key])).filter((id) => id !== undefined);
   const BABY_TIME = 300; // un petit devient adulte en 5 minutes
   const BABY_SCALE = 0.55;
 
@@ -403,6 +408,7 @@
         m.love = fl & 8 ? 1 : 0;
         m.loveCd = fl & 16 ? 1 : 0;
         m.fire = fl & 32 ? 1 : 0;
+        m.ai.special = !!(fl & 64); // rampant qui siffle, squelette qui bande son arc
         this.mobs.push(m);
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
@@ -456,8 +462,11 @@
         const dist = Math.hypot(p.x - m.x, p.z - m.z);
         if (m.love > 0 && dist < 40 && r() < dt * 3) this.hearts(m, 1);
         if (m.fire > 0 && dist < 40 && r() < dt * 14) this.flames(m);
-        if (MOBS[m.type].passive) {
-          if (dist < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
+        const def = MOBS[m.type];
+        if (def.sound && !(def.passive && !def.neutral)) {
+          if (dist < 14 && r() < dt * 0.08) CM.Audio.play(def.sound);
+        } else if (MOBS[m.type].passive) {
+          if (dist < 14 && r() < dt * 0.04) CM.Audio.play(def.sound || (m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak'));
         } else {
           if (dist < 16 && r() < dt * 0.12) CM.Audio.play('shadow');
           if (g.daylight < 0.4 && dist < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
@@ -525,12 +534,26 @@
           if (m.dead) return;
         }
       }
-      let tvx = 0, tvz = 0, jump = false;
+      let tvx = 0, tvz = 0, jump = false, tvy = 0, climb = false, face;
       const def = MOBS[m.type];
       const dxp = p.x - m.x, dzp = p.z - m.z, dyp = p.y - m.y;
       const distP = Math.hypot(dxp, dzp);
+      const ctx = { p, distP, dxp, dzp, dyp, distL, g };
+      if (def.tick) def.tick(this, m, dt, ctx);
+      // cerf : s'enfuit quand on approche (sauf avec sa nourriture en main)
+      if (def.skittish && p.alive && distP < 7 && m.ai.flee <= 0 && !this.tempter(m) && !(m.love > 0)) m.ai.flee = 3;
 
-      if (m.type === 'golem') {
+      if (def.update) {
+        // comportement propre (mob_defs.js)
+        const o = def.update(this, m, dt, ctx) || {};
+        if (m.dead) return;
+        tvx = o.tvx || 0;
+        tvz = o.tvz || 0;
+        tvy = o.tvy || 0;
+        climb = !!o.climb;
+        face = o.face;
+        jump = !!o.jump;
+      } else if (m.type === 'golem') {
         // golem de fer : chasse les Ombres autour de lui ; se fâche contre qui l'attaque
         let tgt = null, td = 18;
         if (m.ai.angry > 0 && m.ai.foe && m.ai.foe.alive) {
@@ -541,7 +564,7 @@
         } else {
           m.ai.foe = null;
           for (const o of this.mobs) {
-            if (o.type !== 'ombre' || o.dead || Math.abs(o.y - m.y) > 8) continue;
+            if (!MOBS[o.type].hostile || o.dead || Math.abs(o.y - m.y) > 8) continue;
             const d = Math.hypot(o.x - m.x, o.z - m.z);
             if (d < td) {
               td = d;
@@ -596,9 +619,15 @@
         const dir = Math.atan2(-dxp, -dzp);
         tvx = -Math.sin(dir) * 4.3;
         tvz = -Math.cos(dir) * 4.3;
-        if (p.alive && distP < 1.3 && Math.abs(dyp) < 1.5 && m.ai.attackCd <= 0) {
+        if (p.alive && distP < 1.3 + m.hw && Math.abs(dyp) < 1.5 && m.ai.attackCd <= 0) {
           m.ai.attackCd = 1;
-          this.hitPlayer(p, 2, m, 'Un sanglier');
+          this.hitPlayer(p, def.ram || 2, m, def.cause || 'Un sanglier');
+          // la chèvre envoie valser
+          if (def.ram && p === g.player) {
+            p.vx += (dxp / (distP || 1)) * 9;
+            p.vz += (dzp / (distP || 1)) * 9;
+            p.vy = Math.max(p.vy, 5);
+          }
         }
       } else if (def.passive) {
         let speed = def.speed;
@@ -639,7 +668,8 @@
             tvz = dz * speed;
           }
         }
-        if (distL < 14 && r() < dt * 0.04) CM.Audio.play(m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak');
+        if (distL < 14 && r() < dt * 0.04) CM.Audio.play(def.sound || (m.type === 'mouflon' ? 'baa' : m.type === 'boar' ? 'grunt' : m.type === 'villager' ? 'hmm' : 'squeak'));
+        if (def.hop && (tvx || tvz) && m.onGround) jump = true; // le lapin avance par bonds
       } else if (m.type === 'ombre' || m.type === 'ardent') {
         const ardent = m.type === 'ardent';
         const bl = ardent ? 0 : w.blockLightAt(fx, Math.floor(m.y + 0.5), fz);
@@ -700,7 +730,7 @@
         if (!ardent && g.daylight < 0.4 && distL < 40 && r() < dt * 2.5) this.burst(CM.Textures.layer.ombre_face, m.x + (r() - 0.5) * 0.5, m.y + 1.2 + r() * 0.6, m.z + (r() - 0.5) * 0.5, 1, { speed: 0.3, grav: -0.6, life: 0.9, size: 0.05, emissive: true });
       }
 
-      if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz)) jump = true;
+      if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz) && !def.noJump) jump = true;
       if (m.knock <= 0) {
         const acc = m.onGround ? 10 : 2.5;
         m.vx += (tvx - m.vx) * Math.min(1, acc * dt);
@@ -717,16 +747,18 @@
         m.vy -= 14 * dt;
         m.vx *= inLava ? 0.8 : 0.9;
         m.vz *= inLava ? 0.8 : 0.9;
-      } else m.vy -= 28 * dt;
+      } else if (def.fly) m.vy += (tvy - m.vy) * Math.min(1, dt * 3); // chauve-souris
+      else m.vy -= 28 * dt;
       m.vy = Math.max(m.vy, -40);
-      if (jump) m.vy = 8.2;
+      if (jump) m.vy = def.hop ? 6 : 8.2;
+      if (climb) m.vy = Math.max(m.vy, 3.5); // araignée : grimpe aux murs
       CM.Physics.move(w, m, m.vx * dt, m.vy * dt, m.vz * dt);
       if (m.hitY) m.vy = 0;
       const sp = Math.hypot(m.vx, m.vz);
       m.walk += sp * dt * 3.2;
       m.moving = sp > 0.3;
-      if (sp > 0.3 && m.knock <= 0) {
-        const target = Math.atan2(-m.vx, -m.vz);
+      if (face !== undefined || (sp > 0.3 && m.knock <= 0)) {
+        const target = face !== undefined ? face : Math.atan2(-m.vx, -m.vz);
         let d = target - m.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
@@ -783,19 +815,24 @@
           }
         }
         if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' || m.type === 'ardent' ? 'shadow_hurt' : 'hit');
-        if (m.type === 'boar') m.ai.angry = 12;
-        else if (MOBS[m.type].passive) m.ai.flee = 5;
+        if (m.type === 'boar' || MOBS[m.type].retaliate) m.ai.angry = 12;
+        else if (MOBS[m.type].passive && !MOBS[m.type].neutral) m.ai.flee = 5;
+        if (MOBS[m.type].onHurt) MOBS[m.type].onHurt(this, m, by);
         if (m.type === 'golem') CM.Audio.play('golem');
       }
       if (m.hp <= 0 && !m.dead) this.killMob(m, by);
     }
 
+    defOf(m) {
+      return MOBS[m.type];
+    }
     killMob(m, by) {
       m.dead = true;
       const r = this.rand;
       const g = this.game;
       // expérience pour le joueur qui l'a tué (Ombre 5, animal 1 à 3)
-      const xp = m.type === 'ombre' ? 5 : m.type === 'ardent' ? 8 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
+      const def = MOBS[m.type];
+      const xp = def.xp !== undefined ? (m.baby > 0 ? 0 : def.xp) : m.type === 'ombre' ? 5 : m.type === 'ardent' ? 8 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
       if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type, xp });
       else {
         g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;
@@ -806,6 +843,8 @@
       const meat = m.fire > 0 ? I.COOKED_MEAT : I.RAW_MEAT;
       if (m.baby > 0) {
         // un petit ne donne rien
+      } else if (def.loot) {
+        def.loot(this, m, meat, more);
       } else if (m.type === 'mouflon') {
         this.addDrop(meat, 1 + (r() < 0.5 ? 1 : 0) + more(), m.x, m.y + 0.5, m.z);
         if (r() < 0.7) this.addDrop(B.WOOL, 1 + more(), m.x, m.y + 0.5, m.z);
@@ -831,11 +870,15 @@
       }
       this.killFx(m.type, m.x, m.y, m.z);
       if (g.net) g.net.fx({ k: 'kill', ty: m.type, x: m.x, y: m.y, z: m.z });
+      if (def.onDeath) def.onDeath(this, m); // gluant : se divise
     }
     // Nuage de particules à la mort d'une créature.
     killFx(type, x, y, z) {
-      const L = CM.Textures.layer;
-      if (type === 'mouflon') this.burst(L.mouflon_wool, x, y + 0.6, z, 16, { speed: 3 });
+      const L = CM.Textures.layer, def = MOBS[type];
+      if (def && def.fxTex) {
+        this.burst(L[def.fxTex], x, y + def.h * 0.5, z, 10 + Math.round(def.h * 8), { speed: 3 });
+        this.burst(L.smoke, x, y + def.h * 0.5, z, 6, { speed: 1.5, grav: -1, life: 0.8, size: 0.2 });
+      } else if (type === 'mouflon') this.burst(L.mouflon_wool, x, y + 0.6, z, 16, { speed: 3 });
       else if (type === 'boar') this.burst(L.boar_hide, x, y + 0.5, z, 14, { speed: 3 });
       else if (type === 'penguin' || type === 'villager') this.burst(L.white, x, y + 0.8, z, 14, { speed: 3, size: 0.06 });
       else if (type === 'golem') this.burst(L.golem_body, x, y + 1.3, z, 30, { speed: 4, size: 0.1 });
@@ -950,7 +993,7 @@
       for (const m of this.mobs) {
         if (m.dead) continue;
         const dist = Math.hypot(m.x - p.x, m.z - p.z);
-        if (m.type === 'villager' || m.type === 'golem' || m.tame) continue;
+        if (m.type === 'villager' || m.type === 'golem' || m.tame || MOBS[m.type].ambient) continue;
         if (MOBS[m.type].passive) {
           if (dist <= 110) nMouf++;
         } else if (dist <= 70) nOmbre++;
@@ -991,12 +1034,26 @@
           if (!w.loaded(x, z)) continue;
           const y = w.groundBelow(x, H - 1, z);
           const type = this.animalFor(w.column(x, z).bi);
-          if (type && y > 0 && CM.blocks[w.get(x, y, z)].soil && w.skyAt(x, y + 1, z) >= 14) {
+          const under = CM.blocks[w.get(x, y, z)];
+          if (type && y > 0 && (under.soil || (type === 'rabbit' && under.sound === 'sand') || (type === 'goat' && /STONE|SNOW/.test(under.key))) && w.skyAt(x, y + 1, z) >= 14) {
             this.addMob(type, x + 0.5, y + 1, z + 0.5);
+            // certains vivent en groupe (poules, loups…)
+            const gr = MOBS[type].group;
+            if (gr) {
+              const n = gr[0] - 1 + Math.floor(r() * (gr[1] - gr[0] + 1));
+              for (let k = 0; k < n; k++) {
+                const X = x + Math.floor((r() - 0.5) * 5), Z = z + Math.floor((r() - 0.5) * 5);
+                if (!w.loaded(X, Z)) continue;
+                const Y = w.groundBelow(X, H - 1, Z);
+                if (Y > 0 && Math.abs(Y - y) < 3 && !w.solidAt(X, Y + 1, Z)) this.addMob(type, X + 0.5, Y + 1, Z + 0.5);
+              }
+            }
             break;
           }
         }
       }
+      // chauves-souris dans les grottes sombres
+      this.spawnBats(p, w, r);
       // Ombres : plus nombreuses selon la difficulté et les jours passés.
       if (g.difficulty === 'peaceful' || g.mode === 'creative') return;
       const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
@@ -1007,13 +1064,37 @@
       if (nightfall) tries = Math.max(0, Math.min(maxO - nOmbre, 3 + Math.round(dif)));
       for (let n = 0; n < tries; n++) this.spawnOmbre(p, w, r);
     }
+    spawnBats(p, w, r) {
+      if (r() > 0.25) return;
+      let n = 0;
+      for (const m of this.mobs) if (!m.dead && m.type === 'bat' && Math.hypot(m.x - p.x, m.z - p.z) < 40) n++;
+      if (n >= 4) return;
+      for (let t = 0; t < 6; t++) {
+        const x = Math.floor(p.x + (r() - 0.5) * 40), z = Math.floor(p.z + (r() - 0.5) * 40), y = Math.floor(p.y + (r() - 0.5) * 16);
+        if (!w.loaded(x, z) || y < CM.WORLD.MINY + 2) continue;
+        if (w.solidAt(x, y, z) || w.solidAt(x, y + 1, z) || CM.isFluid(w.get(x, y, z))) continue;
+        if (w.skyAt(x, y, z) > 2 || w.blockLightAt(x, y, z) > 5) continue;
+        this.addMob('bat', x + 0.5, y, z + 0.5);
+        return;
+      }
+    }
+    // Quel monstre apparaît ici (la nuit ou dans le noir) ?
+    hostileFor(w, x, y, z) {
+      const r = this.rand(), bi = w.column(x, z).bi;
+      // gluants : dans les marais, et tout au fond (sous y = 0)
+      if ((bi === CM.BIO.SWAMP || bi === CM.BIO.MANGROVE || y < 0) && r < 0.3) return 'slime';
+      if (r < 0.42) return 'ombre';
+      if (r < 0.62) return 'spider';
+      if (r < 0.81) return 'skeleton';
+      return 'rampant';
+    }
 
     // Nether : des Ombres ardentes rôdent partout, de jour comme de nuit, même à la lumière.
     spawnNether(p, w, r) {
       const g = this.game;
       if (g.difficulty === 'peaceful' || g.mode === 'creative' || !p.alive) return;
       let n = 0;
-      for (const m of this.mobs) if (!m.dead && m.type === 'ardent' && Math.hypot(m.x - p.x, m.z - p.z) < 70) n++;
+      for (const m of this.mobs) if (!m.dead && MOBS[m.type].hostile && Math.hypot(m.x - p.x, m.z - p.z) < 70) n++;
       const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
       if (n >= Math.round(5 * dif) || r() > 0.5) return;
       for (let t = 0; t < 10; t++) {
@@ -1024,7 +1105,7 @@
           const y = Math.floor(p.y) - 10 + Math.floor(r() * 20);
           if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
           if (CM.isFluid(w.get(x, y, z)) || CM.isFluid(w.get(x, y - 1, z)) || CM.isFluid(w.get(x, y + 1, z))) continue;
-          const m = this.addMob('ardent', x + 0.5, y, z + 0.5);
+          const m = this.addMob(r() < 0.3 ? 'magma' : 'ardent', x + 0.5, y, z + 0.5);
           this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 10, { speed: 1.5, grav: -1, life: 1, size: 0.3 });
           return;
         }
@@ -1050,7 +1131,9 @@
           const bl = w.blockLightAt(x, y, z);
           const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
           if (bl < 4 && sky < 4) {
-            const m = this.addMob('ombre', x + 0.5, y, z + 0.5);
+            const type = this.hostileFor(w, x, y, z);
+            if (MOBS[type].hw > 0.45 && (w.solidAt(x + 1, y, z) || w.solidAt(x - 1, y, z) || w.solidAt(x, y, z + 1) || w.solidAt(x, y, z - 1))) continue; // (trop large)
+            const m = this.addMob(type, x + 0.5, y, z + 0.5);
             this.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 10, { speed: 1.5, grav: -1, life: 1, size: 0.3 });
             return true;
           }
@@ -1062,25 +1145,32 @@
     // Animal typique d'un biome (null s'il n'y en a pas).
     animalFor(bi) {
       const BIO = CM.BIO, r = this.rand();
+      const pick = (list) => {
+        let t = 0;
+        for (const [k, w] of list) if (r < (t += w)) return k;
+        return list[list.length - 1][0];
+      };
       switch (bi) {
         case BIO.SNOWY_TAIGA:
         case BIO.ICE_SPIKES:
-        case BIO.TUNDRA: return 'penguin';
+        case BIO.TUNDRA: return pick([['penguin', 0.5], ['wolf', 0.2], ['rabbit', 0.15], ['goat', 0.15]]);
+        case BIO.TAIGA: return pick([['boar', 0.3], ['wolf', 0.25], ['deer', 0.25], ['rabbit', 0.2]]);
         case BIO.FOREST:
         case BIO.BIRCH:
-        case BIO.TAIGA:
+        case BIO.DARK_FOREST: return pick([['boar', 0.3], ['deer', 0.25], ['mouflon', 0.15], ['chicken', 0.15], ['rabbit', 0.1], ['wolf', 0.05]]);
         case BIO.JUNGLE:
         case BIO.BAMBOO:
-        case BIO.DARK_FOREST:
         case BIO.MANGROVE:
         case BIO.SWAMP:
-        case BIO.CRYSTAL: return r < 0.6 ? 'boar' : 'mouflon';
+        case BIO.CRYSTAL: return pick([['boar', 0.5], ['chicken', 0.3], ['mouflon', 0.2]]);
         case BIO.PLAINS:
-        case BIO.FLOWERS:
-        case BIO.CHERRY:
-        case BIO.MUSHROOM:
-        case BIO.SAVANNA:
-        case BIO.MOUNTAINS: return 'mouflon';
+        case BIO.FLOWERS: return pick([['mouflon', 0.3], ['cow', 0.3], ['chicken', 0.25], ['rabbit', 0.15]]);
+        case BIO.CHERRY: return pick([['mouflon', 0.4], ['rabbit', 0.3], ['deer', 0.3]]);
+        case BIO.MUSHROOM: return pick([['cow', 0.7], ['mouflon', 0.3]]);
+        case BIO.SAVANNA: return pick([['cow', 0.45], ['mouflon', 0.3], ['chicken', 0.25]]);
+        case BIO.MOUNTAINS: return pick([['goat', 0.55], ['mouflon', 0.45]]);
+        case BIO.DESERT:
+        case BIO.BADLANDS: return r < 0.5 ? 'rabbit' : null;
         default: return null;
       }
     }
@@ -1211,7 +1301,10 @@
         const flags = m.hurt > 0 ? 2 : 0;
         mat4.compose(this.M, m.x, m.y, m.z, m.yaw, 0, 0, m.baby > 0 ? BABY_SCALE : 1);
         const sw = m.moving ? Math.sin(m.walk) : 0;
-        if (m.type === 'mouflon') {
+        const def = MOBS[m.type];
+        if (def.render) {
+          def.render(this, batch, m, l, flags, sw, time);
+        } else if (m.type === 'mouflon') {
           const wool = L.mouflon_wool, skin = L.mouflon_skin;
           this.part(batch, this.M, 0, 0, 0, 0, [-0.33, 0.42, -0.5, 0.33, 1.02, 0.5], wool, l, flags);
           const hb = Math.sin(time * 2 + m.age) * 0.05;

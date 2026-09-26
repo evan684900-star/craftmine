@@ -144,7 +144,14 @@
     ardent: 'ardent', ombre_ardente: 'ardent', blaze: 'ardent',
   };
   const MOB_NAMES = { mouflon: 'Mouflon', boar: 'Sanglier', penguin: 'Manchot', ombre: 'Ombre', villager: 'Villageois', golem: 'Golem de fer', ardent: 'Ombre ardente' };
-  const SUMMON_LIST = ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente', 'tnt', 'eclair', 'wagonnet'];
+  // (plus les créatures de mob_defs.js : poule, vache, araignée, squelette…)
+  const mobType = (k) => {
+    if (MOB_ALIASES[k]) return MOB_ALIASES[k];
+    const M = CM.MOBS || {};
+    return Object.keys(M).find((t) => t === k || norm(M[t].name || '') === k || (M[t].aliases || []).some((x) => norm(x) === k)) || null;
+  };
+  const mobName = (t) => MOB_NAMES[t] || (CM.MOBS && CM.MOBS[t] && CM.MOBS[t].name) || t;
+  const summonList = () => ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente'].concat(Object.values((CM.MORE && CM.MORE.mobs) || {}).map((d) => d.aliases[0])).concat(['tnt', 'eclair', 'wagonnet']);
 
   // -------------------------------------------------------- joueurs --
   const myPid = () => (G().net.isClient ? G().net.pid : 0);
@@ -816,17 +823,17 @@
   });
   const KILL_CATS = {
     creatures: (m) => true, mobs: (m) => true, tout: (m) => true,
-    animaux: (m) => ['mouflon', 'boar', 'penguin'].includes(m.type),
-    ombres: (m) => m.type === 'ombre' || m.type === 'ardent', monstres: (m) => m.type === 'ombre' || m.type === 'ardent', hostiles: (m) => m.type === 'ombre' || m.type === 'ardent',
+    animaux: (m) => CM.MOBS[m.type].passive && m.type !== 'villager',
+    ombres: (m) => m.type === 'ombre' || m.type === 'ardent', monstres: (m) => CM.MOBS[m.type].hostile, hostiles: (m) => CM.MOBS[m.type].hostile,
     villageois: (m) => m.type === 'villager', golems: (m) => m.type === 'golem',
   };
   def('tuer kill', {
-    cat: 'Créatures', cheat: true, usage: '[joueur | @a | créatures | animaux | ombres | villageois | golems | objets]', desc: 'tue un joueur (toi par défaut) ou des créatures proches',
-    args: [() => players().map((q) => q.name).concat(['@a', 'creatures', 'animaux', 'ombres', 'villageois', 'golems', 'objets'])],
+    cat: 'Créatures', cheat: true, usage: '[joueur | @a | créatures | animaux | monstres | ombres | villageois | golems | objets | <créature>]', desc: 'tue un joueur (toi par défaut) ou des créatures proches',
+    args: [() => players().map((q) => q.name).concat(['@a', 'creatures', 'animaux', 'monstres', 'ombres', 'villageois', 'golems', 'objets'])],
     local: true,
     run(ctx, a, o) {
       const g = G(), k = norm(a[0]);
-      if (a[0] !== undefined && (KILL_CATS[k] || k === 'objets' || k === 'items' || MOB_ALIASES[k])) {
+      if (a[0] !== undefined && (KILL_CATS[k] || k === 'objets' || k === 'items' || mobType(k))) {
         if (forward(ctx)) return;
         const R = a[1] !== undefined ? int(a[1], 1, 500, 'Rayon') : 128;
         const ents = g.entities;
@@ -835,7 +842,7 @@
           for (const d of ents.drops) if (!d.dead && Math.hypot(d.x - ctx.x, d.z - ctx.z) <= R) (d.dead = true), n++;
           return o.ok('🧹 ' + plural(n, 'objet') + ' au sol retiré' + (n > 1 ? 's' : ''));
         }
-        const f = KILL_CATS[k] || ((m) => m.type === MOB_ALIASES[k]);
+        const mt = mobType(k), f = KILL_CATS[k] || ((m) => m.type === mt);
         let n = 0;
         for (const m of ents.mobs) {
           if (m.dead || !f(m) || Math.hypot(m.x - ctx.x, m.z - ctx.z) > R) continue;
@@ -1335,9 +1342,9 @@
   // ----------------------------------------------------------- créatures --
   def('invoquer summon spawnmob', {
     cat: 'Créatures', cheat: true, usage: '<créature> [nombre] [x y z]', desc: 'fait apparaître des créatures, de la TNT, un éclair… (là où tu vises)',
-    args: [() => SUMMON_LIST, () => ['1', '5', '10']],
+    args: [() => summonList(), () => ['1', '5', '10']],
     run(ctx, a, o, c) {
-      if (!a[0]) return o.info('Créatures : ' + SUMMON_LIST.join(', '));
+      if (!a[0]) return o.info('Créatures : ' + summonList().join(', '));
       const g = G(), w = g.world, k = norm(a[0]);
       const n = isNum(a[1]) ? int(a[1], 1, 50, 'Nombre') : 1;
       const pi = isNum(a[1]) ? 2 : 1;
@@ -1358,8 +1365,8 @@
         for (let i = 0; i < n; i++) g.entities.addCart('cart', Math.floor(p.x) + 0.5, p.y, Math.floor(p.z) + 0.5);
         return o.ok('🛒 ' + plural(n, 'wagonnet'));
       }
-      const type = MOB_ALIASES[k];
-      if (!type) bad('Créature inconnue : « ' + a[0] + ' » (' + SUMMON_LIST.join(', ') + ')');
+      const type = mobType(k);
+      if (!type) bad('Créature inconnue : « ' + a[0] + ' » (' + summonList().join(', ') + ')');
       let made = 0;
       for (let i = 0; i < n; i++) {
         const x = p.x + jit(), z = p.z + jit();
@@ -1368,7 +1375,7 @@
         if (m && type === 'golem') m.home = [Math.floor(x), Math.floor(z)];
         made++;
       }
-      o.ok('🐾 ' + made + ' × ' + MOB_NAMES[type]);
+      o.ok('🐾 ' + made + ' × ' + mobName(type));
     },
   });
   def('foudre lightning eclair smite', {
@@ -1419,7 +1426,7 @@
       const c = {};
       for (const m of G().entities.mobs) if (!m.dead) c[m.type] = (c[m.type] || 0) + 1;
       const k = Object.keys(c);
-      o.info(k.length ? '🐾 ' + k.map((t) => (MOB_NAMES[t] || t) + ' ' + c[t]).join(' · ') : 'Aucune créature chargée');
+      o.info(k.length ? '🐾 ' + k.map((t) => mobName(t) + ' ' + c[t]).join(' · ') : 'Aucune créature chargée');
     },
   });
 

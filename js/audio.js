@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
 
   A.init = function () {
@@ -271,6 +271,32 @@
       case 'explode':
         noise(t, 1.1, 'lowpass', 700, 0.7, 0.9, 80);
         tone(t, 0.6, 'sine', 90, 30, 0.6);
+        break;
+      // nouvelles créatures
+      case 'cluck':
+        tone(t, 0.07, 'square', 900 * pitch, 600, 0.06);
+        tone(t + 0.1, 0.06, 'square', 1000 * pitch, 700, 0.05);
+        break;
+      case 'moo':
+        tone(t, 0.9, 'sawtooth', 150 * pitch, 110, 0.12, 0.15);
+        noise(t, 0.8, 'lowpass', 400, 0.8, 0.05);
+        break;
+      case 'hiss':
+        noise(t, 1.4, 'highpass', 3000, 0.7, 0.22);
+        break;
+      case 'skitter':
+        for (let i = 0; i < 5; i++) noise(t + i * 0.05, 0.03, 'bandpass', 2500 * pitch, 3, 0.1);
+        break;
+      case 'rattle':
+        for (let i = 0; i < 4; i++) noise(t + i * 0.06, 0.04, 'bandpass', 1400 * pitch, 5, 0.14);
+        break;
+      case 'squish':
+        tone(t, 0.18, 'sine', 180 * pitch, 90, 0.2);
+        noise(t, 0.12, 'lowpass', 600, 1, 0.1);
+        break;
+      case 'growl':
+        tone(t, 0.6, 'sawtooth', 95 * pitch, 80, 0.08, 0.1);
+        noise(t, 0.6, 'lowpass', 300 * pitch, 1, 0.08);
         break;
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule

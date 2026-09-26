@@ -33,7 +33,8 @@
     }
     const g = this.game;
     if (!this.arrows) this.arrows = [];
-    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, pick: !shooter || g.mode !== 'creative' });
+    // (flèches des squelettes : pas ramassables)
+    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, pick: !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
     CM.Audio.play('bow', { pitch: 0.9 + Math.random() * 0.2 });
   };
   E.updateArrows = function (dt) {
@@ -61,7 +62,7 @@
         const dx = a.vx / sp, dy = a.vy / sp, dz = a.vz / sp;
         let hit = null, ht = len;
         for (const m of this.mobs) {
-          if (m.dead) continue;
+          if (m.dead || m === a.shooter) continue;
           const t = CM.rayBox(a.x, a.y, a.z, dx, dy, dz, m.x - m.hw, m.y, m.z - m.hw, m.x + m.hw, m.y + m.h, m.z + m.hw);
           if (t >= 0 && t < ht) {
             ht = t;

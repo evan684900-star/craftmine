@@ -1235,7 +1235,7 @@
     }
     setDifficulty(d) {
       this.difficulty = d;
-      if (d === 'peaceful') for (const m of this.entities.mobs) if (m.type === 'ombre' || m.type === 'ardent') m.dead = true;
+      if (d === 'peaceful') for (const m of this.entities.mobs) if (CM.MOBS[m.type].hostile) m.dead = true;
       this.net.sendCfg();
     }
 
@@ -1590,7 +1590,7 @@
         this.ui.toast('Tu ne peux dormir que la nuit', 'info', 'bedday');
         return;
       }
-      if (this.entities.mobs.some((m) => m.type === 'ombre' && Math.hypot(m.x - x, m.z - z) < 10 && Math.abs(m.y - y) < 6)) {
+      if (this.entities.mobs.some((m) => CM.MOBS[m.type].hostile && !m.dead && Math.hypot(m.x - x, m.z - z) < 10 && Math.abs(m.y - y) < 6)) {
         this.ui.toast('Impossible de dormir : des Ombres rôdent tout près !', 'warn', 'bedombre');
         return;
       }
@@ -1768,7 +1768,7 @@
     onDawnHeart(x, y, z, remote) {
       this.dawnHearts.push([x, y, z]);
       for (const m of this.entities.mobs) {
-        if (m.type === 'ombre' && Math.hypot(m.x - x, m.z - z) < 48) {
+        if (CM.MOBS[m.type].hostile && Math.hypot(m.x - x, m.z - z) < 48) {
           m.dead = true;
           this.entities.burst(CM.Textures.layer.smoke, m.x, m.y + 1, m.z, 16, { speed: 2, grav: -1.5, life: 1.2, size: 0.3 });
         }
