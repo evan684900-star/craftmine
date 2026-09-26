@@ -700,7 +700,7 @@
           const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0);
           m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
         }
-        for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z)]);
+        for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z), Math.round(o.age)]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
         const x = ents.snapExtra(near);
         e.link.send({ t: 'ent', m, d, tn, ar: x.ar, ca: x.ca, fb: x.fb });
@@ -1231,7 +1231,10 @@
           if (typeof m.s === 'string') CM.Commands.ann(m.s);
           break;
         case 'wx':
-          if (CM.Weather.NAMES[m.w]) g.weather = { type: m.w, t: num(m.d) };
+          if (CM.Weather.NAMES[m.w]) {
+            if (m.n && m.w !== (g.weather && g.weather.type)) CM.Weather.announce(g, m.w);
+            g.weather = { type: m.w, t: num(m.d) };
+          }
           break;
         case 'join':
           this.remotes.set(m.pid, new RemotePlayer(this, m.pid, cleanName(m.n)));

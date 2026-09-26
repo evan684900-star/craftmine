@@ -1238,7 +1238,7 @@
   });
   const WX = { clair: 'clear', beau: 'clear', soleil: 'clear', clear: 'clear', sun: 'clear', pluie: 'rain', rain: 'rain', neige: 'rain', snow: 'rain', orage: 'thunder', thunder: 'thunder', tempete: 'thunder' };
   def('meteo weather', {
-    cat: 'Monde', cheat: true, usage: '<clair | pluie | orage> [durée en minutes]', desc: 'change la météo (neige dans les biomes froids)',
+    cat: 'Monde', cheat: true, usage: '<clair | pluie | orage> [durée en minutes]', desc: 'change la météo (neige dans les biomes froids) ; elle change aussi toute seule (/regle meteo_auto off pour la figer)',
     args: [() => ['clair', 'pluie', 'orage', 'neige'], () => ['2', '5', '10']],
     run(ctx, a, o, c) {
       const t = WX[norm(a[0])];
@@ -1268,6 +1268,7 @@
     garder_inventaire: ['keepInventory', 'option', 'on garde son inventaire en mourant'],
     propagation_feu: ['fireSpread', 'option', 'le feu se propage'],
     cycle_jour: ['dayCycle', 'setting', 'le temps passe'],
+    meteo_auto: ['weatherCycle', 'setting', 'la météo change toute seule'],
     apparition_creatures: ['mobSpawn', 'setting', 'les créatures apparaissent'],
     degats_chute: ['fallDamage', 'setting', 'les chutes font mal'],
     faim: ['hunger', 'setting', 'la faim baisse'],

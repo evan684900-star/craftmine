@@ -1,6 +1,7 @@
 'use strict';
-// Météo : beau temps, pluie (neige dans les biomes froids) et orage avec éclairs. Réglée par la
-// commande /météo ; l'hôte (ou la partie solo) décide, les invités reçoivent la météo et les éclairs.
+// Météo : beau temps, pluie (neige dans les biomes froids) et orage avec éclairs. Elle change toute
+// seule (beau temps 10 à 25 min, puis pluie 3 à 8 min ou orage 2 à 6 min ; règle « météo_auto »)
+// ou par la commande /météo. L'hôte (ou la partie solo) décide, les invités reçoivent la météo.
 (function () {
   const M = (CM.MORE = CM.MORE || { blocks: [], items: [], recipes: [], textures: [] });
   M.textures.push(function (X) {
@@ -23,12 +24,29 @@
       if (!g.weather || !NAMES[g.weather.type]) g.weather = { type: 'clear', t: 0 };
       return g.weather;
     },
-    // Change la météo (dur : secondes ; 0 = jusqu'au prochain changement).
-    set(g, type, dur) {
+    // Météo automatique ?
+    auto(g) {
+      return !CM.gameRule || CM.gameRule(g, 'weatherCycle');
+    },
+    // Durée naturelle d'une météo (secondes).
+    natural(type) {
+      const r = Math.random();
+      return type === 'rain' ? 180 + r * 300 : type === 'thunder' ? 120 + r * 240 : 600 + r * 900;
+    },
+    // Change la météo (dur : secondes ; 0 = durée naturelle, ou pour toujours sans météo automatique).
+    // natural : changement tout seul (annoncé à l'écran).
+    set(g, type, dur, natural) {
       const s = W.state(g);
       s.type = NAMES[type] ? type : 'clear';
-      s.t = Math.max(0, dur || 0);
-      if (g.net && g.net.isHost) g.net.broadcast({ t: 'wx', w: s.type, d: Math.round(s.t) });
+      s.t = dur > 0 ? dur : W.auto(g) ? W.natural(s.type) : 0;
+      if (natural) W.announce(g, s.type);
+      if (g.net && g.net.isHost) g.net.broadcast({ t: 'wx', w: s.type, d: Math.round(s.t), n: natural ? 1 : 0 });
+    },
+    announce(g, type) {
+      if (!g.world || g.world.nether || !g.player) return;
+      const snow = type !== 'clear' && W.cold(g, g.player.x, g.player.z);
+      const msg = type === 'thunder' ? '⛈ Un orage éclate !' : type === 'rain' ? (snow ? '🌨 Il commence à neiger' : '🌧 Il commence à pleuvoir') : '☀ Le beau temps revient';
+      g.ui.toast(msg, 'info', 'weather');
     },
     // Neige plutôt que pluie ?
     cold(g, x, z) {
@@ -49,8 +67,12 @@
       if (!net.isClient) {
         if (s.t > 0) {
           s.t -= dt;
-          if (s.t <= 0) W.set(g, 'clear');
-        }
+          // fin de cette météo : la suivante (automatique), ou le beau temps (fin d'une /météo)
+          if (s.t <= 0) {
+            if (W.auto(g)) W.set(g, s.type === 'clear' ? (Math.random() < 0.3 ? 'thunder' : 'rain') : 'clear', 0, true);
+            else W.set(g, 'clear', 0, s.type !== 'clear');
+          }
+        } else if (W.auto(g)) s.t = W.natural(s.type);
         // orage : un éclair de temps en temps près d'un joueur
         if (s.type === 'thunder' && !g.world.nether) {
           g.boltT = (g.boltT === undefined ? 6 : g.boltT) - dt;

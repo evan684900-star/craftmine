@@ -126,6 +126,8 @@
     return tmin;
   };
 
+  const DROP_LIFE = 300; // durée de vie d'un objet au sol (secondes)
+  CM.DROP_LIFE = DROP_LIFE;
   const MOBS = {
     // pick : la boîte de frappe déborde un peu (tête et museau dépassent du corps)
     mouflon: { hw: 0.4, h: 1.15, hp: 8, speed: 1.4, passive: true, pick: 1.35 },
@@ -405,10 +407,10 @@
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
       this.drops = [];
-      for (const [uid, id, count, x, y, z] of s.d || []) {
+      for (const [uid, id, count, x, y, z, age] of s.d || []) {
         if (!CM.itemInfo(id)) continue;
         let d = oldD.get(uid);
-        if (!d) d = { uid, id, x, y, z, age: 0, spin: this.rand() * 6, hw: 0.125, h: 0.25 };
+        if (!d) d = { uid, id, x, y, z, age: Number.isFinite(age) ? age : 0, spin: this.rand() * 6, hw: 0.125, h: 0.25 };
         d.id = id;
         d.count = count;
         d.tx = x; d.ty = y; d.tz = z;
@@ -851,7 +853,7 @@
       if (!w.loaded(d.x, d.z)) return; // figé tant que son tronçon n'est pas chargé
       d.age += dt;
       d.pickDelay -= dt;
-      if (d.age > 600) d.dead = true;
+      if (d.age > DROP_LIFE) d.dead = true; // disparaît au bout de 5 minutes
       const cell = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z));
       const inWater = CM.isWater(cell);
       // un objet tombé dans le feu ou la lave brûle (sauf la netherite)
@@ -1288,6 +1290,8 @@
       this.renderExtra(batch);
       for (const d of this.drops) {
         if (!this.game.world.loaded(d.x, d.z)) continue;
+        // les 10 dernières secondes, il clignote avant de disparaître
+        if (d.age > DROP_LIFE - 10 && Math.floor(d.age * (d.age > DROP_LIFE - 3 ? 8 : 4)) % 2) continue;
         const l = this.lightAt(d.x, d.y + 0.2, d.z);
         const bob = Math.sin(d.age * 3 + d.spin) * 0.06 + 0.1;
         mat4.compose(this.M, d.x, d.y + bob, d.z, d.age * 1.6 + d.spin, 0, 0, 1);
