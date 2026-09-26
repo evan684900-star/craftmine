@@ -849,6 +849,8 @@
         this.locked = document.pointerLockElement === this.canvas;
         if (this.locked) {
           this.ui.hide('start');
+          // souris reprise par le jeu : le tchat ne doit pas rester ouvert (sinon plus de touches)
+          if (this.net.chatOpen) this.net.closeChat(false, true);
           return;
         }
         this.clearInput();
@@ -870,6 +872,9 @@
           inp.mouse[e.button] = true;
           inp.pressed['mouse' + e.button] = true;
           e.preventDefault();
+        } else if (this.net.chatOpen && e.target.isConnected && e.target !== this.net.chatIn && !this.net.suggEl.contains(e.target) && !this.net.chatEl.contains(e.target) && !(e.target.closest && e.target.closest('#t-chat'))) {
+          // clic en dehors du tchat : on le ferme et on reprend la partie
+          this.net.closeChat(false);
         } else if (e.target === this.canvas && !this.touch.enabled && this.state === 'playing' && !this.paused && !this.ui.invOpen && this.player.alive) {
           this.captureMouse();
         }
@@ -894,6 +899,13 @@
         if (this.ui.captureKey(e)) return;
         if (this.state !== 'playing') return;
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+        // tchat ouvert mais la saisie n'a plus le focus : Échap le ferme, sinon on y revient
+        if (this.net.chatOpen) {
+          e.preventDefault();
+          if (e.key === 'Escape') this.net.closeChat(false);
+          else this.net.chatIn.focus();
+          return;
+        }
         const c = e.code;
         const K = this.binds;
         if (['Space', 'Tab', 'F3', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();

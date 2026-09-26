@@ -331,6 +331,11 @@
       e.preventDefault();
       CM.Audio.init();
       const g = this.game;
+      // tchat ouvert : toucher le jeu le ferme (le bouton 💬 garde son propre effet)
+      if (g.net.chatOpen && !(e.target.closest && e.target.closest('#t-chat'))) {
+        g.net.closeChat(false);
+        return;
+      }
       if (g.state !== 'playing' || g.paused || g.ui.invOpen || g.net.chatOpen) return;
       try {
         e.target.setPointerCapture(e.pointerId);

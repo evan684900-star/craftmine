@@ -1448,6 +1448,23 @@
         this.tab = null;
         this.suggest();
       });
+      // clic / toucher sur une suggestion : complète (sans quitter la saisie)
+      this.suggEl.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const d = e.target.closest && e.target.closest('.sg');
+        const it = d && this.suggItems && this.suggItems[+d.dataset.i];
+        if (it) this.chatIn.value = it.text;
+        this.tab = null;
+        this.chatIn.focus();
+        setTimeout(() => this.suggest(), 0);
+      });
+      // la saisie perd le focus (clic ailleurs, toucher sur l'écran…) : on ferme le tchat,
+      // sinon il resterait affiché et les touches du jeu ne répondraient plus
+      this.chatIn.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (this.chatOpen && document.activeElement !== this.chatIn && document.hasFocus()) this.closeChat(false);
+        }, 0);
+      });
       $('t-chat').addEventListener('click', (e) => {
         e.preventDefault();
         if (this.chatOpen) this.closeChat(false);
@@ -1495,16 +1512,7 @@
       if (r.more) h += '<div class="sg-more">… et ' + r.more + ' autre' + (r.more > 1 ? 's' : '') + ' (continue à taper)</div>';
       el.innerHTML = h;
       el.classList.remove('hidden');
-      // clic / toucher : complète
-      for (const d of el.querySelectorAll('.sg')) {
-        d.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          this.chatIn.value = r.items[+d.dataset.i].text;
-          this.tab = null;
-          this.chatIn.focus();
-          this.suggest();
-        });
-      }
+      this.suggItems = r.items;
     }
     say(s) {
       // « / » : commande

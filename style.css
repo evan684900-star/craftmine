@@ -428,7 +428,7 @@ body.touch .inv-panel > .hint, body.touch #chest-panel .hint, body.touch #tab-cr
 .cl.cmd.msg { color: #f0c8ff; font-style: italic; }
 .cl.cmd.me { color: #ffe9a8; font-style: italic; }
 .cl.cmd.ann { color: #ffd166; font-weight: 700; }
-#chat-sugg { position: absolute; left: 10px; bottom: calc(146px * var(--gui, 1)); width: min(620px, calc(100vw - 20px)); z-index: 6; background: rgba(12, 14, 22, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 4px; font-size: 13px; max-height: 45vh; overflow-y: auto; }
+#chat-sugg { pointer-events: auto; position: absolute; left: 10px; bottom: calc(146px * var(--gui, 1)); width: min(620px, calc(100vw - 20px)); z-index: 6; background: rgba(12, 14, 22, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 4px; font-size: 13px; max-height: 45vh; overflow-y: auto; }
 #chat-sugg .sg { padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #chat-sugg .sg b { color: var(--gold); font-weight: 700; }
 #chat-sugg .sg span { color: var(--muted); }
