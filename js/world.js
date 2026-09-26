@@ -2092,7 +2092,8 @@
       const c = this.chunkAt(x, z);
       if (!c) return false;
       const i = lidx(x & 15, y, z & 15);
-      if (c.blocks[i] === id) return false;
+      const old = c.blocks[i];
+      if (old === id) return false;
       c.blocks[i] = id;
       const k = ckey(c.cx, c.cz);
       let e = this.edits.get(k);
@@ -2118,7 +2119,7 @@
       this.propagate(BLK);
       this.trackDirty = false;
       if (this.onSet) this.onSet(x, y, z, id);
-      if (this.onEdit) this.onEdit(x, y, z, id);
+      if (this.onEdit) this.onEdit(x, y, z, id, old);
       return true;
     }
 

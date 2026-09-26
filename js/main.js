@@ -335,13 +335,13 @@
       ctx.techAnim = new Set(w.editedWhere((id) => !!CM.blocks[id].anim).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
       // liquides qui coulent et feu
       ctx.ticks.reset();
-      w.onEdit = (x, y, z, id) => {
+      w.onEdit = (x, y, z, id, old) => {
         const k = x + ',' + y + ',' + z;
         if (id === B.ENCHANTING_TABLE) ctx.enchTables.add(k);
         else if (ctx.enchTables.size) ctx.enchTables.delete(k);
         if (CM.blocks[id].anim) ctx.techAnim.add(k);
         else if (ctx.techAnim.size) ctx.techAnim.delete(k);
-        ctx.ticks.onEdit(x, y, z, id);
+        ctx.ticks.onEdit(x, y, z, id, old);
       };
       this.ctxs[dim] = ctx;
       if (this.net.active) this.net.attachWorld(w, dim);

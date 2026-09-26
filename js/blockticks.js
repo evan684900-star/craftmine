@@ -104,7 +104,7 @@
       this.spawnAge = 0;
     }
     // Un bloc a changé : les liquides voisins réagissent, un nouveau feu commence à vivre.
-    onEdit(x, y, z, id) {
+    onEdit(x, y, z, id, old) {
       if (!this.active) return;
       const w = this.world;
       if (kindOf(id)) this.schedule(x, y, z, kindOf(id));
@@ -114,7 +114,7 @@
       }
       if (id === B.FIRE) this.addFire(x, y, z);
       if (this.rs) this.rs.onEdit(x, y, z, id);
-      if (this.grav) this.grav.onEdit(x, y, z, id);
+      if (this.grav) this.grav.onEdit(x, y, z, id, old);
       if (!blk(id).portal) {
         for (const [dx, dy, dz] of NB6) if (blk(w.get(x + dx, y + dy, z + dz)).portal) this.portalChecks.add(x + dx + ',' + (y + dy) + ',' + (z + dz));
       }
