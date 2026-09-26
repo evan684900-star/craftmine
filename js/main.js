@@ -2010,7 +2010,7 @@
         game.autostart = true;
         const v = params.get('autostart');
         const mode = params.get('mode') === 'creative' ? 'creative' : 'survival';
-        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal', ext: { tech: params.get('tech') !== '0', light: params.get('light') !== '0' } });
+        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal', ext: { tech: params.get('tech') !== '0', light: params.get('light') !== '0', gravity: params.get('gravity') === '1' } });
       }
     } catch (err) {
       console.error(err);

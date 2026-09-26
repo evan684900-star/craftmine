@@ -694,7 +694,7 @@
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z)]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
         const x = ents.snapExtra(near);
-        e.link.send({ t: 'ent', m, d, tn, ar: x.ar, ca: x.ca });
+        e.link.send({ t: 'ent', m, d, tn, ar: x.ar, ca: x.ca, fb: x.fb });
       }
     }
     // Hôte : zones à garder chargées autour des invités.

@@ -53,6 +53,7 @@
       this.game = game;
       this.w = world || null; // monde de cette dimension
       this.rs = null;
+      this.grav = null; // extension Gravité réaliste
       this.t = 0;
       this.due = new Map(); // eau : clé -> instant (dans l'ordre d'insertion = ordre des échéances)
       this.dueLava = new Map(); // lave : idem, plus lente
@@ -79,6 +80,8 @@
       // redstone : un moteur par dimension
       if (!this.rs && CM.Redstone) this.rs = new CM.Redstone(this);
       else if (this.rs) this.rs.reset();
+      if (!this.grav && CM.Gravity) this.grav = new CM.Gravity(this);
+      else if (this.grav) this.grav.reset();
       if (!this.active || !this.world) return;
       for (const [x, y, z] of this.world.editedWhere((id) => id === B.FIRE)) this.addFire(x, y, z);
       // liquides posés ou qui coulaient encore : ils reprennent (sans rien changer s'ils sont stables)
@@ -111,6 +114,7 @@
       }
       if (id === B.FIRE) this.addFire(x, y, z);
       if (this.rs) this.rs.onEdit(x, y, z, id);
+      if (this.grav) this.grav.onEdit(x, y, z, id);
       if (!blk(id).portal) {
         for (const [dx, dy, dz] of NB6) if (blk(w.get(x + dx, y + dy, z + dz)).portal) this.portalChecks.add(x + dx + ',' + (y + dy) + ',' + (z + dz));
       }
@@ -120,6 +124,7 @@
       if (!this.active || !this.world) return;
       this.t += dt;
       if (this.rs) this.rs.update(dt);
+      if (this.grav) this.grav.update(dt);
       if (this.portalChecks.size) {
         const list = [...this.portalChecks];
         this.portalChecks.clear();

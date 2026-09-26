@@ -236,6 +236,7 @@
       this.tnts.length = 0;
       if (this.arrows) this.arrows.length = 0;
       if (this.carts) this.carts.length = 0;
+      if (this.falling) this.falling.length = 0;
     }
     // TNT allumée : tombe, clignote puis explose.
     addTnt(x, y, z, fuse) {

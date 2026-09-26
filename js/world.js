@@ -326,6 +326,12 @@
       return c ? c.blocks[lidx(x & 15, y, z & 15)] : 0;
     }
     // Pour les collisions : un tronçon pas encore chargé fait office de mur.
+    // Case modifiée depuis la génération (posée, cassée…) ?
+    isEdited(x, y, z) {
+      if (y < MINY || y >= H) return false;
+      const e = this.edits.get(ckey(x >> 4, z >> 4));
+      return !!e && e.has(lidx(x & 15, y, z & 15));
+    }
     solidAt(x, y, z) {
       if (y < MINY) return true;
       if (y >= H) return false;
