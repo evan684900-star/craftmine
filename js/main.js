@@ -215,6 +215,13 @@
       this.chests = new Map();
       this.noteBlocks = {};
       this.techData = {}; // extension Électricité : charge des batteries, combustible, progression
+      // commandes : météo, maisons (/defmaison), dernière position (/retour), constructions (/annuler)
+      this.weather = save && save.weather && CM.Weather.NAMES[save.weather.type] ? { type: save.weather.type, t: +save.weather.t || 0 } : { type: 'clear', t: 0 };
+      this.wLevel = this.weather.type !== 'clear' ? 1 : 0;
+      this.homes = (save && save.homes && typeof save.homes === 'object' && save.homes) || {};
+      this.cmdBack = null;
+      this.cmdUndo = null;
+      this.bolts = null;
       this.inventory.slots = new Array(36).fill(null);
       this.inventory.armor = [null, null, null, null];
       this.inventory.offhand = null;
@@ -245,6 +252,11 @@
           flying: !!p.flying,
         });
         this.player.bed = Array.isArray(p.bed) ? p.bed : null;
+        // pouvoirs donnés par commande (/vol, /invincible, /vitesse, /saut, /vision)
+        if (p.cmd && typeof p.cmd === 'object') {
+          const c = p.cmd;
+          Object.assign(this.player, { cmdFly: !!c.f, cmdGod: !!c.g, cmdSpeed: Math.max(0.1, Math.min(10, +c.s || 1)), cmdJump: Math.max(0, Math.min(10, c.j | 0)), nightVision: !!c.n });
+        }
         this.player.xpTotal = Math.max(0, p.xp | 0);
         if (Number.isFinite(p.enchSeed)) this.player.enchSeed = p.enchSeed >>> 0;
         this.player.fallStart = this.player.y;
@@ -696,6 +708,7 @@
           x: rs ? rs.x : p.x, y: rs ? rs.y : p.y, z: rs ? rs.z : p.z,
           yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
           xp: p.xpTotal, enchSeed: p.enchSeed,
+          cmd: p.cmdFly || p.cmdGod || (p.cmdSpeed && p.cmdSpeed !== 1) || p.cmdJump || p.nightVision ? { f: p.cmdFly ? 1 : 0, g: p.cmdGod ? 1 : 0, s: p.cmdSpeed || 1, j: p.cmdJump || 0, n: p.nightVision ? 1 : 0 } : undefined,
         },
         inv: this.inventory.serialize(),
         time: this.time,
@@ -706,6 +719,8 @@
         chests: Object.fromEntries(this.chests),
         noteBlocks: this.noteBlocks,
         tech: this.techData,
+        weather: this.weather,
+        homes: this.homes,
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -891,10 +906,10 @@
           this.ui.toggleHud();
           return;
         }
-        // tchat (multijoueur)
-        if ((c === 'KeyT' || c === 'Enter') && this.net.active && !this.ui.invOpen && !this.paused) {
+        // tchat (et commandes, aussi en solo) ; « / » l'ouvre avec la commande commencée
+        if ((c === 'KeyT' || c === 'Enter' || e.key === '/' || c === 'NumpadDivide') && this.state === 'playing' && !this.ui.invOpen && !this.paused) {
           e.preventDefault();
-          this.net.openChat();
+          this.net.openChat(e.key === '/' || c === 'NumpadDivide' ? '/' : '');
           return;
         }
         if (c === K.inventory && !this.paused && this.player.alive) {
@@ -1807,7 +1822,9 @@
         fog = [0, 1.6];
         flatSky = fogColor;
       }
-      return {
+      // vision nocturne (/vision) : on voit clair partout
+      if (p.nightVision) ambient = ambient ? ambient.map((v) => Math.max(v, 0.62)) : [0.62, 0.62, 0.66];
+      const env = {
         sunDir, zenith, horizon, fogColor, fog,
         day: 0.14 + 0.86 * day,
         skyTint: mix([0.5, 0.58, 0.95], [1.0, 0.99, 0.95], day),
@@ -1824,6 +1841,8 @@
         heldCol: CM.Light.heldColor(this),
         handCol: CM.Light.colorAt(this.world, Math.floor(cam[0]), Math.floor(cam[1]), Math.floor(cam[2])),
       };
+      CM.Weather.env(this, env); // pluie, orage
+      return env;
     }
 
     // Main principale <-> main secondaire.
@@ -1913,6 +1932,7 @@
       }
       // hôte : l'autre dimension continue de vivre tant qu'un invité s'y trouve
       if (net.isHost) this.updateOtherDims(dt);
+      CM.Weather.update(this, dt);
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -1936,6 +1956,7 @@
         this.renderEnchantTables(rdt);
       }
       if (this.techAnim && this.techAnim.size && CM.Tech) CM.Tech.render(this, this.batch);
+      CM.Weather.render(this, this.translucent, cam); // pluie, neige, éclairs
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // corde du grappin

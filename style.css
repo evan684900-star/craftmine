@@ -421,6 +421,21 @@ body.touch .inv-panel > .hint, body.touch #chest-panel .hint, body.touch #tab-cr
 #chat.open .cl { opacity: 1; }
 #chat.open { pointer-events: auto; overflow-y: auto; }
 #chat-input { position: absolute; left: 10px; bottom: calc(112px * var(--gui, 1)); width: min(520px, calc(100vw - 20px)); z-index: 5; font-size: 15px; }
+/* commandes : réponses et suggestions */
+.cl.cmd.ok { color: #b9f5b0; }
+.cl.cmd.err { color: #ffb4a8; }
+.cl.cmd.info { color: #e8e8f0; }
+.cl.cmd.msg { color: #f0c8ff; font-style: italic; }
+.cl.cmd.me { color: #ffe9a8; font-style: italic; }
+.cl.cmd.ann { color: #ffd166; font-weight: 700; }
+#chat-sugg { position: absolute; left: 10px; bottom: calc(146px * var(--gui, 1)); width: min(620px, calc(100vw - 20px)); z-index: 6; background: rgba(12, 14, 22, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 4px; font-size: 13px; max-height: 45vh; overflow-y: auto; }
+#chat-sugg .sg { padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#chat-sugg .sg b { color: var(--gold); font-weight: 700; }
+#chat-sugg .sg span { color: var(--muted); }
+#chat-sugg .sg.on, #chat-sugg .sg:hover { background: rgba(255, 255, 255, 0.1); }
+#chat-sugg .sg-usage { padding: 3px 8px 5px; color: #bfe3ff; border-bottom: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 2px; white-space: normal; }
+#chat-sugg .sg-more { padding: 2px 8px; color: var(--muted); font-style: italic; }
+body.touch #chat-sugg { top: 104px; bottom: auto; }
 .code { font: 800 44px/1.1 ui-monospace, Consolas, monospace; letter-spacing: 10px; color: var(--gold); margin: 4px 0 14px; user-select: all; }
 .code-input { text-transform: uppercase; letter-spacing: 4px; font-weight: 700; }
 .small-note.left { text-align: left; line-height: 1.45; }

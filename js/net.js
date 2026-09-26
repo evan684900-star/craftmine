@@ -209,7 +209,7 @@
       this.muted = false;
       this.locks = new Map(); // hôte : coffre ouvert -> pid (0 = l'hôte)
       this.guests = {}; // hôte : progression de chaque invité (par pseudo)
-      this.rules = { pvp: false, keep: false };
+      this.rules = { pvp: false, keep: false, cmds: false };
       this.dayLen = 0;
       this.chestKey = null;
       this.chestDirty = false;
@@ -315,6 +315,7 @@
       this.name = name;
       this.rules.pvp = !!pvp;
       this.rules.keep = !!this.game.options.keepInventory;
+      this.rules.cmds = !!(this.game.settings && this.game.settings.guestCheats); // triches des invités (/triche)
       peer.on('connection', (conn) => this.incoming(conn));
       peer.on('disconnected', () => this.reconnectLater());
       this.attachWorld();
@@ -407,6 +408,7 @@
         nether: w.ne ? { edits: w.ne } : undefined,
         player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
+        weather: w.wx && typeof w.wx === 'object' ? w.wx : null,
       };
     }
 
@@ -472,7 +474,7 @@
       this.chestKey = null;
       this.code = '';
       this.dayLen = 0;
-      this.rules = { pvp: false, keep: false };
+      this.rules = { pvp: false, keep: false, cmds: false };
       if (this.chatOpen) this.closeChat(false, true);
       document.body.classList.remove('net');
       this.tagsEl.innerHTML = '';
@@ -541,12 +543,19 @@
       this.outSets = [];
     }
     rulesMsg() {
-      return { pvp: this.rules.pvp, keep: !!this.game.options.keepInventory };
+      const s = this.game.settings || {};
+      return {
+        pvp: this.rules.pvp, keep: !!this.game.options.keepInventory, cmds: !!this.rules.cmds,
+        fallDamage: s.fallDamage !== false, hunger: s.hunger !== false, mobSpawn: s.mobSpawn !== false,
+      };
     }
     applyRules(r) {
       if (!r) return;
       this.rules.pvp = !!r.pvp;
       this.rules.keep = !!r.keep;
+      this.rules.cmds = !!r.cmds;
+      // règles de la partie (/regle) qui jouent chez l'invité
+      for (const k of ['fallDamage', 'hunger', 'mobSpawn']) this.rules[k] = r[k] !== false;
     }
     // Hôte : réglages du monde modifiés (mode, difficulté, règles).
     sendCfg() {
@@ -757,7 +766,7 @@
         seed: w.seed, settings: Object.assign({}, g.settings, { mode: g.mode, difficulty: g.difficulty }),
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
-        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(),
+        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null,
         players: [[0, this.name], ...[...this.links.values()].map((x) => [x.pid, x.name])],
         you,
       });
@@ -880,6 +889,14 @@
           if (s) this.chatAll(e.name, s);
           break;
         }
+        case 'cmd':
+          // commande tapée par l'invité (exécutée ici, dans sa dimension)
+          CM.Commands.fromGuest(e, m);
+          break;
+        case 'act':
+          // action d'une commande de l'invité sur un joueur (relayée)
+          CM.Commands.guestAct(e, m);
+          break;
         case 'save':
           if (m.d && typeof m.d === 'object') this.guests[e.name] = m.d;
           break;
@@ -1202,6 +1219,20 @@
         case 'sys':
           this.sys(m.s);
           break;
+        case 'cr':
+          // réponse d'une commande, ou ligne pour tous (/moi, /dé…)
+          if (typeof m.s === 'string') CM.Commands.print(m.s.replace(/[\u0000-\u001f]/g, ' ').slice(0, 600), ['ok', 'err', 'info', 'msg', 'me', 'ann'].includes(m.k) ? m.k : 'info');
+          break;
+        case 'act':
+          // une commande nous vise (objets, soins, téléportation…)
+          if (m.a && typeof m.a === 'object') CM.Commands.apply(m.a);
+          break;
+        case 'ann':
+          if (typeof m.s === 'string') CM.Commands.ann(m.s);
+          break;
+        case 'wx':
+          if (CM.Weather.NAMES[m.w]) g.weather = { type: m.w, t: num(m.d) };
+          break;
         case 'join':
           this.remotes.set(m.pid, new RemotePlayer(this, m.pid, cleanName(m.n)));
           this.sys(cleanName(m.n) + ' a rejoint la partie');
@@ -1231,6 +1262,8 @@
         if (d < 48 && CM.Tech) CM.Tech.zapFx(g, m.x, m.y, m.z, num(m.t[0]), num(m.t[1]), num(m.t[2]));
       } else if (m.k === 'laser' && Array.isArray(m.t)) {
         if (d < 64) g.player.laserFx(m.x, m.y, m.z, num(m.t[0]), num(m.t[1]), num(m.t[2]));
+      } else if (m.k === 'bolt') {
+        if (d < 400) CM.Weather.boltFx(g, m.x, m.y, m.z);
       } else if (m.k === 'love') {
         if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }
@@ -1372,19 +1405,48 @@
     bindUI() {
       this.chatEl = $('chat');
       this.chatIn = $('chat-input');
+      this.suggEl = $('chat-sugg');
       this.tagsEl = $('tags');
+      this.hist = []; // messages et commandes déjà envoyés (↑ ↓)
+      this.histI = 0;
       this.chatIn.addEventListener('keydown', (e) => {
         e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
           const s = cleanText(this.chatIn.value);
           this.chatIn.value = '';
-          if (s) this.say(s);
+          if (s) {
+            if (this.hist[this.hist.length - 1] !== s) this.hist.push(s);
+            if (this.hist.length > 50) this.hist.shift();
+          }
           this.closeChat(true);
+          if (s) this.say(s);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           this.closeChat(false);
+        } else if (e.key === 'Tab') {
+          // complète la commande (appuis suivants : suggestion suivante)
+          e.preventDefault();
+          const v = this.chatIn.value;
+          if (this.tab && this.tab.last === v) this.tab.i = (this.tab.i + 1) % this.tab.items.length;
+          else {
+            const r = CM.Commands.complete(v);
+            if (!r || !r.items.length) return;
+            this.tab = { items: r.items, i: 0 };
+          }
+          this.chatIn.value = this.tab.last = this.tab.items[this.tab.i].text;
+          this.suggest(this.tab.i);
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          if (!this.hist.length) return;
+          e.preventDefault();
+          this.histI = Math.max(0, Math.min(this.hist.length, this.histI + (e.key === 'ArrowUp' ? -1 : 1)));
+          this.chatIn.value = this.hist[this.histI] || '';
+          this.suggest();
         }
+      });
+      this.chatIn.addEventListener('input', () => {
+        this.tab = null;
+        this.suggest();
       });
       $('t-chat').addEventListener('click', (e) => {
         e.preventDefault();
@@ -1392,16 +1454,22 @@
         else this.openChat();
       });
     }
-    openChat() {
+    // Tchat (aussi en solo, pour les commandes). prefill : texte déjà tapé (« / »).
+    openChat(prefill) {
       const g = this.game;
-      if (!this.active || g.state !== 'playing' || g.ui.invOpen || this.chatOpen) return;
+      if (g.state !== 'playing' || g.ui.invOpen || this.chatOpen) return;
       this.chatOpen = true;
       g.clearInput();
       if (g.touch.enabled) g.touch.reset();
       this.chatEl.classList.add('open');
+      this.chatIn.placeholder = this.active ? 'Message, ou commande (/aide) — Entrée pour envoyer, Tab pour compléter' : 'Commande (/aide pour la liste) — Entrée pour valider, Tab pour compléter';
+      this.chatIn.value = prefill || '';
       this.chatIn.classList.remove('hidden');
+      this.histI = this.hist.length;
+      this.tab = null;
       g.releaseMouse();
       this.chatIn.focus();
+      this.suggest();
     }
     closeChat(sent, silent) {
       if (!this.chatOpen) return;
@@ -1409,9 +1477,45 @@
       this.chatIn.blur();
       this.chatIn.classList.add('hidden');
       this.chatEl.classList.remove('open');
+      this.suggEl.classList.add('hidden');
       if (!silent && this.game.state === 'playing' && !this.game.paused) this.game.captureMouse();
     }
+    // Suggestions sous la saisie (commandes, puis arguments : objets, joueurs, créatures…).
+    suggest(sel) {
+      const el = this.suggEl, r = this.chatOpen ? CM.Commands.complete(this.chatIn.value) : null;
+      if (!r || (!r.items.length && !r.usage)) {
+        el.classList.add('hidden');
+        return;
+      }
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      let h = r.usage ? '<div class="sg-usage">' + esc(r.usage) + '</div>' : '';
+      r.items.forEach((it, i) => {
+        h += '<div class="sg' + (i === sel ? ' on' : '') + '" data-i="' + i + '"><b>' + esc(it.label) + '</b>' + (it.desc ? ' <span>' + esc(it.desc) + '</span>' : '') + '</div>';
+      });
+      if (r.more) h += '<div class="sg-more">… et ' + r.more + ' autre' + (r.more > 1 ? 's' : '') + ' (continue à taper)</div>';
+      el.innerHTML = h;
+      el.classList.remove('hidden');
+      // clic / toucher : complète
+      for (const d of el.querySelectorAll('.sg')) {
+        d.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          this.chatIn.value = r.items[+d.dataset.i].text;
+          this.tab = null;
+          this.chatIn.focus();
+          this.suggest();
+        });
+      }
+    }
     say(s) {
+      // « / » : commande
+      if (s[0] === '/') {
+        CM.Commands.run(s);
+        return;
+      }
+      if (!this.active) {
+        this.addChat('Toi', s);
+        return;
+      }
       if (this.isHost) this.chatAll(this.name, s);
       else this.send({ t: 'chat', s });
     }

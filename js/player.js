@@ -103,6 +103,7 @@
     // Ajoute de l'épuisement (fait baisser la saturation puis la faim).
     exhaust(n) {
       if (this.creative || this.game.difficulty === 'peaceful') return;
+      if (CM.gameRule && !CM.gameRule(this.game, 'hunger')) return; // règle « faim »
       if (this.game.inventory.has(I.STAMINA_CHARM)) n *= 0.5;
       this.exh += n;
       while (this.exh >= 4) {
@@ -131,7 +132,7 @@
       this.swing = Math.max(0, this.swing - dt * 3.2);
       this.comboTimer = Math.max(0, this.comboTimer - dt);
       if (this.comboTimer <= 0) this.combo = 0;
-      if (!this.creative) this.flying = false;
+      if (!this.creative && !this.cmdFly) this.flying = false;
       // couché dans un lit : on ne bouge plus (la faim continue)
       if (this.sleeping) {
         const s = this.sleeping;
@@ -174,8 +175,8 @@
       const wl = Math.hypot(wx, wz);
       if (wl > 0) { wx /= wl; wz /= wl; }
 
-      // ----- vol (mode créatif) : double appui sur saut
-      if (this.creative && input.pressed[K.jump]) {
+      // ----- vol (mode créatif, ou /vol) : double appui sur saut
+      if ((this.creative || this.cmdFly) && input.pressed[K.jump]) {
         if (g.clock - this.lastJumpTap < 0.3) {
           this.flying = !this.flying;
           this.vy = 0;
@@ -245,6 +246,7 @@
       if (this.onGround && under.slip) speed *= 1.15;
       if (this.flying) speed = this.sprinting ? 21 : 11;
       if (mag < 1) speed *= Math.max(0.3, mag);
+      if (this.cmdSpeed) speed *= this.cmdSpeed; // /vitesse
 
       // ----- ruée
       if (input.pressed[K.dash] && this.dashCd <= 0 && !this.flying) {
@@ -341,7 +343,7 @@
         if ((k[K.jump] || autoJump) && this.onGround && this.jumpCd <= 0) {
           const bounce = standBlock === B.MUSHROOM || standBlock === B.SLIME_BLOCK;
           const honey = standBlock === B.HONEY_BLOCK;
-          this.vy = bounce ? 14 : honey ? 5 : 8.6;
+          this.vy = (bounce ? 14 : honey ? 5 : 8.6) * Math.sqrt(1 + 0.6 * (this.cmdJump || 0)); // /saut
           this.jumpCd = 0.15;
           if (bounce) CM.Audio.play('bounce');
           this.exhaust(this.sprinting ? EXH.sprintJump : EXH.jump);
@@ -388,7 +390,8 @@
       // ----- chute, rebond
       if (this.landed) {
         const under2 = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
-        const fall = this.fallStart - this.y;
+        // (/saut amortit les chutes ; règle « dégâts de chute »)
+        const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0);
         const bouncy = under2 === B.MUSHROOM || under2 === B.SLIME_BLOCK;
         if (bouncy && prevVy < -4 && !this.sneaking) {
           this.vy = Math.min(24, -prevVy * 0.85);
@@ -1608,6 +1611,7 @@
       if (!this.alive || n <= 0) return;
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
+      if (this.cmdGod && cause !== 'Le vide') return; // /invincible
       if (this.invul > 0 && !bypass) return;
       // bouclier levé : arrête les coups venus de devant (créatures, flèches, joueurs, explosions)
       if (this.blocking && sx !== null && sx !== undefined && (!bypass || cause === 'Une explosion')) {
@@ -1709,6 +1713,7 @@
 
     die(cause) {
       const g = this.game;
+      g.cmdBack = { x: this.x, y: this.y, z: this.z, dim: g.playerDim }; // (/retour)
       this.alive = false;
       this.hook = null;
       this.flying = false;

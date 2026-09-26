@@ -217,6 +217,7 @@
     uniform float uUnderwater;
     uniform vec3 uFlatSky;
     uniform float uClouds;
+    uniform float uRain; // pluie, orage : ciel couvert
     in vec2 vNdc;
     out vec4 outColor;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -233,7 +234,7 @@
         vec3 sp = floor(dir * 160.0);
         float s = hash(sp.xy + sp.z * 17.0);
         float st = step(0.994, s) * (0.45 + 0.55 * fract(s * 7919.0));
-        col += vec3(0.92, 0.94, 1.0) * st * uNight * clamp(h * 4.0, 0.0, 1.0);
+        col += vec3(0.92, 0.94, 1.0) * st * uNight * clamp(h * 4.0, 0.0, 1.0) * (1.0 - uRain);
       }
       // soleil et lune carrés
       vec3 su = normalize(cross(uSunDir, vec3(0.0, 0.0, 1.0)));
@@ -242,14 +243,14 @@
       if (dp > 0.0) {
         vec2 l = vec2(dot(dir, su), dot(dir, sv)) / dp;
         float m = max(abs(l.x), abs(l.y));
-        if (m < 0.075) col = mix(col, vec3(1.0, 0.97, 0.82), 1.0);
-        else col += vec3(1.0, 0.9, 0.6) * 0.25 * exp(-m * 9.0);
+        if (m < 0.075) col = mix(col, vec3(1.0, 0.97, 0.82), 1.0 - 0.92 * uRain);
+        else col += vec3(1.0, 0.9, 0.6) * 0.25 * exp(-m * 9.0) * (1.0 - uRain);
       } else {
         vec2 l = vec2(dot(dir, su), dot(dir, sv)) / -dp;
         float m = max(abs(l.x), abs(l.y));
         if (m < 0.055) {
           float crater = hash(floor(l * 60.0));
-          col = mix(col, vec3(0.86, 0.88, 0.95) - crater * 0.12, 1.0);
+          col = mix(col, vec3(0.86, 0.88, 0.95) - crater * 0.12, 1.0 - 0.92 * uRain);
         }
       }
       // nuages cubiques
@@ -259,9 +260,10 @@
           vec2 cp = uCamPos.xz + dir.xz * t;
           vec2 cell = floor(cp / 14.0 + vec2(uTime * 0.035, 0.0));
           float n = hash(cell) * 0.55 + hash(floor(cell / 4.0) + 9.0) * 0.6;
-          if (n > 0.78) {
+          if (n > 0.78 - 0.3 * uRain) {
             float fade = 1.0 - smoothstep(350.0, 900.0, t);
             vec3 cc = mix(vec3(0.07, 0.08, 0.13), vec3(1.0), 1.0 - uNight * 0.93);
+            cc = mix(cc, cc * vec3(0.38, 0.4, 0.44), uRain);
             col = mix(col, cc, 0.85 * fade);
           }
         }
@@ -655,6 +657,7 @@
       gl.uniform1f(su.uUnderwater, env.flatSky ? 1 : 0);
       if (env.flatSky) gl.uniform3fv(su.uFlatSky, env.flatSky);
       gl.uniform1f(su.uClouds, this.clouds ? 1 : 0);
+      if (su.uRain) gl.uniform1f(su.uRain, env.rain || 0);
       gl.bindVertexArray(this.skyVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.depthMask(true);

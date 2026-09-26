@@ -934,6 +934,8 @@
       const nightfall = this.nightfall;
       this.nightfall = false;
       const alive = pls.filter((q) => q.alive);
+      // (règle « apparition des créatures » : /regle apparition_creatures off)
+      if (CM.gameRule && !CM.gameRule(g, 'mobSpawn')) return;
       for (const p of alive.length ? alive : pls.includes(g.player) ? [g.player] : []) this.spawnAround(p, w, r, nightfall);
     }
 

@@ -1455,6 +1455,23 @@
       }
       return v;
     }
+    // Village le plus proche (commande /localiser), à moins de maxDist blocs.
+    nearestVillage(x, z, maxDist) {
+      if (!this.hasVillages) return null;
+      const R = VILLAGE_REGION, rx0 = Math.floor(x / R), rz0 = Math.floor(z / R), n = Math.ceil(maxDist / R);
+      let best = null, bd = maxDist;
+      for (let dz = -n; dz <= n; dz++)
+        for (let dx = -n; dx <= n; dx++) {
+          const v = this.villageAt(rx0 + dx, rz0 + dz);
+          if (!v) continue;
+          const d = Math.hypot(v.x - x, v.z - z);
+          if (d < bd) {
+            bd = d;
+            best = v;
+          }
+        }
+      return best;
+    }
     // Village dont la zone (agrandie de pad) contient (x, z).
     villageNear(x, z, pad) {
       if (!this.hasVillages) return null;

@@ -43,7 +43,8 @@
     <div id="netinfo" class="hidden"></div>
     <div id="tags"></div>
     <div id="chat"></div>
-    <input id="chat-input" type="text" class="hidden" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Message aux autres joueurs (Entrée pour envoyer, Échap pour fermer)" />
+    <input id="chat-input" type="text" class="hidden" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send" placeholder="Message ou commande (/aide) — Entrée pour envoyer, Échap pour fermer" />
+    <div id="chat-sugg" class="hidden"></div>
     <div id="toasts"></div>
     <div id="pickups"></div>
     <div id="armor-panel" class="hidden"></div>
@@ -76,7 +77,7 @@
     <div class="t-top">
       <button id="t-inv" title="Inventaire">🎒</button>
       <button id="t-drop" title="Jeter l'objet">🗑</button>
-      <button id="t-chat" class="net-only" title="Tchat">💬</button>
+      <button id="t-chat" title="Tchat et commandes">💬</button>
       <button id="t-pause" title="Pause">⏸</button>
     </div>
     <div class="t-right">
@@ -412,6 +413,7 @@
   <script src="js/tech_defs.js"></script>
   <script src="js/gear_defs.js"></script>
   <script src="js/anim_defs.js"></script>
+  <script src="js/weather.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
   <script src="js/light.js"></script>
@@ -429,6 +431,7 @@
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>
   <script src="js/net.js"></script>
+  <script src="js/commands.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>

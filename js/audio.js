@@ -272,6 +272,12 @@
         noise(t, 1.1, 'lowpass', 700, 0.7, 0.9, 80);
         tone(t, 0.6, 'sine', 90, 30, 0.6);
         break;
+      case 'thunder':
+        // coup de tonnerre : craquement puis grondement qui roule
+        noise(t, 0.25 * pitch, 'highpass', 1800, 0.6, 0.5);
+        noise(t + 0.05, 2.6, 'lowpass', 420 * pitch, 0.8, 0.8, 50);
+        tone(t, 1.8, 'sine', 70 * pitch, 28, 0.45, 0.05);
+        break;
     }
   };
 })();
