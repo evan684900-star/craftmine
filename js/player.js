@@ -255,6 +255,9 @@
           return;
         }
       }
+      // élytres : vol plané (remplace les déplacements)
+      if (CM.Weapons.glide(this, dt, input, wasHeadIn)) return;
+      CM.Weapons.riptide(this, dt);
       this.eyeOffset += ((mounted ? -0.95 : this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
       CM.Fishing.update(this, dt);
       // course : maintenir ou basculer (option)
@@ -707,9 +710,12 @@
       const g = this.game, f = Math.min(1, this.bowT);
       const power = Math.min(1, (f * f + 2 * f) / 3);
       if (power < 0.1) return;
-      if (!this.creative && !g.inventory.remove(CM.I.ARROW, 1)) return;
+      const bow = g.inventory.held(), inf = CM.enchLevel(bow, 'infinity');
+      if (!this.creative && !(inf && g.inventory.has(CM.I.ARROW)) && !g.inventory.remove(CM.I.ARROW, 1)) return;
       const e = this.eye(), d = this.aim(), sp = power * 55;
-      g.entities.shootArrow(e[0] + d[0] * 0.4, e[1] + d[1] * 0.4 - 0.1, e[2] + d[2] * 0.4, d[0] * sp + this.vx * 0.5, d[1] * sp, d[2] * sp + this.vz * 0.5, this);
+      // Puissance, Frappe, Flamme ; Infinité : la flèche ne se ramasse pas
+      const x = { pw: CM.enchLevel(bow, 'power'), pu: CM.enchLevel(bow, 'punch'), fl: CM.enchLevel(bow, 'flame'), np: inf ? 1 : 0 };
+      g.entities.shootArrow(e[0] + d[0] * 0.4, e[1] + d[1] * 0.4 - 0.1, e[2] + d[2] * 0.4, d[0] * sp + this.vx * 0.5, d[1] * sp, d[2] * sp + this.vz * 0.5, this, undefined, 0, x.pw || x.pu || x.fl || x.np ? x : undefined);
       if (g.net.isClient) CM.Audio.play('bow', { pitch: 0.9 + Math.random() * 0.2 });
       this.swing = 1;
     }
@@ -973,6 +979,8 @@
         }
       } else this.mining = null;
 
+      // arbalète (charger / tirer), trident (lancer)
+      if (CM.Weapons.update(this, dt, input)) return;
       // arc : maintenir le clic droit pour bander, relâcher pour tirer
       const held = g.inventory.held();
       if (held && held.id === CM.I.BOW) {
@@ -1221,7 +1229,7 @@
         if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
         const sh = CM.enchLevel(stack, 'sharpness');
         if (sh) dmg += 0.5 * sh + 0.5;
-      }
+      } else if (info && info.melee) dmg = CM.Weapons.melee(stack, info, null);
       if (!this.onGround && this.vy < -1) dmg *= 1.5;
       if (this.dashTime > 0) dmg += 2;
       return Math.max(0.5, dmg + CM.Effects.dmgBonus(this)); // force / faiblesse
@@ -1245,7 +1253,7 @@
         if (info.toolType === 'sword') dmg += Math.floor((this.masteryOf(stack) - 1) / 2);
         const sh = CM.enchLevel(stack, 'sharpness');
         if (sh) dmg += 0.5 * sh + 0.5; // Tranchant
-      }
+      } else if (info && info.melee) dmg = CM.Weapons.melee(stack, info, mob); // trident (Empalement)
       let crit = false;
       if (!this.onGround && this.vy < -1) {
         dmg *= 1.5;
@@ -1534,6 +1542,11 @@
       }
       if (info.type === 'grapple') {
         if (input.pressed.mouse2) this.fireHook();
+        return;
+      }
+      // fusée : propulsion en vol plané, sinon feu d'artifice
+      if (info.type === 'rocket') {
+        if (input.pressed.mouse2) CM.Weapons.useRocket(this);
         return;
       }
       // canne à pêche : lancer / ferrer
@@ -1901,6 +1914,8 @@
       const g = this.game;
       g.cmdBack = { x: this.x, y: this.y, z: this.z, dim: g.playerDim }; // (/retour)
       if (this.mount !== null && this.mount !== undefined) this.dismount();
+      if (this.gliding) CM.Weapons.stopGlide(this);
+      this.bobber = null;
       this.alive = false;
       this.hook = null;
       this.flying = false;

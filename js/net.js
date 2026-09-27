@@ -571,11 +571,11 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0) | (CM.Effects.invisible(p) ? 256 : 0) | (p.riding !== null && p.riding !== undefined ? 512 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0) | (CM.Effects.invisible(p) ? 256 : 0) | (p.riding !== null && p.riding !== undefined ? 512 : 0) | (p.gliding ? 1024 : 0) | (CM.Weapons.wearing(p) ? 2048 : 0);
       const held = g.inventory.held();
       let armor = 0;
       g.inventory.armor.forEach((s, k) => {
-        if (s) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
+        if (s && !CM.itemInfo(s.id).elytra) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
       });
       const off = g.inventory.offhand;
       return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0, off ? off.id : 0, CM.Fishing.netState(p)];
@@ -966,9 +966,12 @@
           // flèche tirée par un invité (arc)
           if (!Array.isArray(m.p) || !Array.isArray(m.v)) break;
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
-          if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > 4) break;
+          if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > (m.k === 'rocket' ? 7 : 4)) break;
           const it = m.k === 'potion' && CM.itemInfo(m.it | 0) && CM.itemInfo(m.it | 0).potion ? m.it | 0 : 0;
-          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, m.k === 'egg' ? 'egg' : it ? 'potion' : undefined, it);
+          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : m.k === 'trident' ? 'trident' : m.k === 'rocket' ? 'rocket' : undefined;
+          const xo = m.x && typeof m.x === 'object' ? m.x : {};
+          const extra = { pi: Math.min(4, xo.pi | 0), np: xo.np ? 1 : 0, pw: Math.min(5, xo.pw | 0), pu: Math.min(2, xo.pu | 0), fl: xo.fl ? 1 : 0, ench: CM.cleanEnch(xo.ench) };
+          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, kind, kind === 'trident' ? CM.I.TRIDENT : kind === 'rocket' ? CM.I.FIREWORK : it, extra);
           break;
         }
         case 'cart': {
@@ -1347,6 +1350,12 @@
         if (d < 64) g.player.laserFx(m.x, m.y, m.z, num(m.t[0]), num(m.t[1]), num(m.t[2]));
       } else if (m.k === 'bolt') {
         if (d < 400) CM.Weather.boltFx(g, m.x, m.y, m.z);
+      } else if (m.k === 'firework') {
+        if (d < 160) {
+          const L = CM.Textures.layer, cols = ['concrete_red', 'concrete_yellow', 'concrete_light_blue', 'concrete_lime', 'concrete_magenta', 'concrete_orange'];
+          e.burst(L[cols[Math.floor(Math.random() * cols.length)]] || L.white, m.x, m.y, m.z, 40, { speed: 7, grav: 2, life: 1.4, size: 0.1, emissive: true, full: true });
+          CM.Audio.play('explode', { pitch: 1.8, vol: 0.5 });
+        }
       } else if (m.k === 'love') {
         if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }
@@ -1662,9 +1671,11 @@
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);
         const fl = rp.flags & 16 ? 2 : 0;
-        const sneak = rp.flags & 1, rides = rp.flags & 128, seated = rp.flags & 512;
+        const sneak = rp.flags & 1, rides = rp.flags & 128, seated = rp.flags & 512, glides = rp.flags & 1024;
         const M = this.M;
-        mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, rp.ryaw, 0, 0, 1);
+        if (glides) CM.Weapons.glideMatrix(M, this.Q, this.P, rp.rx, rp.ry, rp.rz, rp.ryaw, rp.pitch);
+        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, rp.ryaw, 0, 0, 1);
+        if (rp.flags & 2048) CM.Weapons.renderWings(ents, batch, M, l, fl, glides);
         // canne à pêche : la ligne jusqu'au flotteur
         if (rp.bob) {
           const cy = Math.cos(rp.ryaw), sy2 = Math.sin(rp.ryaw);

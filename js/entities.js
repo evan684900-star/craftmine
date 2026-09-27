@@ -1130,10 +1130,11 @@
     spawnWater(p, w, r) {
       if (r() > 0.35) return;
       const BIO = CM.BIO;
-      let fish = 0, squid = 0, dol = 0;
+      let fish = 0, squid = 0, dol = 0, drowned = 0;
       for (const m of this.mobs) {
         if (m.dead || !MOBS[m.type].water || Math.hypot(m.x - p.x, m.z - p.z) > 64) continue;
-        if (m.type === 'squid') squid++;
+        if (m.type === 'drowned') drowned++;
+        else if (m.type === 'squid') squid++;
         else if (m.type === 'dolphin') dol++;
         else fish++;
       }
@@ -1148,7 +1149,13 @@
         if (depth < 2) continue;
         const bi = w.column(x, z).bi, ocean = bi === BIO.OCEAN || bi === BIO.WARM_OCEAN, warm = bi === BIO.WARM_OCEAN;
         let type;
-        const k = r();
+        const k = r(), g = this.game;
+        // Noyés : la nuit (ou dans les eaux sombres), s'il y a des monstres
+        const dark = g.daylight < 0.45 || w.skyAt(x, gy + 1, z) < 8;
+        if (dark && drowned < 3 && k < 0.2 && g.difficulty !== 'peaceful' && g.mode !== 'creative') {
+          this.addMob('drowned', x + 0.5, gy + 1, z + 0.5);
+          return;
+        }
         if (ocean && depth >= 5 && dol < 4 && k < 0.12) type = 'dolphin';
         else if (depth >= 4 && squid < 3 && k < 0.3) type = 'squid';
         else if (fish < 10) type = warm ? (k < 0.7 ? 'tropical_fish' : k < 0.85 ? 'pufferfish' : 'cod') : ocean ? (k < 0.65 ? 'cod' : k < 0.9 ? 'salmon' : 'pufferfish') : k < 0.6 ? 'salmon' : 'cod';

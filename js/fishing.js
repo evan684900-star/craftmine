@@ -39,7 +39,7 @@
       const junk = [[I.STICK, 1], [I.BONE, 1], [I.LEATHER, 1], [I.ROPE, 2], [I.DYE_BLACK, 3], [I.FEATHER, 1], [CM.B.KELP_PLANT || CM.B.DRIED_KELP_BLOCK, 1], [I.PAPER, 1]];
       return junk[Math.floor(Math.random() * junk.length)];
     }
-    const treasure = [[I.SADDLE, 1], [I.EMERALD, 1 + Math.floor(Math.random() * 3)], [I.DIAMOND, 1], [I.GOLDEN_CARROT, 2], [I.BOOK, 1], [I.GOLDEN_APPLE, 1], [I.NAME_TAG || I.GOLD_INGOT, 1]];
+    const treasure = [[I.SADDLE, 1], [I.EMERALD, 1 + Math.floor(Math.random() * 3)], [I.DIAMOND, 1], [I.GOLDEN_CARROT, 2], [I.BOOK, 1], [I.GOLDEN_APPLE, 1], [I.NAME_TAG || I.GOLD_INGOT, 1], [I.TRIDENT, 1]];
     return treasure[Math.floor(Math.random() * treasure.length)];
   }
   const F = (CM.Fishing = {

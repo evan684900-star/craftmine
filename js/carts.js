@@ -13,30 +13,43 @@
   const MAXV = 8; // vitesse maximale d'un wagonnet (blocs par seconde)
 
   // Objet donné à un joueur (local ou invité).
-  E.giveTo = function (q, id, n) {
+  E.giveTo = function (q, id, n, extra) {
     const g = this.game;
     if (q === g.player) {
-      const left = g.inventory.add(id, n);
+      const left = g.inventory.add(id, n, extra);
       if (left < n) {
         CM.Audio.play('pop');
         g.onPickup(id, n - left);
       }
-      if (left > 0) this.addDrop(id, left, q.x, q.y + 0.5, q.z);
-    } else if (q.pid !== undefined) g.net.sendTo(q.pid, { t: 'give', id, n });
+      if (left > 0) this.addDrop(id, left, q.x, q.y + 0.5, q.z, extra);
+    } else if (q.pid !== undefined) g.net.sendTo(q.pid, extra ? { t: 'give', id, n, xp: extra.xp, en: extra.ench } : { t: 'give', id, n });
   };
 
   // ------------------------------------------------------------ flèches --
   // kind : 'egg' pour un œuf lancé (sinon une flèche)
-  E.shootArrow = function (x, y, z, vx, vy, vz, shooter, kind, item) {
+  // extra : { pi : perforation, np : pas ramassable, pw / pu / fl : Puissance, Frappe, Flamme,
+  //          ench : enchantements du trident }
+  E.shootArrow = function (x, y, z, vx, vy, vz, shooter, kind, item, extra) {
     if (this.remote) {
-      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)], k: kind, it: item });
+      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)], k: kind, it: item, x: extra || undefined });
       return;
     }
-    const g = this.game;
+    const g = this.game, x2 = extra || {};
     if (!this.arrows) this.arrows = [];
     // (flèches des squelettes : pas ramassables)
-    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, kind: kind || null, item: item || 0, pick: !kind && !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
-    CM.Audio.play(kind ? 'pop' : 'bow', { pitch: 0.9 + Math.random() * 0.2 });
+    const mobShot = !!(shooter && shooter.type);
+    const a = { uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, kind: kind || null, item: item || 0, pick: (!kind || kind === 'trident') && !mobShot && !x2.np && (!shooter || g.mode !== 'creative' || kind === 'trident') };
+    if (x2.pi) a.pi = x2.pi | 0;
+    if (x2.pw) a.pw = x2.pw | 0;
+    if (x2.pu) a.pu = x2.pu | 0;
+    if (x2.fl) a.fire = true;
+    if (kind === 'trident') {
+      a.ench = CM.cleanEnch(x2.ench) || null;
+      a.loyal = mobShot ? 0 : (a.ench && a.ench.loyalty) | 0;
+      if (x2.np) a.pick = false;
+    }
+    this.arrows.push(a);
+    CM.Audio.play(kind === 'trident' ? 'bow' : kind === 'rocket' ? 'fuse' : kind ? 'pop' : 'bow', { pitch: kind === 'trident' ? 0.55 : 0.9 + Math.random() * 0.2 });
   };
   // Un œuf se casse : parfois un poussin en sort.
   E.eggHit = function (a) {
@@ -52,8 +65,9 @@
     const g = this.game, w = g.world;
     for (const a of this.arrows) {
       a.age += dt;
-      if (a.age > 60) a.dead = true;
+      if (a.age > 60 && !(a.kind === 'trident' && a.pick)) a.dead = true;
       if (a.dead) continue;
+      if ((a.kind === 'trident' || a.kind === 'rocket') && this.updateSpecialArrow(a, dt)) continue;
       if (a.stuck) {
         if (!w.get(a.bx, a.by, a.bz)) a.stuck = false; // le bloc a disparu : la flèche retombe
         else {
@@ -72,16 +86,16 @@
       if (len > 1e-4) {
         const dx = a.vx / sp, dy = a.vy / sp, dz = a.vz / sp;
         let hit = null, ht = len;
-        for (const m of this.mobs) {
-          if (m.dead || m === a.shooter) continue;
+        for (const m of a.spent ? [] : this.mobs) {
+          if (m.dead || m === a.shooter || (a.hitSet && a.hitSet.has(m.uid))) continue;
           const t = CM.rayBox(a.x, a.y, a.z, dx, dy, dz, m.x - m.hw, m.y, m.z - m.hw, m.x + m.hw, m.y + m.h, m.z + m.hw);
           if (t >= 0 && t < ht) {
             ht = t;
             hit = { m };
           }
         }
-        for (const q of this.plist) {
-          if (q.alive === false || (q === a.shooter && a.age < 0.4)) continue;
+        for (const q of a.spent ? [] : this.plist) {
+          if (q.alive === false || (q === a.shooter && (a.age < 0.4 || a.kind === 'trident'))) continue;
           const t = CM.rayBox(a.x, a.y, a.z, dx, dy, dz, q.x - 0.3, q.y, q.z - 0.3, q.x + 0.3, q.y + 1.8, q.z + 0.3);
           if (t >= 0 && t < ht) {
             ht = t;
@@ -131,14 +145,34 @@
           if (CM.blocks[bh.id].tnt && a.fire) g.primeTnt(bh.x, bh.y, bh.z);
           continue;
         }
+        if (hit && a.kind === 'trident') {
+          a.x += dx * Math.max(0, ht - 0.1);
+          a.y += dy * Math.max(0, ht - 0.1);
+          a.z += dz * Math.max(0, ht - 0.1);
+          this.tridentHit(a, hit);
+          continue;
+        }
         if (hit) {
-          const dmg = Math.max(1, Math.round(sp * 0.13));
+          let dmg = Math.max(1, Math.round(sp * 0.13));
+          if (a.pw) dmg = Math.round(dmg * (1 + 0.25 * (a.pw + 1))); // Puissance
           const by = a.shooter && (a.shooter === g.player || a.shooter.pid !== undefined) ? a.shooter : null;
-          if (hit.m) this.hurtMob(hit.m, dmg, [a.x - dx, a.z - dz], false, by);
-          else if (hit.p === g.player) hit.p.damage(dmg, a.x - dx, a.z - dz, 'Une flèche');
-          else hit.p.damage(dmg, a.x - dx, a.z - dz, 'Une flèche');
-          a.dead = true;
+          const opts = a.pu || a.fire ? { kb: a.pu || 0, fire: a.fire ? 1 : 0 } : undefined;
+          if (hit.m) this.hurtMob(hit.m, dmg, [a.x - dx, a.z - dz], false, by, opts);
+          else if (hit.p === g.player) {
+            hit.p.damage(dmg, a.x - dx, a.z - dz, 'Une flèche');
+            if (a.fire) hit.p.burning = Math.max(hit.p.burning || 0, 5);
+          } else hit.p.damage(dmg, a.x - dx, a.z - dz, 'Une flèche');
           CM.Audio.play('arrowhit');
+          // Perforation : elle traverse la créature et continue
+          if (hit.m && a.pi > 0) {
+            a.pi--;
+            (a.hitSet = a.hitSet || new Set()).add(hit.m.uid);
+            a.x += a.vx * dt;
+            a.y += a.vy * dt;
+            a.z += a.vz * dt;
+            continue;
+          }
+          a.dead = true;
           continue;
         }
         a.x += a.vx * dt;
@@ -146,7 +180,7 @@
         a.z += a.vz * dt;
       }
       a.vy -= 20 * dt;
-      const drag = Math.pow(CM.isWater(w.get(Math.floor(a.x), Math.floor(a.y), Math.floor(a.z))) ? 0.6 : 0.99, dt * 20);
+      const drag = Math.pow(CM.isWater(w.get(Math.floor(a.x), Math.floor(a.y), Math.floor(a.z))) && a.kind !== 'trident' ? 0.6 : 0.99, dt * 20);
       a.vx *= drag;
       a.vy *= drag;
       a.vz *= drag;
@@ -158,6 +192,7 @@
     const L = CM.Textures.layer.arrow_ent;
     for (const a of this.arrows || []) {
       const l = this.lightAt(a.x, a.y, a.z);
+      if (this.renderSpecialArrow(batch, a, l)) continue;
       if (a.kind === 'egg') {
         mat4.compose(this.M, a.x, a.y, a.z, 0, 0, 0, 1);
         batch.box(this.M, -0.07, -0.08, -0.07, 0.07, 0.1, 0.07, CM.Textures.layer.mob_chicken, l[0], l[1], 0);
@@ -493,7 +528,8 @@
     for (const a of this.arrows || []) {
       if (a.dead || !near(a)) continue;
       const yaw = a.stuck ? a.yaw : Math.atan2(a.vx, a.vz), pitch = a.stuck ? a.pitch : Math.atan2(-a.vy, Math.hypot(a.vx, a.vz));
-      ar.push(a.kind === 'egg' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 1] : a.kind === 'potion' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 2, a.item] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
+      const k = a.kind === 'egg' ? 1 : a.kind === 'potion' ? 2 : a.kind === 'trident' ? 3 : a.kind === 'rocket' ? 4 : 0;
+      ar.push(k === 1 || k === 4 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, k] : k === 2 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 2, a.item] : k === 3 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0), 3] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
     }
     for (const c of this.carts || []) {
       if (c.dead || !near(c)) continue;
@@ -506,7 +542,7 @@
     this.arrows = [];
     for (const [uid, x, y, z, yaw, pitch, k, it] of s.ar || []) {
       let a = oldA.get(uid);
-      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : k === 2 ? 'potion' : null, item: k === 2 && CM.itemInfo(it) ? it : 0 };
+      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : k === 2 ? 'potion' : k === 3 ? 'trident' : k === 4 ? 'rocket' : null, item: k === 2 && CM.itemInfo(it) ? it : 0 };
       a.tx = x;
       a.ty = y;
       a.tz = z;
