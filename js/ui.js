@@ -23,6 +23,9 @@
     ['🪧 Panneaux', "Panneau : 6 planches + 1 bâton (3 panneaux). Pose-le au sol (il fait face à toi) ou contre un mur ; une fenêtre s'ouvre pour écrire 4 lignes (Entrée : ligne suivante). Clic droit dessus pour le modifier, avec une teinture pour colorer le texte. Le texte se lit de près, peint sur la planche."],
     ['🖼 Tableaux, cadres, porte-armures', "Tableau (8 bâtons + 1 laine) : clic droit sur un mur, le jeu choisit une de ses 14 œuvres (du 1 × 1 au 4 × 2), la plus grande qui tient. Cadre (8 bâtons + 1 cuir) : sur un mur, le sol ou le plafond ; clic droit avec un objet pour l'exposer, encore pour le tourner. Porte-armure (6 bâtons + 1 dalle de pierre lisse) : clic droit avec une pièce d'armure (ou des élytres) pour l'habiller, avec une arme ou un outil pour la lui donner, main vide pour reprendre. Frappe-les pour les récupérer ; s'ils perdent leur mur, ils tombent."],
     ['🎵 Juke-box et disques', "Clic droit sur un juke-box avec un disque : la musique joue (on l'entend à 48 blocs, à gauche ou à droite selon où il est), des notes s'en échappent ; clic droit encore pour reprendre le disque. 8 disques, 8 morceaux composés par le jeu (Aube, Clairière, Cavernes, Marée, Forge, Étoiles, Pixel, Orage). On les trouve dans les coffres des ruines, et un rampant tué par la flèche d'un squelette en laisse un."],
+    ['🗺 Carte, boussoles, mort', "Mini-carte en haut à droite (touche M : masquée, petite, grande) : relief, eau, toi (flèche), les autres joueurs, ton lit, le lieu de ta mort (croix) et les monstres (points rouges). Carte (8 papiers + 1 boussole) : tenue en main, une grande carte des environs. Boussole (4 lingots de fer + 1 redstone) : tenue en main (ou en main secondaire), elle montre la direction et la distance de ton lit (ou du point de départ). Boussole de récupération (boussole + 4 essences d'ombre) : elle mène au lieu de ta dernière mort. À la mort, l'écran et le tchat donnent tes coordonnées ; tes objets restent 20 minutes au sol (au lieu de 5)."],
+    ['🧰 Tri et recherche', "Inventaire : bouton « ⇅ Trier » (regroupe les piles et range par type, sans toucher à la barre d'objets). Coffre ouvert : son propre bouton « ⇅ Trier ». Champ « Chercher dans les coffres proches » : tape un nom (par exemple « diamant ») puis Entrée : le jeu indique combien il en trouve, à quelle distance et dans quelle direction, et des étincelles montent des coffres pendant 20 secondes (48 blocs autour de toi, aussi en multijoueur)."],
+    ['🏆 Succès et apparence', "31 succès à débloquer (premier bois, diamants, Nether, potion, pêche, bateau, cheval, loup, élytres, juke-box, 100 Ombres, 50 jours…) : une bannière dorée s'affiche, les autres joueurs sont prévenus, la liste est dans l'onglet Journal de l'inventaire. Options > Apparence : peau, cheveux, haut, pantalon et cape de ton personnage, tel que les autres le voient en multijoueur (et tes bras à l'écran)."],
     ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons, les vaches et les chèvres ; carotte, pomme de terre ou betterave pour les sangliers ; graines pour les poules ; carotte pour les lapins ; pomme pour les cerfs. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
     ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
     ['✨ Expérience', "La barre verte au-dessus de la barre d'objets montre ton niveau. On gagne de l'expérience en minant du charbon, des diamants, des émeraudes, du lapis, de la redstone, du quartz, du cristal ou des rubis, en tuant des Ombres (5) et des animaux, en échangeant avec les villageois, en faisant naître des petits et en fondant à la forge. À la mort, elle est perdue (sauf si l'inventaire est conservé)."],
@@ -177,11 +180,14 @@
       { k: 'showFps', t: 'check', label: 'Afficher les images par seconde' },
       { k: 'showBiome', t: 'check', label: 'Afficher le nom du biome' },
       { k: 'itemNames', t: 'check', label: "Afficher le nom de l'objet en main" },
+      { k: 'minimap', t: 'select', label: 'Mini-carte (touche M)', opts: [[0, 'Masquée'], [1, 'Petite'], [2, 'Grande']] },
     ]],
+    ['look', 'Apparence', []],
   ];
   const BIND_LABELS = {
     forward: 'Avancer', back: 'Reculer', left: 'Aller à gauche', right: 'Aller à droite', jump: 'Sauter / nager / monter (vol)',
     sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet", swap: 'Échanger les deux mains',
+    map: 'Mini-carte (masquée / petite / grande)',
   };
   const MODE_NAMES = { survival: 'Survie', creative: 'Créatif' };
   const DIFF_NAMES = { peaceful: 'Paisible', easy: 'Facile', normal: 'Normale', hard: 'Difficile' };
@@ -232,6 +238,16 @@
       this.buildGuide();
       this.buildNewWorld();
       $('inv-close').addEventListener('click', () => this.closeInventory());
+      // tri de l'inventaire et du coffre ouvert ; recherche dans les coffres proches
+      $('inv-sort').addEventListener('click', () => CM.Comfort.sortInventory(this.game));
+      $('chest-sort').addEventListener('click', () => CM.Comfort.sortChest(this.game));
+      $('chest-find').addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          CM.Comfort.find(this.game, e.target.value);
+          this.closeInventory();
+        }
+      });
       const toggle = (id, key) => $(id).addEventListener('click', () => {
         this[key] = !this[key];
         $(id).classList.toggle('on', this[key]);
@@ -1482,7 +1498,7 @@
         '<div>Graine : <b>' + g.world.seed + '</b></div>' +
         '<div>Types de blocs posés : <b>' + Object.keys(s.placed).length + '</b></div>' +
         '</div>';
-      $('tab-journal').innerHTML = h;
+      $('tab-journal').innerHTML = h + CM.Comfort.achHTML(g);
     }
 
     // ---------------------------------------------------- nouveau monde --
@@ -1552,8 +1568,17 @@
       );
       const body = $('opt-body');
       body.innerHTML = '';
-      const items = OPTION_TABS.find((t) => t[0] === this.optTab)[2];
+      const tab = OPTION_TABS.find((t) => t[0] === this.optTab);
+      const items = tab[0] === 'look' ? CM.Comfort.lookOptions() : tab[2];
       for (const it of items) {
+        if (it.t === 'look') {
+          body.appendChild(CM.Comfort.previewEl(g));
+          const n = document.createElement('div');
+          n.className = 'small-note';
+          n.textContent = 'Ton personnage tel que les autres joueurs le voient en multijoueur (et tes bras à l’écran).';
+          body.appendChild(n);
+          continue;
+        }
         if (it.t === 'binds') {
           const h = document.createElement('div');
           h.className = 'opt binds';
@@ -1639,6 +1664,7 @@
           d.querySelector('select').addEventListener('change', (e) => {
             o[it.k] = typeof CM.DEFAULT_OPTIONS[it.k] === 'number' ? +e.target.value : e.target.value;
             g.applyOptions();
+            if (this.optTab === 'look') this.renderOptions(); // aperçu
           });
         }
         body.appendChild(d);

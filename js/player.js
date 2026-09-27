@@ -15,6 +15,7 @@
   const EAT_TIME = 1; // secondes pour manger n’importe quel aliment
   const MAX_AIR = 15; // secondes de souffle sous l'eau
   // Faim (comme dans Minecraft) : 20 points, saturation, épuisement.
+  const DEATH_LIFE = 1200; // objets perdus à la mort : 20 minutes (au lieu de 5)
   const EXH = { sprint: 0.1, swim: 0.012, jump: 0.05, sprintJump: 0.2, mine: 0.005, attack: 0.1, hurt: 0.1, heal: 6, dash: 1.2, double: 0.6, grapple: 0.4 };
 
   // Expérience (comme dans Minecraft) : points à gagner pour passer du niveau L au suivant.
@@ -1924,6 +1925,7 @@
       if (this.mount !== null && this.mount !== undefined) this.dismount();
       if (this.gliding) CM.Weapons.stopGlide(this);
       this.bobber = null;
+      CM.Comfort.onDeath(g, this); // lieu de la mort (boussole de récupération, carte)
       this.alive = false;
       this.hook = null;
       this.flying = false;
@@ -1933,14 +1935,14 @@
           const s = inv.slots[i];
           if (!s) continue;
           const extra = CM.stackExtra(s);
-          g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra);
+          g.entities.addDrop(s.id, s.count, this.x, this.y + 1, this.z, extra, null, DEATH_LIFE);
           inv.slots[i] = null;
         }
         inv.armor.forEach((s, k) => {
-          if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, CM.stackExtra(s) || { xp: 0 });
+          if (s) g.entities.addDrop(s.id, 1, this.x, this.y + 1, this.z, CM.stackExtra(s) || { xp: 0 }, null, DEATH_LIFE);
           inv.armor[k] = null;
         });
-        if (inv.offhand) g.entities.addDrop(inv.offhand.id, inv.offhand.count, this.x, this.y + 1, this.z, CM.stackExtra(inv.offhand));
+        if (inv.offhand) g.entities.addDrop(inv.offhand.id, inv.offhand.count, this.x, this.y + 1, this.z, CM.stackExtra(inv.offhand), null, DEATH_LIFE);
         inv.offhand = null;
         inv.changed();
       }
@@ -2002,8 +2004,9 @@
       }
       if (!stack) {
         mat4.compose(M, 0.48 + bx - swingOn * 0.12, -0.44 + by + swingOn * 0.08, -0.62 - swingOn * 0.18, 0.3, -1.25 - swingOn * 0.5, 0, 1);
-        batch.box(M, -0.07, -0.2, -0.07, 0.07, 0.2, 0.07, L.skin, l[0], l[1], 0);
-        batch.box(M, -0.075, -0.52, -0.075, 0.075, -0.2, 0.075, L.sleeve, l[0], l[1], 0);
+        const look = CM.Comfort.layers(CM.Comfort.myLook(this.game));
+        batch.box(M, -0.07, -0.2, -0.07, 0.07, 0.2, 0.07, look.skin, l[0], l[1], 0);
+        batch.box(M, -0.075, -0.52, -0.075, 0.075, -0.2, 0.075, look.shirt, l[0], l[1], 0);
         return;
       }
       const info = CM.itemInfo(stack.id);

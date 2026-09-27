@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -23,7 +23,9 @@
     // audio
     volume: 50, sfxVolume: 100, mobVolume: 100, uiVolume: 100,
     // interface
-    guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true,
+    guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true, minimap: 1,
+    // apparence (multijoueur)
+    lookSkin: 0, lookHair: 0, lookShirt: 'blue', lookPants: 'jeans', lookCape: 'none',
     // écran tactile
     touchControls: 'auto', touchSens: 1, touchSize: 100, touchAim: 'finger', touchOpacity: 100, touchLayout: null,
     // multijoueur
@@ -130,6 +132,7 @@
 
     // ------------------------------------------------------- options -----
     applyOptions() {
+      if (CM.Comfort) CM.Comfort.lookChanged(this);
       const o = this.options;
       const r = this.renderer;
       r.renderDist = o.renderDist;
@@ -221,6 +224,8 @@
       this.homes = (save && save.homes && typeof save.homes === 'object' && save.homes) || {};
       this.beaconFx = (save && save.beaconFx && typeof save.beaconFx === 'object' && save.beaconFx) || {};
       CM.Deco.load(this, save && save.deco); // panneaux, tableaux, cadres, porte-armures, juke-box
+      this.ach = (save && save.ach && typeof save.ach === 'object' && save.ach) || {}; // succès
+      this.lastDeath = (save && save.lastDeath) || null;
       CM.Deco.bindUI(this);
       this.brewT = {};
       this.cmdBack = null;
@@ -367,6 +372,7 @@
         if (tr) (ctx.special[tr] = ctx.special[tr] || new Set()).add(k);
         ctx.ticks.onEdit(x, y, z, id, old);
         CM.Deco.onEdit(this, dim, x, y, z, id, old);
+        CM.Comfort.onEdit(dim, x, z);
       };
       this.ctxs[dim] = ctx;
       if (this.net.active) this.net.attachWorld(w, dim);
@@ -739,6 +745,8 @@
         homes: this.homes,
         beaconFx: this.beaconFx,
         deco: CM.Deco.save(this),
+        ach: this.ach,
+        lastDeath: this.lastDeath,
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -927,6 +935,11 @@
         const c = e.code;
         const K = this.binds;
         if (['Space', 'Tab', 'F3', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
+        // mini-carte : masquée / petite / grande
+        if (c === K.map && !this.ui.invOpen) {
+          CM.Comfort.cycleMap(this);
+          return;
+        }
         if (c === 'F3') {
           this.ui.toggleDebug();
           return;
@@ -1077,6 +1090,7 @@
       on('btn-respawn', () => {
         this.player.respawn();
         this.captureMouse();
+        CM.Comfort.onRespawn(this);
       });
       on('btn-victory', () => {
         this.ui.hide('victory');
@@ -2044,8 +2058,14 @@
         target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box } : null,
       });
       this.net.updateTags(cam);
+      const nowC = performance.now(), rdtC = Math.min(0.2, Math.max(0, (nowC - (this.comfortT || nowC)) / 1000));
+      this.comfortT = nowC;
       CM.Deco.overlay(this, cam); // texte des panneaux
       CM.Deco.updateMusic(this); // juke-box
+      CM.Comfort.updateMaps(this, rdtC); // mini-carte, carte tenue
+      CM.Comfort.updateCompass(this); // boussoles
+      CM.Comfort.checkAch(this, rdtC); // succès
+      CM.Comfort.updateHighlights(this, rdtC); // coffres trouvés
     }
   }
 

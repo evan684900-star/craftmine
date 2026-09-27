@@ -41,6 +41,10 @@
     </div>
     <div id="clock"></div>
     <div id="effects"></div>
+    <canvas id="minimap" class="hidden" width="128" height="128"></canvas>
+    <canvas id="bigmap" class="hidden" width="256" height="256"></canvas>
+    <div id="compass" class="hidden"><div class="rose"><div class="needle"></div></div><div class="clabel"></div></div>
+    <div id="ach-banner" class="hidden"></div>
     <div id="netinfo" class="hidden"></div>
     <div id="signs"></div>
     <div id="tags"></div>
@@ -123,6 +127,7 @@
           <div class="inv-tools">
             <button id="inv-quick" class="touch-only" title="Déplacer rapidement (comme Maj+clic)">⇄ Rapide</button>
             <button id="inv-half" class="touch-only" title="Prendre la moitié / poser un seul objet (comme clic droit)">½ Moitié</button>
+            <button id="inv-sort" title="Trier l’inventaire (hors barre d’objets)">⇅ Trier</button>
             <button id="inv-close" title="Fermer">✕</button>
           </div>
         </div>
@@ -153,10 +158,11 @@
           <div class="hint">À gauche, l'armure abîmée (ou l'objet à améliorer). À droite, son matériau pour la réparer (cuir, lingots d'or ou de fer, diamants, lingots de netherite : 25 % de durabilité par unité), ou un deuxième objet identique pour additionner les durabilités et réunir les enchantements (deux niveaux égaux donnent le niveau au-dessus). Coûte des niveaux d'expérience. Maj+clic depuis l'inventaire pour y poser un objet.</div>
         </div>
         <div id="chest-panel" class="hidden">
-          <h2 id="chest-title">Coffre</h2>
+          <div class="chest-head"><h2 id="chest-title">Coffre</h2><button id="chest-sort" title="Trier le coffre">⇅ Trier</button></div>
           <div id="chest-grid" class="grid"></div>
           <div class="hint">Maj+clic : transférer entre le coffre et l'inventaire</div>
         </div>
+        <input id="chest-find" type="search" placeholder="🔍 Chercher un objet dans les coffres proches… (Entrée)" />
         <div class="tabs">
           <button data-tab="craft" class="active">Fabrication</button>
           <button data-tab="creative" id="tab-btn-creative" class="hidden">Créatif</button>
@@ -389,6 +395,7 @@
     <div class="menu-box">
       <h1>Vous êtes mort</h1>
       <div id="death-cause"></div>
+      <div id="death-where" class="small-note"></div>
       <div id="death-note" class="small-note">Vos objets sont tombés sur place. Allez vite les récupérer !</div>
       <button id="btn-respawn" class="big">Réapparaître</button>
     </div>
@@ -430,6 +437,7 @@
   <script src="js/fish_defs.js"></script>
   <script src="js/weapon_defs.js"></script>
   <script src="js/deco_defs.js"></script>
+  <script src="js/comfort_defs.js"></script>
   <script src="js/weather.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
@@ -447,6 +455,7 @@
   <script src="js/fishing.js"></script>
   <script src="js/weapons.js"></script>
   <script src="js/deco.js"></script>
+  <script src="js/comfort.js"></script>
   <script src="js/gravity.js"></script>
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>

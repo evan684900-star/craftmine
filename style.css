@@ -551,3 +551,30 @@ body.touch #armor-panel .ap-num { min-width: 40px; }
 #effects .ef.low { animation: efblink 0.6s infinite alternate; }
 @keyframes efblink { from { opacity: 1; } to { opacity: 0.35; } }
 body.touch #effects { top: 150px; }
+
+/* ---- confort : mini-carte, carte, boussole, succès, apparence ---- */
+#minimap { position: absolute; top: calc(64px * var(--gui, 1)); right: 12px; width: calc(128px * var(--gui, 1)); height: calc(128px * var(--gui, 1)); border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 8px; image-rendering: pixelated; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); pointer-events: none; }
+#minimap.large { width: calc(200px * var(--gui, 1)); height: calc(200px * var(--gui, 1)); }
+#bigmap { position: absolute; right: 16px; bottom: calc(96px * var(--gui, 1)); width: min(46vh, 340px); height: min(46vh, 340px); border: 6px solid #d8c48f; border-radius: 6px; image-rendering: pixelated; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6); pointer-events: none; }
+#compass { position: absolute; left: 50%; bottom: calc(118px * var(--gui, 1)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; background: rgba(0, 0, 0, 0.5); padding: 4px 10px 4px 4px; border-radius: 22px; pointer-events: none; }
+#compass .rose { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle, #efe7cf 55%, #8d8d96 58%); position: relative; }
+#compass .needle { position: absolute; left: 50%; top: 50%; width: 4px; height: 28px; margin: -14px 0 0 -2px; background: linear-gradient(#d22 50%, #eee 50%); border-radius: 2px; }
+#compass .clabel { font-size: 13px; font-weight: 700; white-space: nowrap; }
+#ach-banner { position: absolute; top: 14px; left: 50%; transform: translate(-50%, -140%); display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 12px; border-radius: 10px; background: linear-gradient(135deg, rgba(40, 30, 6, 0.92), rgba(80, 60, 10, 0.92)); border: 2px solid #f5c542; color: #fff; pointer-events: none; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
+#ach-banner.go { animation: achIn 5s ease forwards; }
+@keyframes achIn { 0% { transform: translate(-50%, -140%); } 8%, 88% { transform: translate(-50%, 0); } 100% { transform: translate(-50%, -140%); } }
+#ach-banner .ai { font-size: 30px; }
+#ach-banner .at { color: #f5c542; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+#ach-banner .an { font-size: 17px; font-weight: 800; }
+#ach-banner .ad { font-size: 12px; opacity: 0.8; }
+.ach-head { margin: 14px 0 8px; font-size: 15px; }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.ach { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); opacity: 0.55; }
+.ach.got { opacity: 1; background: rgba(245, 197, 66, 0.12); border: 1px solid rgba(245, 197, 66, 0.35); }
+.ach .ai { font-size: 22px; }
+.ach .an { font-weight: 700; font-size: 13px; }
+.ach .ad { font-size: 11px; opacity: 0.75; }
+#chest-find { width: 100%; box-sizing: border-box; margin: 0 0 8px; font: inherit; font-size: 12px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--text); }
+.chest-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.look-prev { display: flex; justify-content: center; }
+.look-prev canvas { background: rgba(255, 255, 255, 0.06); border-radius: 10px; image-rendering: pixelated; }

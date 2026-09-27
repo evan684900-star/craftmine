@@ -276,9 +276,10 @@
       // (grâce de 2 s : la position « à cheval » de l'invité arrive juste après sa demande)
       return rp && rp.alive && (rp.flags & 128 || g.clock - (m.riderT || 0) < 2) ? rp : null;
     }
-    addDrop(id, count, x, y, z, extra, vel) {
+    // life : durée de vie (secondes) si ce n'est pas la durée normale (objets perdus à la mort).
+    addDrop(id, count, x, y, z, extra, vel, life) {
       if (this.remote) {
-        this.game.net.requestDrop(id, count, x, y, z, extra, vel);
+        this.game.net.requestDrop(id, count, x, y, z, extra, vel, life);
         return;
       }
       const r = this.rand;
@@ -289,7 +290,7 @@
         vy: vel ? vel[1] : 3 + r() * 2,
         vz: vel ? vel[2] : (r() - 0.5) * 3,
         age: 0, pickDelay: vel ? 1.2 : 0.25, onGround: false, dead: false,
-        spin: r() * 6,
+        spin: r() * 6, life: life > DROP_LIFE ? Math.min(3600, life) : undefined,
       });
     }
 
@@ -956,7 +957,7 @@
       if (!w.loaded(d.x, d.z)) return; // figé tant que son tronçon n'est pas chargé
       d.age += dt;
       d.pickDelay -= dt;
-      if (d.age > DROP_LIFE) d.dead = true; // disparaît au bout de 5 minutes
+      if (d.age > (d.life || DROP_LIFE)) d.dead = true; // disparaît au bout de 5 minutes (20 pour les objets perdus à la mort)
       const cell = w.get(Math.floor(d.x), Math.floor(d.y + 0.1), Math.floor(d.z));
       const inWater = CM.isWater(cell);
       // un objet tombé dans le feu ou la lave brûle (sauf la netherite)
@@ -1526,7 +1527,8 @@
       for (const d of this.drops) {
         if (!this.game.world.loaded(d.x, d.z)) continue;
         // les 10 dernières secondes, il clignote avant de disparaître
-        if (d.age > DROP_LIFE - 10 && Math.floor(d.age * (d.age > DROP_LIFE - 3 ? 8 : 4)) % 2) continue;
+        const age = d.age - ((d.life || DROP_LIFE) - DROP_LIFE);
+        if (age > DROP_LIFE - 10 && Math.floor(age * (age > DROP_LIFE - 3 ? 8 : 4)) % 2) continue;
         const l = this.lightAt(d.x, d.y + 0.2, d.z);
         const bob = Math.sin(d.age * 3 + d.spin) * 0.06 + 0.1;
         mat4.compose(this.M, d.x, d.y + bob, d.z, d.age * 1.6 + d.spin, 0, 0, 1);

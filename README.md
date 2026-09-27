@@ -150,6 +150,11 @@ Plus de 80 commandes, **en solo comme en multijoueur** : ouvre le tchat (**T**, 
 | 🪧 **Panneaux** | Au sol (tournés vers soi) ou au mur ; 4 lignes écrites dans une fenêtre, texte peint en perspective sur la planche (caché derrière les murs), couleur à la teinture, modifiables. |
 | 🖼 **Tableaux, cadres, porte-armures** | 14 tableaux peints par le jeu (1 × 1 à 4 × 2, le plus grand qui tient), cadres (mur, sol, plafond ; objet exposé et tourné), porte-armures (armure, élytres, arme en main). Ils tombent s'ils perdent leur support ; sauvegardés et partagés en multijoueur. |
 | 🎵 **Juke-box** | 8 disques, 8 morceaux composés par le jeu (accords, basse, mélodie en A-B-A, arpèges, batterie, écho selon le style), son spatialisé, notes qui s'envolent. Disques : coffres des ruines, rampant tué par un squelette. |
+| 🗺 **Carte et boussoles** | Mini-carte (touche M : masquée / petite / grande) avec relief, joueurs, lit, lieu de la mort, monstres ; carte tenue en main (grande) ; boussole vers le lit, boussole de récupération vers le lieu de la dernière mort (l'aiguille s'affole dans une autre dimension). |
+| 💀 **Mort** | Coordonnées affichées (écran de mort et tchat), objets au sol pendant 20 minutes au lieu de 5. |
+| 🧰 **Tri et recherche** | Tri de l'inventaire et des coffres (piles regroupées, rangées par type) ; recherche d'un objet dans les coffres à 48 blocs (distance, direction, étincelles ; aussi pour les invités). |
+| 🏆 **Succès** | 31 succès (bannière, annonce aux autres joueurs, liste dans le Journal), sauvegardés par joueur. |
+| 🎨 **Apparence** | Peau, cheveux, haut, pantalon, cape : vus par les autres joueurs en multijoueur (et bras à l'écran). |
 | 🐾 **Créatures** | **Paisibles** : mouflon, sanglier, manchot, **poule** (plumes, plane en tombant), **vache** (cuir, viande), **lapin** (bonds, déserts et prairies), **cerf** (s'enfuit), **chèvre** (montagnes, sauts géants, charge si on la frappe), **chauve-souris** (grottes). **Neutre** : **loup** (taïgas, en meute : frappe-en un, toute la meute attaque). **Hostiles** (la nuit, dans le noir) : l'Ombre, **araignée** (grimpe aux murs, bondit, neutre le jour ; corde), **squelette** (archer, garde ses distances, prend feu au soleil ; flèches, poudre d'os), **rampant** (siffle puis explose ; **poudre à canon** : 5 + 4 sables = TNT), **gluant** (marais et profondeurs, se divise en 2 à 4 plus petits ; boules de slime). **Nether** : Ombre ardente et **cube de magma** (se divise ; **crème de magma** : 4 = bloc de magma). Le golem de fer défend les villages contre tous les monstres. `/invoquer` les fait apparaître. |
 | 🌑 **Les Ombres** | La nuit et dans les grottes sombres. Une vague apparaît à la tombée de la nuit ; leur nombre dépend de la difficulté et des jours passés. Elles brûlent au soleil et refusent d'entrer dans la lumière des torches. |
 | 🎨 **Mode créatif** | Vol, blocs infinis, minage instantané, onglet *Créatif* avec tous les blocs et objets (recherche + catégories). Changeable en pause > Options > Jeu. |
@@ -226,6 +231,8 @@ js/weapon_defs.js arbalète, trident, élytres, fusées, enchantements, Noyé
 js/weapons.js     tir, lancer, Loyauté, Impulsion, vol plané, fusées
 js/deco_defs.js   panneaux, tableaux (peints par le jeu), cadres, porte-armures, disques
 js/deco.js        décoration posée (partagée), texte des panneaux, juke-box et musique
+js/comfort_defs.js boussoles, carte, textures de l'apparence
+js/comfort.js     mini-carte, boussoles, mort, tri, recherche dans les coffres, succès, apparence
 js/player.js      joueur : déplacements, faim, minage, combat, grappin, mode créatif…
 js/touch.js       contrôles tactiles : joystick, caméra au doigt, boutons
 js/net.js         multijoueur pair à pair : hôte, invités, synchronisation, tchat

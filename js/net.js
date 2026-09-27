@@ -373,7 +373,7 @@
                 else this.lost('Connexion perdue avec l’hôte.');
               },
             );
-            this.hostLink.send({ t: 'hello', v: PROTO, name });
+            this.hostLink.send({ t: 'hello', v: PROTO, name, look: CM.Comfort.myLook(this.game) });
           });
           conn.on('error', () => fail({ type: 'timeout' }));
         });
@@ -386,7 +386,11 @@
         this.applyRules(welcome.rules);
         this.dayLen = welcome.dayLen || 0;
         this.remotes.clear();
-        for (const [pid, n] of welcome.players || []) this.remotes.set(pid, new RemotePlayer(this, pid, n));
+        for (const [pid, n, lk] of welcome.players || []) {
+          const rp = new RemotePlayer(this, pid, n);
+          rp.look = CM.Comfort.cleanLook(lk);
+          this.remotes.set(pid, rp);
+        }
         document.body.classList.add('net');
         return welcome;
       } catch (e) {
@@ -413,6 +417,7 @@
         nether: w.ne ? { edits: w.ne } : undefined,
         player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
+        ach: you.ach && typeof you.ach === 'object' ? you.ach : {}, lastDeath: you.lastDeath || null,
         weather: w.wx && typeof w.wx === 'object' ? w.wx : null,
         beaconFx: w.bfx && typeof w.bfx === 'object' ? w.bfx : {},
         deco: w.deco && typeof w.deco === 'object' ? w.deco : null,
@@ -608,6 +613,8 @@
           },
           inv: g.inventory.serialize(),
           stats: g.stats,
+          ach: g.ach || {},
+          lastDeath: g.lastDeath || null,
         },
       });
     }
@@ -708,7 +715,7 @@
           const pet = (o.tame ? 1 : 0) | (o.sit ? 2 : 0) | (o.saddle ? 4 : 0) | ((o.variant | 0) << 3) | (o.rider !== undefined && o.rider !== null ? 64 : 0);
           m.push(pet ? [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl, pet] : [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
         }
-        for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z), Math.round(o.age)]);
+        for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z), Math.round(o.age - ((o.life || CM.DROP_LIFE) - CM.DROP_LIFE))]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
         const x = ents.snapExtra(near);
         e.link.send({ t: 'ent', m, d, tn, ar: x.ar, ca: x.ca, fb: x.fb });
@@ -765,6 +772,7 @@
       e.pid = this.nextPid++;
       e.name = name;
       e.rp = new RemotePlayer(this, e.pid, name);
+      e.rp.look = CM.Comfort.cleanLook(m.look);
       // il revient dans la dimension où il était (chacun voyage seul)
       const you = this.guests[name] || null;
       if (you && you.dim === 'nether' && you.player && Number.isFinite(you.player.x)) e.rp.dim = 'nether';
@@ -775,12 +783,12 @@
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
         time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {}, deco: CM.Deco.save(g),
-        players: [[0, this.name], ...[...this.links.values()].map((x) => [x.pid, x.name])],
+        players: [[0, this.name, CM.Comfort.myLook(g)], ...[...this.links.values()].map((x) => [x.pid, x.name, x.rp.look])],
         you,
       });
       this.links.set(e.pid, e);
       this.remotes.set(e.pid, e.rp);
-      this.broadcast({ t: 'join', pid: e.pid, n: name }, e.pid);
+      this.broadcast({ t: 'join', pid: e.pid, n: name, lk: e.rp.look }, e.pid);
       this.sys(name + ' a rejoint la partie');
       CM.Audio.play('pop');
     }
@@ -855,7 +863,7 @@
           const id = m.id | 0, n = Math.min(4096, m.n | 0);
           if (!CM.itemInfo(id) || n <= 0) break;
           const v = Array.isArray(m.v) ? m.v.map(num) : null;
-          g.entities.addDrop(id, n, num(m.x), num(m.y), num(m.z), netExtra(m), v);
+          g.entities.addDrop(id, n, num(m.x), num(m.y), num(m.z), netExtra(m), v, m.lf ? Math.min(3600, m.lf | 0) : undefined);
           break;
         }
         case 'hit': {
@@ -883,6 +891,20 @@
           }
           break;
         }
+        case 'look':
+          // l'invité change d'apparence
+          rp.look = CM.Comfort.cleanLook(m.l);
+          this.broadcast({ t: 'look', pid: e.pid, l: rp.look }, e.pid);
+          break;
+        case 'ach': {
+          const a = CM.Comfort.ACH.find((x) => x.k === m.k);
+          if (a) this.sysAll('🏆 ' + e.name + ' a obtenu le succès « ' + a.name + ' »');
+          break;
+        }
+        case 'cfind':
+          // recherche dans les coffres proches de l'invité
+          if (typeof m.q === 'string') this.sendTo(e.pid, { t: 'cfound', q: m.q.slice(0, 40), r: CM.Comfort.searchChests(g, m.q, rp.x, rp.y, rp.z, rp.dim) });
+          break;
         case 'dco':
           // décoration posée par un invité (panneau, tableau, cadre, porte-armure, juke-box)
           CM.Deco.fromGuest(g, e, m.o);
@@ -1327,8 +1349,17 @@
             g.weather = { type: m.w, t: num(m.d) };
           }
           break;
+        case 'look': {
+          const rp2 = this.remotes.get(m.pid);
+          if (rp2) rp2.look = CM.Comfort.cleanLook(m.l);
+          break;
+        }
+        case 'cfound':
+          if (Array.isArray(m.r)) CM.Comfort.showFound(g, String(m.q || '').slice(0, 40), m.r.slice(0, 12).filter((a) => Array.isArray(a)).map((a) => a.map(num)));
+          break;
         case 'join':
           this.remotes.set(m.pid, new RemotePlayer(this, m.pid, cleanName(m.n)));
+          if (m.lk) this.remotes.get(m.pid).look = CM.Comfort.cleanLook(m.lk);
           this.sys(cleanName(m.n) + ' a rejoint la partie');
           break;
         case 'leave': {
@@ -1382,8 +1413,9 @@
     feedMob(mob) {
       this.send({ t: 'feed', id: mob.uid });
     }
-    requestDrop(id, count, x, y, z, extra, vel) {
+    requestDrop(id, count, x, y, z, extra, vel, life) {
       const m = { t: 'drop', id, n: count, x: r2(x), y: r2(y), z: r2(z) };
+      if (life) m.lf = Math.min(3600, life | 0);
       if (extra && extra.xp !== undefined) m.xp = extra.xp;
       if (extra && extra.ench) m.en = extra.ench;
       if (vel) m.v = vel.map(r2);
@@ -1690,24 +1722,27 @@
           CM.Fishing.drawLine(ents, batch, [rp.rx + cy * 0.4 - sy2 * 0.9, rp.ry + 1.75 - (seated ? 0.45 : 0), rp.rz - sy2 * 0.4 - cy * 0.9], rp.bob, false);
         }
         const sw = rp.moving && !rides && !seated ? Math.sin(rp.walk) : 0;
-        const shirt = L['concrete_' + rp.shirt] || L.sleeve;
+        const lk = CM.Comfort.layers(rp.look, rp.shirt), shirt = lk.shirt; // apparence choisie par le joueur
         // (rotation autour de x : positif = vers l'avant pour un membre qui pend)
         // (à cheval : jambes écartées de part et d'autre)
         // (assis dans un bateau ou un wagonnet : jambes vers l'avant)
-        ents.part(batch, M, -0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, seated ? 0.1 : rides ? 0.5 : 0);
-        ents.part(batch, M, 0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, seated ? -0.1 : rides ? -0.5 : 0);
+        ents.part(batch, M, -0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], lk.pants, l, fl, null, 0, seated ? 0.1 : rides ? 0.5 : 0);
+        ents.part(batch, M, 0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], lk.pants, l, fl, null, 0, seated ? -0.1 : rides ? -0.5 : 0);
+        // cape (flotte un peu quand il avance)
+        if (lk.cape && !(rp.flags & 2048)) ents.part(batch, M, 0, 1.35, 0.14, -(0.1 + (rp.moving ? 0.35 : 0) + (glides ? 0.8 : 0)), [-0.24, -1.0, 0, 0.24, 0, 0.04], lk.cape, l, fl);
         // corps (penché quand il est accroupi), tête qui suit le regard
         const lean = sneak ? 0.4 : 0;
         ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], shirt, l, fl);
         const ny = 0.7 + 0.65 * Math.cos(lean), nz = -0.65 * Math.sin(lean);
-        ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], head, l, fl);
+        ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], rp.look ? lk.head : head, l, fl);
+        if (rp.look) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.232, 0, -0.232, 0.232, 0.452, 0.232], lk.hair, l, fl);
         // bras (le droit frappe, et avance un peu quand il tient quelque chose)
         const swing = rp.swingT > 0 ? 1.3 * Math.sin((1 - rp.swingT / 0.3) * Math.PI) : 0;
         const sy = ny - 0.02, sz = nz * 0.9;
         const arms = [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0)], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
         for (const [ax, rot] of arms) {
           ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl);
-          ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], L.skin, l, fl);
+          ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl);
         }
         // armure portée : coques un peu plus grandes que chaque partie du corps
         const am = (k) => {
