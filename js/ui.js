@@ -13,6 +13,8 @@
     ['🌾 Agriculture', "Laboure la terre avec une houe (clic droit), puis plante : graines de blé ou de betterave (herbes hautes), carottes et pommes de terre (herbes hautes, villages, coffres), graines de citrouille ou de pastèque (1 citrouille = 4 graines, 1 tranche = 1 graine). Avec de l'eau à 4 blocs ou moins, la terre devient irriguée (plus sombre) et tout pousse 2,5 fois plus vite ; laissée sèche et vide, elle redevient de la terre. Un seau (3 lingots de fer) ramasse de l'eau et la verse où tu veux (versée juste avant de toucher le sol, elle annule les dégâts de chute : le fameux MLG !). Une tige adulte fait pousser une citrouille ou une pastèque sur une case libre à côté. La poudre d'os accélère tout."],
     ['🐾 Créatures', "Paisibles : mouflon, sanglier (charge si on le frappe), manchot, poule (plumes, descend en planant), vache (cuir, viande), lapin (avance par bonds, déserts et prairies), cerf (s'enfuit quand on approche), chèvre (montagnes, saute très haut, vous envoie valser si on la frappe), chauve-souris (grottes). Neutre : le loup (taïgas, en meute) — frappe-le et toute la meute attaque. Hostiles, la nuit et dans le noir : l'Ombre, l'araignée (grimpe aux murs, bondit ; le jour, elle ne t'attaque que si tu la frappes ; donne de la corde), le squelette (tire à l'arc de loin, prend feu au soleil ; flèches, poudre d'os), le rampant (s'approche sans bruit, siffle… et explose : éloigne-toi vite ! poudre à canon → TNT), le gluant (marais et profondeurs ; se divise en plus petits ; boules de slime). Dans le Nether : l'Ombre ardente et le cube de magma (se divise aussi ; crème de magma → bloc de magma)."],
     ['🐴 Animaux apprivoisés', "Loup : donne-lui des os (laissés par les squelettes) jusqu'à ce qu'il porte un collier rouge. Il te suit partout (il te rejoint si tu t'éloignes), attaque ce qui te frappe, ce que tu frappes et les monstres proches ; clic droit pour qu'il s'assoie ou te suive ; la viande le soigne (et, en pleine forme, lui donne des petits). Cheval (plaines, savane) : clic droit main vide pour le monter ; il rue et te désarçonne jusqu'à ce qu'il t'accepte (blé, pommes et carottes l'adoucissent). Dressé, mets-lui une selle (5 cuirs + 2 fers à l'établi) puis clic droit : il galope (course pour aller plus vite), saute très haut et monte les marches ; accroupis-toi pour descendre. Carottes ou pommes dorées : des poulains. Vache + seau : seau de lait (à boire). Les poules pondent un œuf toutes les 5 à 10 minutes : lance-le (clic droit), parfois un poussin en sort."],
+    ['🧪 Potions et alambic', "Fiole vide : 3 verres à l'Établi, clic droit sur de l'eau pour la remplir. Alambic (3 pierres + 1 essence d'ombre + 1 poudre lumineuse) : la 1re case reçoit l'ingrédient, les 3 autres les fioles ; il distille en 12 s. Verrue du Nether (un bloc de verrues des forêts carmin du Nether en donne 9) + fiole d'eau = potion étrange, qui devient : sucre → vitesse, essence d'ombre → force, melon scintillant → soin, larme d’ardent → régénération, œil d'araignée → poison, crème de magma → résistance au feu, poisson-globe → apnée, carotte dorée → vision nocturne, patte de lapin → saut, plume → chute lente, éclat d'améthyste → résistance, émeraude → célérité. Ajoute ensuite de la redstone (plus longue), de la poudre lumineuse (niveau II), un œil fermenté (la corrompt : vitesse → lenteur, force → faiblesse, soin → dégâts, vision nocturne → invisibilité…) ou de la poudre à canon (potion jetable, clic droit pour la lancer : elle touche tout ce qui est autour). Boire rend la fiole vide ; le lait enlève tous les effets. Les effets en cours s'affichent en haut à droite."],
+    ['🔆 Balise', "Balise : 5 verres + 3 obsidiennes + 1 éclat céleste. Pose-la au sommet d'une pyramide de blocs de fer, d'or, de diamant, d'émeraude ou de netherite (3 × 3, puis 5 × 5, 7 × 7, 9 × 9 : jusqu'à 4 étages). Elle projette un faisceau vers le ciel et donne un effet à tous les joueurs à 20 à 50 blocs : vitesse ou célérité (1 étage), résistance ou saut (2), force (3), régénération (4). Clic droit sur la balise pour changer d'effet."],
     ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons, les vaches et les chèvres ; carotte, pomme de terre ou betterave pour les sangliers ; graines pour les poules ; carotte pour les lapins ; pomme pour les cerfs. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
     ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
     ['✨ Expérience', "La barre verte au-dessus de la barre d'objets montre ton niveau. On gagne de l'expérience en minant du charbon, des diamants, des émeraudes, du lapis, de la redstone, du quartz, du cristal ou des rubis, en tuant des Ombres (5) et des animaux, en échangeant avec les villageois, en faisant naître des petits et en fondant à la forge. À la mort, elle est perdue (sauf si l'inventaire est conservé)."],
@@ -450,6 +452,21 @@
         }
       }
       if (this.debug) this.updateDebug();
+      // effets en cours (potions, balises) : icône et temps restant
+      this.effT = (this.effT || 0) - dt;
+      if (this.effT <= 0 || this.effDirty) {
+        this.effT = 0.5;
+        this.effDirty = false;
+        const ef = (g.player && g.player.effects) || {};
+        let h = '';
+        for (const [k, e] of Object.entries(ef)) {
+          const d = CM.EFFECTS[k];
+          if (!d || e.t <= 0) continue;
+          const s = Math.ceil(e.t), c = d.color;
+          h += '<div class="ef' + (s <= 10 ? ' low' : '') + '" style="--c:rgb(' + c.join(',') + ')">' + d.icon + ' ' + d.name + (e.l > 1 ? ' ' + ['', 'I', 'II', 'III', 'IV', 'V'][e.l] : '') + ' · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + '</div>';
+        }
+        if (h !== this.effHtml) $('effects').innerHTML = this.effHtml = h;
+      }
     }
 
     updateObjective() {
@@ -1295,10 +1312,17 @@
         if (info.toolType === 'pickaxe' && info.mat === 'CRYSTAL') h += '<div class="tt-sub">Mine les filons de minerai d’un coup.</div>';
         if (info.toolType === 'axe' && info.tier >= 3) h += '<div class="tt-sub">Abat l’arbre entier d’un coup.</div>';
         if (info.toolType === 'axe') h += '<div class="tt-sub">Clic droit sur une bûche : l’écorcer.</div>';
+      } else if (info.potion || info.type === 'splash') {
+        const o = info.potion, d = CM.EFFECTS[o.e];
+        h += '<div class="tt-gold">' + d.icon + ' ' + d.name + (o.l > 1 ? ' II' : '') + (o.t ? ' · ' + Math.floor(o.t / 60) + ':' + String(o.t % 60).padStart(2, '0') : '') + '</div>';
+        h += '<div class="tt-sub">' + (info.type === 'splash' ? 'Clic droit pour la lancer : elle agit sur tout ce qui est à moins de 4 blocs.' : 'Clic droit maintenu pour la boire (on garde la fiole).') + '</div>';
       } else if (info.type === 'food') {
-        h += '<div class="tt-sub">Clic droit maintenu 1 s pour manger : +' + info.food / 2 + ' 🍗 (saturation ' + info.sat + ')' + (info.regen ? ', Régénération' : '') + '</div>';
+        h += '<div class="tt-sub">Clic droit maintenu 1 s pour ' + (info.drinkBottle || info.milk ? 'boire' : 'manger') + (info.food ? ' : +' + info.food / 2 + ' 🍗 (saturation ' + info.sat + ')' : '') + (info.regen ? ', Régénération' : '') + '</div>';
+        if (info.eatEffect) h += '<div class="tt-sub">⚠ ' + CM.EFFECTS[info.eatEffect[0]].name + ' si on le mange.</div>';
+        if (info.desc) h += '<div class="tt-sub">' + esc(info.desc) + '</div>';
         if (info.plant) h += '<div class="tt-sub">Clic droit sur de la terre labourée pour planter.</div>';
-        for (const [ty, foods] of Object.entries(CM.BREED_FOOD)) if (foods.includes(info.id)) h += '<div class="tt-sub">Plaît aux ' + (ty === 'boar' ? 'sangliers' : 'mouflons') + ' (élevage).</div>';
+        const fans = Object.entries(CM.BREED_FOOD).filter(([, foods]) => foods.includes(info.id)).map(([ty]) => (CM.MOBS && CM.MOBS[ty] && CM.MOBS[ty].name) || (ty === 'boar' ? 'Sanglier' : ty === 'mouflon' ? 'Mouflon' : ty));
+        if (fans.length) h += '<div class="tt-sub">Plaît à : ' + fans.join(', ') + ' (élevage).</div>';
       } else if (info.type === 'charm') {
         h += '<div class="tt-gold">' + info.desc + '</div>';
       } else if (info.charge) {
@@ -1325,6 +1349,8 @@
         h += '<div class="tt-sub">Clic droit sur une TNT pour l’allumer.</div>';
       } else if (info.dye) {
         h += '<div class="tt-sub">Teint la laine, le verre, la terre cuite et le béton.</div>';
+      } else if (info.desc && !info.isBlock) {
+        h += '<div class="tt-sub">' + esc(info.desc) + '</div>';
       } else if (info.isBlock) {
         const b = info.block;
         const bits = [];

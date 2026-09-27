@@ -413,6 +413,7 @@
         player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
         weather: w.wx && typeof w.wx === 'object' ? w.wx : null,
+        beaconFx: w.bfx && typeof w.bfx === 'object' ? w.bfx : {},
       };
     }
 
@@ -569,7 +570,7 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0) | (CM.Effects.invisible(p) ? 256 : 0);
       const held = g.inventory.held();
       let armor = 0;
       g.inventory.armor.forEach((s, k) => {
@@ -771,7 +772,7 @@
         seed: w.seed, settings: Object.assign({}, g.settings, { mode: g.mode, difficulty: g.difficulty }),
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
-        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null,
+        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {},
         players: [[0, this.name], ...[...this.links.values()].map((x) => [x.pid, x.name])],
         you,
       });
@@ -880,6 +881,13 @@
           }
           break;
         }
+        case 'bfx':
+          // l'invité choisit l'effet d'une balise
+          if (typeof m.k === 'string' && CM.EFFECTS[m.e]) {
+            CM.Potions.setBeacon(g, m.k, m.e);
+            this.broadcast({ t: 'bfx', k: m.k, e: m.e }, e.pid);
+          }
+          break;
         case 'unmount':
           for (const o of g.entities.mobs) if (o.rider === e.pid) o.rider = null;
           break;
@@ -958,7 +966,8 @@
           if (!Array.isArray(m.p) || !Array.isArray(m.v)) break;
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
           if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > 4) break;
-          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, m.k === 'egg' ? 'egg' : undefined);
+          const it = m.k === 'potion' && CM.itemInfo(m.it | 0) && CM.itemInfo(m.it | 0).potion ? m.it | 0 : 0;
+          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, m.k === 'egg' ? 'egg' : it ? 'potion' : undefined, it);
           break;
         }
         case 'cart': {
@@ -1180,6 +1189,9 @@
         case 'unride':
           if (p) p.riding = null;
           break;
+        case 'bfx':
+          if (typeof m.k === 'string' && CM.EFFECTS[m.e]) CM.Potions.setBeacon(g, m.k, m.e);
+          break;
         case 'buck':
           // le cheval nous a désarçonnés
           if (p && p.mount !== null && p.mount !== undefined) p.dismount(null, true);
@@ -1230,6 +1242,17 @@
           break;
         case 'cbusy':
           g.ui.toast('Ce coffre est déjà ouvert par ' + m.n, 'warn', 'cbusy');
+          break;
+        case 'cupd':
+          // l'hôte a changé le contenu ouvert (alambic qui a fini)
+          if (this.chestKey === m.k && g.ui.chest && Array.isArray(m.s)) {
+            for (let i = 0; i < g.ui.chest.length; i++) {
+              const it = m.s[i];
+              g.ui.chest[i] = it && CM.itemInfo(it.id | 0) && it.count > 0 ? { id: it.id | 0, count: Math.min(it.count | 0, 999) } : null;
+            }
+            g.ui.renderInventory();
+            CM.Audio.play('fizz');
+          }
           break;
         case 'cclose':
           if (this.chestKey === m.k) {
@@ -1612,6 +1635,7 @@
       const me = this.game.player;
       for (const rp of this.remotes.values()) {
         if (!rp.seen || !rp.alive || rp.dim !== this.game.playerDim) continue;
+        if (rp.flags & 256) continue; // invisible (potion)
         // caméra à l'intérieur du personnage (même point d'apparition) : on ne le dessine pas
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);

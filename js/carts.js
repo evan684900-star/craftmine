@@ -27,16 +27,16 @@
 
   // ------------------------------------------------------------ flèches --
   // kind : 'egg' pour un œuf lancé (sinon une flèche)
-  E.shootArrow = function (x, y, z, vx, vy, vz, shooter, kind) {
+  E.shootArrow = function (x, y, z, vx, vy, vz, shooter, kind, item) {
     if (this.remote) {
-      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)], k: kind });
+      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)], k: kind, it: item });
       return;
     }
     const g = this.game;
     if (!this.arrows) this.arrows = [];
     // (flèches des squelettes : pas ramassables)
-    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, kind: kind || null, pick: !kind && !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
-    CM.Audio.play(kind === 'egg' ? 'pop' : 'bow', { pitch: 0.9 + Math.random() * 0.2 });
+    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, kind: kind || null, item: item || 0, pick: !kind && !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
+    CM.Audio.play(kind ? 'pop' : 'bow', { pitch: 0.9 + Math.random() * 0.2 });
   };
   // Un œuf se casse : parfois un poussin en sort.
   E.eggHit = function (a) {
@@ -89,6 +89,16 @@
           }
         }
         const bh = w.raycast(a.x, a.y, a.z, dx, dy, dz, ht, (id) => !CM.isFluid(id) && !(CM.blocks[id].rs && CM.blocks[id].rs.k === 'tripwire'));
+        // potion jetable : elle se brise contre ce qu'elle touche
+        if ((bh || hit) && a.kind === 'potion') {
+          const tt = bh ? Math.max(0, bh.t - 0.1) : ht;
+          a.x += dx * tt;
+          a.y += dy * tt;
+          a.z += dz * tt;
+          a.dead = true;
+          CM.Potions.splash(this, a.x, a.y, a.z, a.item);
+          continue;
+        }
         if (bh && a.kind === 'egg') {
           a.x += dx * Math.max(0, bh.t - 0.1);
           a.y += dy * Math.max(0, bh.t - 0.1) + 0.1;
@@ -151,6 +161,12 @@
       if (a.kind === 'egg') {
         mat4.compose(this.M, a.x, a.y, a.z, 0, 0, 0, 1);
         batch.box(this.M, -0.07, -0.08, -0.07, 0.07, 0.1, 0.07, CM.Textures.layer.mob_chicken, l[0], l[1], 0);
+        continue;
+      }
+      if (a.kind === 'potion') {
+        const info = CM.itemInfo(a.item);
+        mat4.compose(this.M, a.x, a.y - 0.15, a.z, (a.age || 0) * 8, 0, 0, 1);
+        if (info) this.drawItem(batch, this.M, a.item, l, 0.3);
         continue;
       }
       let yaw = a.yaw, pitch = a.pitch;
@@ -464,7 +480,7 @@
     for (const a of this.arrows || []) {
       if (a.dead || !near(a)) continue;
       const yaw = a.stuck ? a.yaw : Math.atan2(a.vx, a.vz), pitch = a.stuck ? a.pitch : Math.atan2(-a.vy, Math.hypot(a.vx, a.vz));
-      ar.push(a.kind === 'egg' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 1] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
+      ar.push(a.kind === 'egg' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 1] : a.kind === 'potion' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 2, a.item] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
     }
     for (const c of this.carts || []) {
       if (c.dead || !near(c)) continue;
@@ -475,9 +491,9 @@
   E.applyExtra = function (s) {
     const oldA = new Map((this.arrows || []).map((a) => [a.uid, a]));
     this.arrows = [];
-    for (const [uid, x, y, z, yaw, pitch, k] of s.ar || []) {
+    for (const [uid, x, y, z, yaw, pitch, k, it] of s.ar || []) {
       let a = oldA.get(uid);
-      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : null };
+      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : k === 2 ? 'potion' : null, item: k === 2 && CM.itemInfo(it) ? it : 0 };
       a.tx = x;
       a.ty = y;
       a.tz = z;

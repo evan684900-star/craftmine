@@ -17,7 +17,7 @@
     defItem(1367, 'BONE', { name: 'Os', tex: 'bone', desc: 'Laissé par les squelettes. Clic droit sur un loup pour l’apprivoiser ; donne 3 poudres d’os.' });
     defItem(1368, 'SADDLE', { name: 'Selle', tex: 'saddle', stack: 1, desc: 'Clic droit sur un cheval dressé pour la lui mettre, puis clic droit pour le monter.' });
     defItem(1369, 'EGG', { name: 'Œuf', tex: 'egg', stack: 16, type: 'egg', desc: 'Pondu par les poules. Clic droit pour le lancer (parfois, un poussin en sort).' });
-    defItem(1370, 'MILK_BUCKET', { name: 'Seau de lait', tex: 'milk_bucket', stack: 1, type: 'food', food: 1, sat: 0.5, milk: true, desc: 'Clic droit sur une vache avec un seau. À boire : enlève les effets (poison…).' });
+    defItem(1370, 'MILK_BUCKET', { name: 'Seau de lait', tex: 'milk_bucket', stack: 1, type: 'food', food: 1, sat: 0.5, always: true, milk: true, desc: 'Clic droit sur une vache avec un seau. À boire : enlève les effets (poison…).' });
   });
   M.recipes.push(function (K) {
     const { r } = K;
@@ -365,6 +365,7 @@
     loot(e, m, meat, more) {
       drop(e, m, meat, e.rand() < 0.6 ? 1 + more() : 0);
       if (e.rand() < 0.3) drop(e, m, I().LEATHER, 1);
+      if (e.rand() < 0.12 + 0.05 * more()) drop(e, m, I().RABBIT_FOOT, 1);
     },
     render(e, batch, m, l, f, sw) {
       const L = Lr(), F = L.mob_rabbit;
@@ -718,6 +719,7 @@
     },
     loot(e, m, meat, more) {
       drop(e, m, I().ROPE, Math.floor(e.rand() * 3) + more());
+      if (e.rand() < 0.5) drop(e, m, I().SPIDER_EYE, 1);
     },
     render(e, batch, m, l, f, sw, t) {
       const L = Lr(), S = L.mob_spider;

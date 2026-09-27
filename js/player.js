@@ -86,6 +86,13 @@
     get creative() {
       return this.game.mode === 'creative';
     }
+    // effets (potions, balises) : voir potions.js
+    addEffect(k, t, l) {
+      CM.Effects.add(this, k, t, l);
+    }
+    clearEffects() {
+      CM.Effects.clear(this);
+    }
     get maxHealth() {
       return 20 + (this.game.inventory.has(I.RUBY_CHARM) ? 4 : 0);
     }
@@ -129,6 +136,7 @@
       this.useCd = Math.max(0, this.useCd - dt);
       this.breakCd = Math.max(0, this.breakCd - dt);
       this.regenEffect = Math.max(0, this.regenEffect - dt);
+      CM.Effects.tick(this, dt);
       this.swing = Math.max(0, this.swing - dt * 3.2);
       this.comboTimer = Math.max(0, this.comboTimer - dt);
       if (this.comboTimer <= 0) this.combo = 0;
@@ -265,6 +273,7 @@
       if (this.flying) speed = this.sprinting ? 21 : 11;
       if (mag < 1) speed *= Math.max(0.3, mag);
       if (this.cmdSpeed) speed *= this.cmdSpeed; // /vitesse
+      speed *= CM.Effects.speedMul(this); // potions de vitesse / lenteur
       // cheval dressé et sellé : on galope ; pas encore dressé : il n'obéit pas
       if (mounted) {
         speed = this.mountTame ? (wantSprint && f > 0 ? 13 : 9) * Math.max(0.3, mag) : 0;
@@ -366,7 +375,7 @@
         if ((k[K.jump] || autoJump) && this.onGround && this.jumpCd <= 0) {
           const bounce = standBlock === B.MUSHROOM || standBlock === B.SLIME_BLOCK;
           const honey = standBlock === B.HONEY_BLOCK;
-          this.vy = mounted ? (this.mountTame ? 10.5 : 0) : (bounce ? 14 : honey ? 5 : 8.6) * Math.sqrt(1 + 0.6 * (this.cmdJump || 0)); // /saut ; cheval : grand saut
+          this.vy = mounted ? (this.mountTame ? 10.5 : 0) : (bounce ? 14 : honey ? 5 : 8.6) * Math.sqrt(1 + 0.6 * (this.cmdJump || 0) + 0.5 * CM.Effects.lv(this, 'jump')); // /saut, potion ; cheval : grand saut
           this.jumpCd = 0.15;
           if (bounce) CM.Audio.play('bounce');
           this.exhaust(this.sprinting ? EXH.sprintJump : EXH.jump);
@@ -414,7 +423,7 @@
       if (this.landed) {
         const under2 = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
         // (/saut amortit les chutes ; règle « dégâts de chute »)
-        const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0) - (mounted ? 4 : 0);
+        const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0) - (mounted ? 4 : 0) - CM.Effects.lv(this, 'jump') * 1.5 - (CM.Effects.lv(this, 'slow_falling') ? 1e9 : 0);
         const bouncy = under2 === B.MUSHROOM || under2 === B.SLIME_BLOCK;
         if (bouncy && prevVy < -4 && !this.sneaking) {
           this.vy = Math.min(24, -prevVy * 0.85);
@@ -867,7 +876,7 @@
         speed = info.speed;
         harvest = info.tier >= b.tier;
       }
-      let time = (b.hardness * 1.5) / speed;
+      let time = (b.hardness * 1.5) / speed / (1 + 0.2 * CM.Effects.lv(this, 'haste')); // célérité
       if (!harvest) time *= 3.3;
       time /= this.comboMult();
       if (this.inWater && !this.onGround) time *= 2;
@@ -1112,7 +1121,19 @@
         this.regenEffect = info.regen;
         g.ui.toast('Régénération (' + info.regen + ' s)', 'gold');
       }
+      // potion bue, aliment empoisonné
+      if (info.potion) {
+        CM.Effects.add(this, info.potion.e, info.potion.t, info.potion.l);
+        const ef = CM.EFFECTS[info.potion.e];
+        g.ui.toast(ef.icon + ' ' + ef.name + (info.potion.l > 1 ? ' II' : '') + (info.potion.t ? ' (' + Math.floor(info.potion.t / 60) + ':' + String(info.potion.t % 60).padStart(2, '0') + ')' : ''), 'gold', 'potion');
+      }
+      if (info.eatEffect) CM.Effects.add(this, info.eatEffect[0], info.eatEffect[1], info.eatEffect[2]);
       this.consume(1);
+      // fiole bue : on garde la fiole vide
+      if (info.drinkBottle && !this.creative) {
+        const left = g.inventory.add(CM.I.GLASS_BOTTLE, 1);
+        if (left > 0) g.dropNearPlayer(CM.I.GLASS_BOTTLE, left);
+      }
       // seau de lait : on garde le seau ; le lait enlève les effets
       if (info.milk) {
         const left = g.inventory.add(CM.I.BUCKET, 1);
@@ -1186,7 +1207,7 @@
       }
       if (!this.onGround && this.vy < -1) dmg *= 1.5;
       if (this.dashTime > 0) dmg += 2;
-      return dmg;
+      return Math.max(0.5, dmg + CM.Effects.dmgBonus(this)); // force / faiblesse
     }
     attackPlayer(rp) {
       this.attackCd = 0.38;
@@ -1217,6 +1238,7 @@
         dmg += 2;
         crit = true;
       }
+      dmg = Math.max(0.5, dmg + CM.Effects.dmgBonus(this)); // force / faiblesse
       if (this.creative) dmg = Math.max(dmg, 50);
       this.attackCd = 0.38;
       this.swing = 1;
@@ -1448,7 +1470,7 @@
           return;
         }
         if (tb.container) {
-          g.openChestAt(t.x, t.y, t.z, tb.name);
+          g.openChestAt(t.x, t.y, t.z, tb.chestTitle || tb.name);
           return;
         }
         if (tb.note) {
@@ -1495,6 +1517,32 @@
       }
       if (info.type === 'grapple') {
         if (input.pressed.mouse2) this.fireHook();
+        return;
+      }
+      // fiole vide : on la remplit d'eau
+      if (info.type === 'bottle') {
+        if (!input.pressed.mouse2) return;
+        const e = this.eye(), d = this.aim();
+        const h = w.raycast(e[0], e[1], e[2], d[0], d[1], d[2], this.creative ? 7 : REACH, (id) => CM.isWater(id) || CM.blocks[id].solid);
+        if (!h || !CM.isWater(h.id)) {
+          g.ui.toast('Clic droit sur de l’eau pour remplir la fiole', 'info', 'bottle');
+          return;
+        }
+        this.consume(1);
+        const left = inv.add(CM.I.WATER_BOTTLE, 1);
+        if (left > 0) g.dropNearPlayer(CM.I.WATER_BOTTLE, left);
+        CM.Audio.play('splash');
+        this.swing = 1;
+        return;
+      }
+      // potion jetable : on la lance
+      if (info.type === 'splash') {
+        if (input.pressed.mouse2) {
+          const e = this.eye(), d = this.aim();
+          g.entities.shootArrow(e[0] + d[0] * 0.4, e[1] + d[1] * 0.4, e[2] + d[2] * 0.4, d[0] * 14, d[1] * 14 + 2.5, d[2] * 14, this, 'potion', stack.id);
+          this.consume(1);
+          this.swing = 1;
+        }
         return;
       }
       // œuf : on le lance
@@ -1712,6 +1760,8 @@
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
       if (this.cmdGod && cause !== 'Le vide') return; // /invincible
+      n = CM.Effects.reduce(this, n, cause); // résistance, résistance au feu
+      if (n <= 0) return;
       if (this.invul > 0 && !bypass) return;
       // bouclier levé : arrête les coups venus de devant (créatures, flèches, joueurs, explosions)
       if (this.blocking && sx !== null && sx !== undefined && (!bypass || cause === 'Une explosion')) {

@@ -343,6 +343,12 @@
       case 'fire':
         p.burning = Math.max(p.burning || 0, Math.min(20, +a.t || 5));
         break;
+      case 'eff':
+        if (CM.EFFECTS[a.k]) CM.Effects.add(p, a.k, Math.min(3600, +a.t || 30), a.l | 0 || 1);
+        break;
+      case 'effclear':
+        CM.Effects.clear(p);
+        break;
       case 'launch':
         p.vy = Math.min(40, +a.v || 20);
         p.onGround = false;
@@ -982,6 +988,28 @@
     run(ctx, a, o) {
       act(findPlayer(ctx), { a: 'more' });
       o.ok('📦 Pile complétée');
+    },
+  });
+  const findEffect = (s) => {
+    const n = norm(s);
+    const k = Object.keys(CM.EFFECTS).find((key) => key === n || norm(CM.EFFECTS[key].name) === n) || Object.keys(CM.EFFECTS).find((key) => norm(CM.EFFECTS[key].name).startsWith(n) || key.startsWith(n));
+    return k || bad('Effet inconnu : « ' + s + ' » (' + Object.values(CM.EFFECTS).map((e) => norm(e.name)).join(', ') + ')');
+  };
+  playerCmd('effet effect potion', {
+    cat: 'Joueur', usage: '<effet> [secondes] [niveau] [joueur | @a] | retirer [joueur]', desc: 'donne un effet (vitesse, force, invisibilité…) ou les retire tous',
+    args: [() => Object.values(CM.EFFECTS).map((e) => norm(e.name)).concat(['retirer']), () => ['30', '60', '300'], () => ['1', '2', '3'], () => players().map((q) => q.name).concat(['@a'])],
+    run(ctx, a, o, c) {
+      if (!a[0]) return o.info('Effets : ' + Object.values(CM.EFFECTS).map((e) => e.icon + ' ' + norm(e.name)).join(', '));
+      if (['retirer', 'clear', 'aucun', 'enlever'].includes(norm(a[0]))) {
+        const list = targets(ctx, a[1]);
+        for (const q of list) act(q, { a: 'effclear' });
+        return o.ok('🥛 Effets retirés : ' + list.map((q) => who(ctx, q)).join(', '));
+      }
+      const k = findEffect(a[0]);
+      const t = isNum(a[1]) ? int(a[1], 1, 3600, 'Secondes') : 60, l = isNum(a[2]) ? int(a[2], 1, 5, 'Niveau') : 1;
+      const list = targets(ctx, a.slice(1).find((x) => !isNum(x)));
+      for (const q of list) act(q, { a: 'eff', k, t, l, note: q.pid !== ctx.pid ? CM.EFFECTS[k].icon + ' ' + ctx.name + ' t’a donné ' + CM.EFFECTS[k].name : '' });
+      o.ok(CM.EFFECTS[k].icon + ' ' + CM.EFFECTS[k].name + (l > 1 ? ' ' + l : '') + ' (' + t + ' s) : ' + list.map((q) => who(ctx, q)).join(', '));
     },
   });
   playerCmd('enflammer ignite burn', {

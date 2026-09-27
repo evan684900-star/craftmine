@@ -219,6 +219,8 @@
       this.weather = save && save.weather && CM.Weather.NAMES[save.weather.type] ? { type: save.weather.type, t: +save.weather.t || 0 } : { type: 'clear', t: 0 };
       this.wLevel = this.weather.type !== 'clear' ? 1 : 0;
       this.homes = (save && save.homes && typeof save.homes === 'object' && save.homes) || {};
+      this.beaconFx = (save && save.beaconFx && typeof save.beaconFx === 'object' && save.beaconFx) || {};
+      this.brewT = {};
       this.cmdBack = null;
       this.cmdUndo = null;
       this.bolts = null;
@@ -253,6 +255,8 @@
         });
         this.player.bed = Array.isArray(p.bed) ? p.bed : null;
         // pouvoirs donnés par commande (/vol, /invincible, /vitesse, /saut, /vision)
+        // effets en cours (potions)
+        if (p.eff && typeof p.eff === 'object') for (const [k, e] of Object.entries(p.eff)) if (CM.EFFECTS[k] && e && e.t > 0) CM.Effects.add(this.player, k, +e.t, e.l | 0);
         if (p.cmd && typeof p.cmd === 'object') {
           const c = p.cmd;
           Object.assign(this.player, { cmdFly: !!c.f, cmdGod: !!c.g, cmdSpeed: Math.max(0.1, Math.min(10, +c.s || 1)), cmdJump: Math.max(0, Math.min(10, c.j | 0)), nightVision: !!c.n });
@@ -345,6 +349,9 @@
       ctx.enchTables = new Set(w.editedWhere((id) => id === B.ENCHANTING_TABLE).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
       // pièces animées de l'extension Électricité (roues, éoliennes, ventilateurs…)
       ctx.techAnim = new Set(w.editedWhere((id) => !!CM.blocks[id].anim).map((q) => q[0] + ',' + q[1] + ',' + q[2]));
+      // blocs suivis (alambics, balises…) : { brew: Set, beacon: Set }
+      ctx.special = {};
+      for (const q of w.editedWhere((id) => !!CM.blocks[id].track)) (ctx.special[CM.blocks[q[3]].track] = ctx.special[CM.blocks[q[3]].track] || new Set()).add(q[0] + ',' + q[1] + ',' + q[2]);
       // liquides qui coulent et feu
       ctx.ticks.reset();
       w.onEdit = (x, y, z, id, old) => {
@@ -353,6 +360,9 @@
         else if (ctx.enchTables.size) ctx.enchTables.delete(k);
         if (CM.blocks[id].anim) ctx.techAnim.add(k);
         else if (ctx.techAnim.size) ctx.techAnim.delete(k);
+        const tr = CM.blocks[id].track, otr = old !== undefined && CM.blocks[old] && CM.blocks[old].track;
+        if (otr && otr !== tr && ctx.special[otr]) ctx.special[otr].delete(k);
+        if (tr) (ctx.special[tr] = ctx.special[tr] || new Set()).add(k);
         ctx.ticks.onEdit(x, y, z, id, old);
       };
       this.ctxs[dim] = ctx;
@@ -389,6 +399,7 @@
       this.farmland = ctx.farmland;
       this.enchTables = ctx.enchTables;
       this.techAnim = ctx.techAnim;
+      this.special = ctx.special;
       this.growTimer = ctx.growTimer;
     }
     // Exécute fn dans une autre dimension (sans son ni effet pour le joueur de cet écran).
@@ -709,6 +720,7 @@
           x: rs ? rs.x : p.x, y: rs ? rs.y : p.y, z: rs ? rs.z : p.z,
           yaw: p.yaw, pitch: p.pitch, health: p.alive ? p.health : 20, food: p.alive ? p.food : 20, sat: p.sat, flying: p.flying, bed: p.bed || null,
           xp: p.xpTotal, enchSeed: p.enchSeed,
+          eff: p.effects && Object.keys(p.effects).length ? p.effects : undefined,
           cmd: p.cmdFly || p.cmdGod || (p.cmdSpeed && p.cmdSpeed !== 1) || p.cmdJump || p.nightVision ? { f: p.cmdFly ? 1 : 0, g: p.cmdGod ? 1 : 0, s: p.cmdSpeed || 1, j: p.cmdJump || 0, n: p.nightVision ? 1 : 0 } : undefined,
         },
         inv: this.inventory.serialize(),
@@ -722,6 +734,7 @@
         tech: this.techData,
         weather: this.weather,
         homes: this.homes,
+        beaconFx: this.beaconFx,
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -1836,7 +1849,7 @@
         flatSky = fogColor;
       }
       // vision nocturne (/vision) : on voit clair partout
-      if (p.nightVision) ambient = ambient ? ambient.map((v) => Math.max(v, 0.62)) : [0.62, 0.62, 0.66];
+      if (p.nightVision || CM.Effects.lv(p, 'night_vision')) ambient = ambient ? ambient.map((v) => Math.max(v, 0.62)) : [0.62, 0.62, 0.66];
       const env = {
         sunDir, zenith, horizon, fogColor, fog,
         day: 0.14 + 0.86 * day,
@@ -1946,6 +1959,7 @@
       // hôte : l'autre dimension continue de vivre tant qu'un invité s'y trouve
       if (net.isHost) this.updateOtherDims(dt);
       CM.Weather.update(this, dt);
+      if (!net.isClient) CM.Potions.tick(this, dt); // alambics, balises
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -1970,6 +1984,7 @@
       }
       if (this.techAnim && this.techAnim.size && CM.Tech) CM.Tech.render(this, this.batch);
       CM.Weather.render(this, this.translucent, cam); // pluie, neige, éclairs
+      CM.Potions.render(this, this.translucent, cam); // rayons des balises
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // corde du grappin

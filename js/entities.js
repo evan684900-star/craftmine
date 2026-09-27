@@ -335,7 +335,9 @@
     nearestPlayer(x, y, z) {
       let best = null, bd = Infinity;
       for (const p of this.plist) {
-        const d = Math.hypot(p.x - x, (p.y - y) * 0.5, p.z - z) + (p.alive ? 0 : 1e6);
+        let d = Math.hypot(p.x - x, (p.y - y) * 0.5, p.z - z) + (p.alive ? 0 : 1e6);
+        // invisible (potion) : les monstres ne le voient que tout près
+        if (d > 3 && (p === this.game.player ? CM.Effects.invisible(p) : p.flags & 256)) continue;
         if (d < bd) {
           bd = d;
           best = p;
@@ -916,6 +918,7 @@
         this.addDrop(I.QUARTZ, 1 + Math.floor(r() * 2) + more(), m.x, m.y + 0.8, m.z);
         if (r() < 0.35 + lo * 0.1) this.addDrop(I.GOLD_INGOT, 1, m.x, m.y + 0.8, m.z);
         if (r() < 0.25) this.addDrop(I.GLOWSTONE_DUST, 1 + more(), m.x, m.y + 0.8, m.z);
+        if (r() < 0.25 + lo * 0.1) this.addDrop(I.ARDENT_TEAR, 1, m.x, m.y + 0.8, m.z);
       } else {
         this.addDrop(I.SHADOW_ESSENCE, 1 + (r() < 0.3 ? 1 : 0) + more(), m.x, m.y + 0.8, m.z);
       }
