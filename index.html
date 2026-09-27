@@ -42,6 +42,7 @@
     <div id="clock"></div>
     <div id="effects"></div>
     <div id="netinfo" class="hidden"></div>
+    <div id="signs"></div>
     <div id="tags"></div>
     <div id="chat"></div>
     <input id="chat-input" type="text" class="hidden" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send" placeholder="Message ou commande (/aide) — Entrée pour envoyer, Échap pour fermer" />
@@ -393,6 +394,16 @@
     </div>
   </div>
 
+  <div id="sign-edit" class="screen hidden">
+    <div class="panel sign-panel">
+      <h3>🪧 Écrire sur le panneau</h3>
+      <div class="sign-lines">
+        <input maxlength="15" autocomplete="off" spellcheck="false" /><input maxlength="15" autocomplete="off" spellcheck="false" /><input maxlength="15" autocomplete="off" spellcheck="false" /><input maxlength="15" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="sign-hint">Entrée : ligne suivante · une teinture sur le panneau colore le texte</div>
+      <button id="sign-ok" class="big">Terminé</button>
+    </div>
+  </div>
   <div id="victory" class="screen gold hidden">
     <div class="menu-box">
       <h1>L'aube se lève !</h1>
@@ -418,6 +429,7 @@
   <script src="js/potions.js"></script>
   <script src="js/fish_defs.js"></script>
   <script src="js/weapon_defs.js"></script>
+  <script src="js/deco_defs.js"></script>
   <script src="js/weather.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
@@ -434,6 +446,7 @@
   <script src="js/carts.js"></script>
   <script src="js/fishing.js"></script>
   <script src="js/weapons.js"></script>
+  <script src="js/deco.js"></script>
   <script src="js/gravity.js"></script>
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>

@@ -220,6 +220,8 @@
       this.wLevel = this.weather.type !== 'clear' ? 1 : 0;
       this.homes = (save && save.homes && typeof save.homes === 'object' && save.homes) || {};
       this.beaconFx = (save && save.beaconFx && typeof save.beaconFx === 'object' && save.beaconFx) || {};
+      CM.Deco.load(this, save && save.deco); // panneaux, tableaux, cadres, porte-armures, juke-box
+      CM.Deco.bindUI(this);
       this.brewT = {};
       this.cmdBack = null;
       this.cmdUndo = null;
@@ -364,6 +366,7 @@
         if (otr && otr !== tr && ctx.special[otr]) ctx.special[otr].delete(k);
         if (tr) (ctx.special[tr] = ctx.special[tr] || new Set()).add(k);
         ctx.ticks.onEdit(x, y, z, id, old);
+        CM.Deco.onEdit(this, dim, x, y, z, id, old);
       };
       this.ctxs[dim] = ctx;
       if (this.net.active) this.net.attachWorld(w, dim);
@@ -735,6 +738,7 @@
         weather: this.weather,
         homes: this.homes,
         beaconFx: this.beaconFx,
+        deco: CM.Deco.save(this),
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -868,7 +872,7 @@
           return;
         }
         this.clearInput();
-        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && !this.net.chatOpen && !this.player.sleeping && $('victory').classList.contains('hidden')) this.pause();
+        if (this.state === 'playing' && !this.ui.invOpen && this.player.alive && !this.paused && !this.net.chatOpen && !this.ui.modal && !this.player.sleeping && $('victory').classList.contains('hidden')) this.pause();
       });
       document.addEventListener('pointerlockerror', () => {
         if (this.state === 'playing' && !this.paused && !this.ui.invOpen) this.ui.show('start');
@@ -889,7 +893,7 @@
         } else if (this.net.chatOpen && e.target.isConnected && e.target !== this.net.chatIn && !this.net.suggEl.contains(e.target) && !this.net.chatEl.contains(e.target) && !(e.target.closest && e.target.closest('#t-chat'))) {
           // clic en dehors du tchat : on le ferme et on reprend la partie
           this.net.closeChat(false);
-        } else if (e.target === this.canvas && !this.touch.enabled && this.state === 'playing' && !this.paused && !this.ui.invOpen && this.player.alive) {
+        } else if (e.target === this.canvas && !this.touch.enabled && this.state === 'playing' && !this.paused && !this.ui.invOpen && !this.ui.modal && this.player.alive) {
           this.captureMouse();
         }
       });
@@ -1401,6 +1405,7 @@
       ];
       const items = [];
       for (const [id, p, a, b] of table) if (r() < p) items.push(worn({ id, count: a + Math.floor(r() * (b - a + 1)) }));
+      if (CM.DISC_IDS && r() < 0.1) items.push({ id: CM.DISC_IDS[Math.floor(r() * CM.DISC_IDS.length)], count: 1 }); // un disque
       // parfois un objet déjà enchanté
       if (r() < 0.2) {
         const pool = [I.SWORD_IRON, I.PICKAXE_IRON, I.AXE_IRON, I.SWORD_GOLD, I.HELMET_IRON, I.BOOTS_IRON, I.CHESTPLATE_GOLD];
@@ -1934,7 +1939,7 @@
         this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
         this.entities.nightfall = true;
       }
-      const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen && !this.player.sleeping;
+      const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen && !this.player.sleeping && !this.ui.modal;
       if (this.player.sleeping) {
         this.checkSleep();
         if (this.daylight > 0.45 && this.clock - this.player.sleeping.t0 > 0.5) this.wake('day');
@@ -1985,6 +1990,7 @@
       if (this.techAnim && this.techAnim.size && CM.Tech) CM.Tech.render(this, this.batch);
       CM.Weather.render(this, this.translucent, cam); // pluie, neige, éclairs
       CM.Potions.render(this, this.translucent, cam); // rayons des balises
+      CM.Deco.render(this, this.batch); // panneaux, tableaux, cadres, porte-armures
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // ligne de la canne à pêche
@@ -2038,6 +2044,8 @@
         target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box } : null,
       });
       this.net.updateTags(cam);
+      CM.Deco.overlay(this, cam); // texte des panneaux
+      CM.Deco.updateMusic(this); // juke-box
     }
   }
 

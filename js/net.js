@@ -415,6 +415,7 @@
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
         weather: w.wx && typeof w.wx === 'object' ? w.wx : null,
         beaconFx: w.bfx && typeof w.bfx === 'object' ? w.bfx : {},
+        deco: w.deco && typeof w.deco === 'object' ? w.deco : null,
       };
     }
 
@@ -773,7 +774,7 @@
         seed: w.seed, settings: Object.assign({}, g.settings, { mode: g.mode, difficulty: g.difficulty }),
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
-        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {},
+        time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {}, deco: CM.Deco.save(g),
         players: [[0, this.name], ...[...this.links.values()].map((x) => [x.pid, x.name])],
         you,
       });
@@ -882,6 +883,10 @@
           }
           break;
         }
+        case 'dco':
+          // décoration posée par un invité (panneau, tableau, cadre, porte-armure, juke-box)
+          CM.Deco.fromGuest(g, e, m.o);
+          break;
         case 'bfx':
           // l'invité choisit l'effet d'une balise
           if (typeof m.k === 'string' && CM.EFFECTS[m.e]) {
@@ -1216,6 +1221,9 @@
           break;
         case 'bfx':
           if (typeof m.k === 'string' && CM.EFFECTS[m.e]) CM.Potions.setBeacon(g, m.k, m.e);
+          break;
+        case 'dco':
+          CM.Deco.apply(g, m.o);
           break;
         case 'buck':
           // le cheval nous a désarçonnés

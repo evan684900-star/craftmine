@@ -157,6 +157,7 @@
           if (a.pw) dmg = Math.round(dmg * (1 + 0.25 * (a.pw + 1))); // Puissance
           const by = a.shooter && (a.shooter === g.player || a.shooter.pid !== undefined) ? a.shooter : null;
           const opts = a.pu || a.fire ? { kb: a.pu || 0, fire: a.fire ? 1 : 0 } : undefined;
+          if (hit.m && a.shooter && a.shooter.type) hit.m.shotBy = a.shooter.type; // (rampant tué par un squelette : un disque)
           if (hit.m) this.hurtMob(hit.m, dmg, [a.x - dx, a.z - dz], false, by, opts);
           else if (hit.p === g.player) {
             hit.p.damage(dmg, a.x - dx, a.z - dz, 'Une flèche');

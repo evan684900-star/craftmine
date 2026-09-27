@@ -914,6 +914,8 @@
       const g = this.game;
       const e = this.eye(), d = this.aim();
       if (this.eating) this.updateEating(dt, input);
+      // tableaux, cadres, porte-armures (clic gauche : les reprendre ; clic droit : les garnir)
+      if (CM.Deco.playerActions(this, input, e, d)) return;
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
@@ -1544,6 +1546,11 @@
         if (input.pressed.mouse2) this.fireHook();
         return;
       }
+      // tableau, cadre, porte-armure : on les pose
+      if (info.type === 'painting' || info.type === 'frame' || info.type === 'stand') {
+        if (input.pressed.mouse2) CM.Deco.place(this, info);
+        return;
+      }
       // fusée : propulsion en vol plané, sinon feu d'artifice
       if (info.type === 'rocket') {
         if (input.pressed.mouse2) CM.Weapons.useRocket(this);
@@ -1795,6 +1802,7 @@
       if (id === B.DAWN_HEART) g.onDawnHeart(px, py, pz);
       // citrouille sur un T de blocs de fer : golem de fer
       if (id === B.JACK_O_LANTERN || id === B.CARVED_PUMPKIN || id === B.PUMPKIN) g.tryBuildGolem(px, py, pz);
+      if (b.afterPlace) b.afterPlace(g, px, py, pz, this); // panneau : on écrit dessus
       this.consume(1);
     }
 

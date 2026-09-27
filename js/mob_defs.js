@@ -833,6 +833,8 @@
     },
     loot(e, m, meat, more) {
       drop(e, m, I().GUNPOWDER, Math.floor(e.rand() * 3) + more());
+      // tué par la flèche d'un squelette : il laisse un disque (comme dans Minecraft)
+      if (m.shotBy === 'skeleton' && CM.DISC_IDS) drop(e, m, CM.DISC_IDS[Math.floor(e.rand() * CM.DISC_IDS.length)], 1);
     },
     render(e, batch, m, l, f, sw, t) {
       const L = Lr(), R = L.mob_rampant;
