@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
 
   A.init = function () {
@@ -302,6 +302,30 @@
         // hennissement : un son qui monte puis tremble en descendant
         tone(t, 0.25, 'sawtooth', 500 * pitch, 900 * pitch, 0.07, 0.03);
         for (let i = 0; i < 5; i++) tone(t + 0.2 + i * 0.09, 0.1, 'sawtooth', (820 - i * 90) * pitch, (700 - i * 90) * pitch, 0.06);
+        break;
+      case 'cast':
+        // la ligne file
+        noise(t, 0.35, 'bandpass', 2600, 2, 0.12, 900);
+        break;
+      case 'reel':
+        for (let i = 0; i < 6; i++) tone(t + i * 0.04, 0.02, 'square', 1800, 1500, 0.035);
+        break;
+      case 'bite':
+        // ça mord : un « bloup » et une éclaboussure
+        tone(t, 0.12, 'sine', 420, 180, 0.2);
+        noise(t + 0.05, 0.25, 'lowpass', 1400, 0.7, 0.2, 300);
+        break;
+      case 'flop':
+        tone(t, 0.07, 'sine', 300 * pitch, 160, 0.12);
+        noise(t, 0.08, 'lowpass', 900, 0.8, 0.08);
+        break;
+      case 'dolphin':
+        // cliquetis et sifflement montant
+        for (let i = 0; i < 4; i++) tone(t + i * 0.05, 0.02, 'square', 2400 * pitch, 2000 * pitch, 0.03);
+        tone(t + 0.22, 0.3, 'sine', 1500 * pitch, 2600 * pitch, 0.06, 0.02);
+        break;
+      case 'paddle':
+        noise(t, 0.25, 'lowpass', 700, 0.8, 0.1 * (opt.vol || 1), 250);
         break;
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule

@@ -169,6 +169,7 @@
       this.armor = a[7] | 0;
       this.dim = (a[8] | 0) === 1 ? 'nether' : 'overworld';
       this.offhand = CM.itemInfo(a[9] | 0) ? a[9] | 0 : 0; // main secondaire
+      this.bob = Array.isArray(a[10]) && a[10].length === 3 ? a[10].map(num) : null; // flotteur de canne à pêche
       this.blocking = !!(this.flags & 64);
       this.alive = !!(this.flags & 4);
       if (this.flags & 8) this.swingT = 0.3;
@@ -570,14 +571,14 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0) | (CM.Effects.invisible(p) ? 256 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0) | (CM.Effects.invisible(p) ? 256 : 0) | (p.riding !== null && p.riding !== undefined ? 512 : 0);
       const held = g.inventory.held();
       let armor = 0;
       g.inventory.armor.forEach((s, k) => {
         if (s) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
       });
       const off = g.inventory.offhand;
-      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0, off ? off.id : 0];
+      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0, off ? off.id : 0, CM.Fishing.netState(p)];
     }
     sendMyState(withInv) {
       const g = this.game;
@@ -687,7 +688,7 @@
       const all = [[0, ...this.stateOf(g.player)]];
       for (const e of this.links.values()) {
         const rp = e.rp;
-        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, rp.dim === 'nether' ? 1 : 0, rp.offhand || 0]);
+        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, rp.dim === 'nether' ? 1 : 0, rp.offhand || 0, rp.bob || 0]);
       }
       for (const e of this.links.values()) e.link.send({ t: 'ps', p: all.filter((a) => a[0] !== e.pid) });
     }
@@ -973,7 +974,7 @@
         case 'cart': {
           if (!CM.CART_ITEMS[m.ty] || !Array.isArray(m.p)) break;
           const [x, y, z] = m.p.map(num);
-          if (Math.hypot(x - rp.x, z - rp.z) < 10) g.entities.addCart(m.ty, x, y, z);
+          if (Math.hypot(x - rp.x, z - rp.z) < 10) g.entities.addCart(m.ty, x, y, z, { yaw: num(m.yw) });
           break;
         }
         case 'hitcart': {
@@ -990,6 +991,27 @@
         case 'unride': {
           const c = (g.entities.carts || []).find((o) => o.rider === e.pid);
           if (c) c.rider = null;
+          break;
+        }
+        case 'bpos': {
+          // l'invité pilote son bateau
+          const c = g.entities.cartByUid(m.id);
+          if (!c || c.type !== 'boat' || c.rider !== e.pid || !Array.isArray(m.p)) break;
+          const [x, y, z, yaw] = m.p.map(num);
+          if (Math.hypot(x - c.x, z - c.z) > 12 || Math.hypot(x - rp.x, z - rp.z) > 8) break;
+          const d = Math.hypot(x - c.x, z - c.z);
+          c.row = (c.row || 0) + d * 1.6;
+          c.x = x;
+          c.y = y;
+          c.z = z;
+          c.yaw = yaw;
+          c.vx = c.vy = c.vz = 0;
+          break;
+        }
+        case 'mpull': {
+          // canne à pêche d'un invité : la créature accrochée est tirée vers lui
+          const mob = g.entities.mobs.find((o) => o.uid === m.id && !o.dead);
+          if (mob && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 40) g.entities.pullMob(mob, m.v);
           break;
         }
         case 'laser': {
@@ -1640,15 +1662,21 @@
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);
         const fl = rp.flags & 16 ? 2 : 0;
-        const sneak = rp.flags & 1, rides = rp.flags & 128;
+        const sneak = rp.flags & 1, rides = rp.flags & 128, seated = rp.flags & 512;
         const M = this.M;
-        mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0), rp.rz, rp.ryaw, 0, 0, 1);
-        const sw = rp.moving && !rides ? Math.sin(rp.walk) : rides ? 0 : 0;
+        mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, rp.ryaw, 0, 0, 1);
+        // canne à pêche : la ligne jusqu'au flotteur
+        if (rp.bob) {
+          const cy = Math.cos(rp.ryaw), sy2 = Math.sin(rp.ryaw);
+          CM.Fishing.drawLine(ents, batch, [rp.rx + cy * 0.4 - sy2 * 0.9, rp.ry + 1.75 - (seated ? 0.45 : 0), rp.rz - sy2 * 0.4 - cy * 0.9], rp.bob, false);
+        }
+        const sw = rp.moving && !rides && !seated ? Math.sin(rp.walk) : 0;
         const shirt = L['concrete_' + rp.shirt] || L.sleeve;
         // (rotation autour de x : positif = vers l'avant pour un membre qui pend)
         // (à cheval : jambes écartées de part et d'autre)
-        ents.part(batch, M, -0.12, 0.7, 0, rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, rides ? 0.5 : 0);
-        ents.part(batch, M, 0.12, 0.7, 0, rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, rides ? -0.5 : 0);
+        // (assis dans un bateau ou un wagonnet : jambes vers l'avant)
+        ents.part(batch, M, -0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, seated ? 0.1 : rides ? 0.5 : 0);
+        ents.part(batch, M, 0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, seated ? -0.1 : rides ? -0.5 : 0);
         // corps (penché quand il est accroupi), tête qui suit le regard
         const lean = sneak ? 0.4 : 0;
         ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], shirt, l, fl);
@@ -1673,7 +1701,7 @@
           ents.part(batch, M, 0, 0.7, 0, -lean, [-0.27, 0.06, -0.15, 0.27, 0.67, 0.15], chest, l, fl);
           for (const [ax, rot] of arms) ents.part(batch, M, ax, sy, sz, rot, [-0.13, -0.27, -0.13, 0.13, 0.06, 0.13], chest, l, fl);
         }
-        for (const [lx, rot] of [[-0.12, sw * 0.7], [0.12, -sw * 0.7]]) {
+        for (const [lx, rot] of [[-0.12, seated ? 1.45 : sw * 0.7], [0.12, seated ? 1.45 : -sw * 0.7]]) {
           if (legs) ents.part(batch, M, lx, 0.7, 0, rot, [-0.135, -0.48, -0.135, 0.135, 0.02, 0.135], legs, l, fl);
           if (boots) ents.part(batch, M, lx, 0.7, 0, rot, [-0.14, -0.71, -0.14, 0.14, -0.5, 0.14], boots, l, fl);
         }

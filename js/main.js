@@ -1256,7 +1256,7 @@
     // ------------------------------------------------ utilitaires jeu ----
     nearbyStations() {
       const p = this.player, w = this.world;
-      const out = { table: false, forge: false, smithing: false, atelier: false };
+      const out = { table: false, forge: false, smithing: false, atelier: false, oven: false };
       const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
       for (let dy = -3; dy <= 4; dy++)
         for (let dz = -4; dz <= 4; dz++)
@@ -1264,7 +1264,7 @@
             const st = CM.blocks[w.get(px + dx, py + dy, pz + dz)].station;
             if (st) out[st] = true;
           }
-      if (this.mode === 'creative') out.table = out.forge = out.smithing = out.atelier = true;
+      if (this.mode === 'creative') out.table = out.forge = out.smithing = out.atelier = out.oven = true;
       return out;
     }
     dropNearPlayer(id, count, extra) {
@@ -1987,6 +1987,11 @@
       CM.Potions.render(this, this.translucent, cam); // rayons des balises
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
+      // ligne de la canne à pêche
+      if (p.bobber) {
+        const a = [cam[0] + right[0] * 0.42 - up[0] * 0.08 + fwd[0] * 1.1, cam[1] + right[1] * 0.42 - up[1] * 0.08 + fwd[1] * 1.1, cam[2] + right[2] * 0.42 - up[2] * 0.08 + fwd[2] * 1.1];
+        CM.Fishing.drawLine(this.entities, this.batch, a, [p.bobber.x, p.bobber.y, p.bobber.z], p.bobber.bite > 0);
+      }
       // corde du grappin
       if (p.hook) {
         const a = [cam[0] + right[0] * 0.3 - up[0] * 0.25 + fwd[0] * 0.5, cam[1] + right[1] * 0.3 - up[1] * 0.25 + fwd[1] * 0.5, cam[2] + right[2] * 0.3 - up[2] * 0.25 + fwd[2] * 0.5];

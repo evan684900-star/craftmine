@@ -183,7 +183,7 @@
   // ----------------------------------------------------------- wagonnets --
   E.addCart = function (type, x, y, z, from) {
     if (this.remote) {
-      this.game.net.send({ t: 'cart', ty: type, p: [r2(x), r2(y), r2(z)] });
+      this.game.net.send({ t: 'cart', ty: type, p: [r2(x), r2(y), r2(z)], yw: from && from.yaw ? r2(from.yaw) : 0 });
       return null;
     }
     if (!this.carts) this.carts = [];
@@ -192,6 +192,10 @@
       from || {},
     );
     if ((type === 'chest' || type === 'hopper') && !c.slots) c.slots = new Array(type === 'chest' ? 27 : 5).fill(null);
+    if (type === 'boat') {
+      c.hw = CM.Boats.HW;
+      c.h = CM.Boats.H;
+    }
     this.carts.push(c);
     return c;
   };
@@ -206,7 +210,8 @@
     let best = null, bt = maxD;
     for (const c of this.carts || []) {
       if (c.dead) continue;
-      const t = CM.rayBox(ox, oy, oz, dx, dy, dz, c.x - 0.5, c.y, c.z - 0.5, c.x + 0.5, c.y + 0.75, c.z + 0.5);
+      const r = c.type === 'boat' ? 0.75 : 0.5;
+      const t = CM.rayBox(ox, oy, oz, dx, dy, dz, c.x - r, c.y, c.z - r, c.x + r, c.y + (c.type === 'boat' ? 0.6 : 0.75), c.z + r);
       if (t >= 0 && t < bt) {
         bt = t;
         best = c;
@@ -237,6 +242,11 @@
         if (!rp || !rp.seen || rp.alive === false || rp.dim !== g.dim) c.rider = null;
       }
       if (c.rider === null) c.push = null;
+      // bateau : piloté par son passager, sinon il flotte et dérive
+      if (c.type === 'boat') {
+        CM.Boats.hostTick(this, c, dt);
+        continue;
+      }
       const r = railAt(w, c);
       if (r) this.cartOnRail(c, r, dt);
       else {
@@ -394,7 +404,7 @@
     }
   };
   E.mount = function (c, who) {
-    if (c.type !== 'cart' || (c.rider !== null && c.rider !== undefined)) return false;
+    if ((c.type !== 'cart' && c.type !== 'boat') || (c.rider !== null && c.rider !== undefined)) return false;
     c.rider = who;
     return true;
   };
@@ -403,7 +413,7 @@
     if (c.rider === 'local') {
       const p = g.player;
       p.riding = null;
-      p.y = c.y + 0.8;
+      p.y = c.y + (c.type === 'boat' ? 0.65 : 0.8);
       p.fallStart = p.y;
     } else if (c.rider !== null && c.rider !== undefined) g.net.sendTo(c.rider, { t: 'unride' });
     c.rider = null;
@@ -411,6 +421,7 @@
   // Coup porté à un wagonnet : il casse au bout de quelques coups et rend son objet.
   E.hitCart = function (c, dmg) {
     const g = this.game;
+    if (c.dead) return;
     if (this.remote) {
       g.net.send({ t: 'hitcart', id: c.uid, d: dmg });
       return;
@@ -432,8 +443,9 @@
   };
   E.renderCarts = function (batch) {
     const L = CM.Textures.layer;
+    CM.Boats.render(this, batch);
     for (const c of this.carts || []) {
-      if (c.dead) continue;
+      if (c.dead || c.type === 'boat') continue;
       const l = this.lightAt(c.x, c.y + 0.4, c.z);
       mat4.compose(this.M, c.x, c.y, c.z, c.yaw || 0, 0, 0, 1);
       const M = this.M, body = L.cart_body, inner = L.cart_inner;
@@ -459,6 +471,7 @@
     const k = Math.min(1, dt * 12);
     for (const o of (this.arrows || []).concat(this.carts || [])) {
       if (o.tx === undefined) continue;
+      if (o.type === 'boat') o.row = (o.row || 0) + Math.min(8, Math.hypot(o.tx - o.x, o.tz - o.z) * 12) * dt * 1.6;
       if (Math.hypot(o.tx - o.x, o.ty - o.y, o.tz - o.z) > 6) {
         o.x = o.tx;
         o.y = o.ty;
@@ -506,7 +519,12 @@
     this.carts = [];
     for (const [uid, type, x, y, z, yaw, rider, lit] of s.ca || []) {
       let c = oldC.get(uid);
-      if (!c) c = { uid, type, x, y, z, vx: 0, vy: 0, vz: 0, hw: 0.45, h: 0.7 };
+      if (!c) c = { uid, type, x, y, z, vx: 0, vy: 0, vz: 0, hw: type === 'boat' ? CM.Boats.HW : 0.45, h: type === 'boat' ? CM.Boats.H : 0.7 };
+      // notre propre bateau : c'est nous qui le pilotons
+      if (type === 'boat' && oldC.has(uid) && this.game.player.riding === uid) {
+        this.carts.push(c);
+        continue;
+      }
       c.type = type;
       c.tx = x;
       c.ty = y;

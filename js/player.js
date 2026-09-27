@@ -217,7 +217,21 @@
       if (this.riding !== null && this.riding !== undefined) {
         const c = (g.entities.carts || []).find((o) => o.uid === this.riding && !o.dead);
         if (!c || (!g.net.isClient && c.rider !== 'local') || input.pressed[K.sneak]) this.leaveCart(c);
-        else {
+        else if (c.type === 'boat') {
+          // en bateau : il va là où l'on se dirige
+          const wl2 = Math.hypot(wx, wz);
+          CM.Boats.drive(this, c, dt, wl2 > 0.01 ? [wx / wl2, wz / wl2, Math.min(1, mag)] : null);
+          this.vx = this.vy = this.vz = 0;
+          this.fallStart = this.y;
+          this.onGround = true;
+          this.flying = this.sneaking = this.sprinting = false;
+          this.eyeOffset = 0.55;
+          CM.Fishing.update(this, dt);
+          this.updateVitals(dt, wasHeadIn);
+          this.updateTarget();
+          this.updateActions(dt, input);
+          return;
+        } else {
           this.x = c.x;
           this.y = c.y + 0.25;
           this.z = c.z;
@@ -242,6 +256,7 @@
         }
       }
       this.eyeOffset += ((mounted ? -0.95 : this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
+      CM.Fishing.update(this, dt);
       // course : maintenir ou basculer (option)
       const sprintKey = !!k[K.sprint];
       if (g.options.toggleSprint) {
@@ -267,6 +282,7 @@
         this.sprinting = false;
       }
       if (this.inWater) speed = this.sprinting ? 3.6 : 2.6;
+      if (this.inWater && CM.Effects.lv(this, 'dolphins_grace')) speed *= 2.2; // nage avec les dauphins
       if (this.inLava) speed = this.sprinting ? 1.6 : 1.2;
       if (this.onGround && under.slow) speed *= under.slow;
       if (this.onGround && under.slip) speed *= 1.15;
@@ -668,7 +684,8 @@
     }
     rideCart(c) {
       const g = this.game;
-      if (c.type !== 'cart' || (c.rider !== null && c.rider !== undefined)) return false;
+      if ((c.type !== 'cart' && c.type !== 'boat') || (c.rider !== null && c.rider !== undefined)) return false;
+      if (this.mount !== null && this.mount !== undefined) return false;
       if (g.net.isClient) g.net.send({ t: 'ride', id: c.uid });
       else if (!g.entities.mount(c, 'local')) return false;
       this.riding = c.uid;
@@ -682,7 +699,7 @@
       this.eyeOffset = 0;
       if (g.net.isClient) g.net.send({ t: 'unride' });
       else if (c && c.rider === 'local') c.rider = null;
-      if (c) this.y = c.y + 0.1;
+      if (c) this.y = c.y + (c.type === 'boat' ? 0.65 : 0.1);
       this.fallStart = this.y;
     }
     // Arc : la flèche part d'autant plus vite que l'arc a été bandé longtemps (1 s = pleine puissance).
@@ -972,7 +989,7 @@
         if (ch && ch.cart.uid !== this.riding && (!this.target || ch.t < this.target.t)) {
           const c = ch.cart;
           if (c.type === 'chest' || c.type === 'hopper') g.openCartChest(c);
-          else if (c.type === 'cart' && (this.riding === null || this.riding === undefined)) this.rideCart(c);
+          else if ((c.type === 'cart' || c.type === 'boat') && (this.riding === null || this.riding === undefined)) this.rideCart(c);
           this.swing = 1;
           return;
         }
@@ -1517,6 +1534,25 @@
       }
       if (info.type === 'grapple') {
         if (input.pressed.mouse2) this.fireHook();
+        return;
+      }
+      // canne à pêche : lancer / ferrer
+      if (info.type === 'rod') {
+        if (input.pressed.mouse2) CM.Fishing.use(this);
+        return;
+      }
+      // bateau : on le pose sur l'eau (ou par terre)
+      if (info.type === 'boat') {
+        if (!input.pressed.mouse2) return;
+        const at = CM.Boats.placeAt(this);
+        if (!at) {
+          g.ui.toast('Vise l’eau (ou le sol) pour poser le bateau', 'info', 'boat');
+          return;
+        }
+        g.entities.addCart('boat', at[0], at[1], at[2], { yaw: this.yaw });
+        this.consume(1);
+        CM.Audio.play('place', { mat: 'wood' });
+        this.swing = 1;
         return;
       }
       // fiole vide : on la remplit d'eau

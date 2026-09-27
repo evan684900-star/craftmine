@@ -571,7 +571,7 @@
       m.knock = Math.max(0, m.knock - dt);
       m.ai.attackCd = Math.max(0, m.ai.attackCd - dt);
       const fx = Math.floor(m.x), fz = Math.floor(m.z);
-      const inWater = CM.isWater(w.get(fx, Math.floor(m.y + 0.4), fz));
+      const inWater = CM.isWater(w.get(fx, Math.floor(MOBS[m.type].swim ? m.y + m.h * 0.5 : m.y + 0.4), fz));
       const inLava = CM.isLava(w.get(fx, Math.floor(m.y + 0.4), fz)) || CM.isLava(w.get(fx, Math.floor(m.y + 0.05), fz));
       const fireproof = MOBS[m.type].fireproof;
       // dans les flammes : la créature prend feu ; dans la lave, elle brûle vite
@@ -782,12 +782,18 @@
       }
 
       if ((m.hitX || m.hitZ) && m.onGround && (tvx || tvz) && !def.noJump) jump = true;
+      const swimming = def.swim && inWater;
       if (m.knock <= 0) {
-        const acc = m.onGround ? 10 : 2.5;
+        const acc = swimming ? 4 : m.onGround ? 10 : 2.5;
         m.vx += (tvx - m.vx) * Math.min(1, acc * dt);
         m.vz += (tvz - m.vz) * Math.min(1, acc * dt);
       }
-      if (inWater || inLava) {
+      if (swimming) {
+        // poissons, calmars, dauphins : ils nagent dans les trois directions
+        m.vy += (tvy - m.vy) * Math.min(1, dt * 3);
+        m.vx *= Math.pow(0.5, dt);
+        m.vz *= Math.pow(0.5, dt);
+      } else if (inWater || inLava) {
         const fv = CM.flowVector(w, fx, Math.floor(m.y + 0.4), fz);
         if (fv) {
           m.vx += fv[0] * (inLava ? 2 : 6) * dt;
@@ -1109,6 +1115,8 @@
       }
       // chauves-souris dans les grottes sombres
       this.spawnBats(p, w, r);
+      // poissons, calmars et dauphins dans les rivières, lacs et océans
+      this.spawnWater(p, w, r);
       // Ombres : plus nombreuses selon la difficulté et les jours passés.
       if (g.difficulty === 'peaceful' || g.mode === 'creative') return;
       const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
@@ -1118,6 +1126,50 @@
       let tries = nOmbre < maxO && p.alive && r() < 0.8 ? 1 : 0;
       if (nightfall) tries = Math.max(0, Math.min(maxO - nOmbre, 3 + Math.round(dif)));
       for (let n = 0; n < tries; n++) this.spawnOmbre(p, w, r);
+    }
+    spawnWater(p, w, r) {
+      if (r() > 0.35) return;
+      const BIO = CM.BIO;
+      let fish = 0, squid = 0, dol = 0;
+      for (const m of this.mobs) {
+        if (m.dead || !MOBS[m.type].water || Math.hypot(m.x - p.x, m.z - p.z) > 64) continue;
+        if (m.type === 'squid') squid++;
+        else if (m.type === 'dolphin') dol++;
+        else fish++;
+      }
+      for (let t = 0; t < 4; t++) {
+        const a = r() * Math.PI * 2, dd = 14 + r() * 34;
+        const x = Math.floor(p.x + Math.cos(a) * dd), z = Math.floor(p.z + Math.sin(a) * dd);
+        if (!w.loaded(x, z)) continue;
+        const gy = w.groundBelow(x, CM.WORLD.H - 1, z);
+        let top = gy + 1;
+        while (top < CM.WORLD.H - 1 && CM.isWater(w.get(x, top, z))) top++;
+        const depth = top - gy - 1;
+        if (depth < 2) continue;
+        const bi = w.column(x, z).bi, ocean = bi === BIO.OCEAN || bi === BIO.WARM_OCEAN, warm = bi === BIO.WARM_OCEAN;
+        let type;
+        const k = r();
+        if (ocean && depth >= 5 && dol < 4 && k < 0.12) type = 'dolphin';
+        else if (depth >= 4 && squid < 3 && k < 0.3) type = 'squid';
+        else if (fish < 10) type = warm ? (k < 0.7 ? 'tropical_fish' : k < 0.85 ? 'pufferfish' : 'cod') : ocean ? (k < 0.65 ? 'cod' : k < 0.9 ? 'salmon' : 'pufferfish') : k < 0.6 ? 'salmon' : 'cod';
+        if (!type) continue;
+        const y = gy + 1 + Math.floor(r() * Math.max(1, depth - 1));
+        const gr = MOBS[type].group, n = gr ? gr[0] + Math.floor(r() * (gr[1] - gr[0] + 1)) : 1;
+        for (let i = 0; i < n; i++) {
+          const X = x + (r() - 0.5) * 3, Z = z + (r() - 0.5) * 3;
+          if (CM.isWater(w.get(Math.floor(X), y, Math.floor(Z)))) this.addMob(type, X, y + 0.1, Z);
+        }
+        return;
+      }
+    }
+    // Canne à pêche : la créature accrochée est tirée vers le pêcheur.
+    pullMob(m, v) {
+      if (!m || m.dead || !Array.isArray(v)) return;
+      const c = (n, a) => Math.max(-a, Math.min(a, Number(n) || 0));
+      m.vx = c(v[0], 12);
+      m.vy = c(v[1], 9);
+      m.vz = c(v[2], 12);
+      m.knock = 0.5;
     }
     spawnBats(p, w, r) {
       if (r() > 0.25) return;
