@@ -256,8 +256,25 @@
 
     addMob(type, x, y, z) {
       const m = new Mob(type, x, y, z);
+      if (MOBS[type].init) MOBS[type].init(m, this);
       if (!this.remote) this.mobs.push(m);
       return m;
+    }
+    // Clic droit d'un joueur sur une créature avec un objet (id) : os, selle, seau, monter…
+    // x.host : on applique ce qui change le monde ; x.local : ce qui change l'inventaire (ce joueur est ici).
+    interact(m, q, id, local, consume, give) {
+      const def = MOBS[m.type];
+      if (!def.interact || m.dead) return false;
+      const g = this.game;
+      return def.interact(this, m, { q, id, host: !this.remote, local, name: CM.playerName(g, q), consume: consume || (() => {}), give: give || (() => {}) });
+    }
+    // Monture : qui la monte (« local » : le joueur de cet écran chez l'hôte ; sinon le numéro de l'invité).
+    riderOf(m) {
+      const g = this.game;
+      if (m.rider === 'local') return g.player.mount === m.uid && g.player.alive ? g.player : null;
+      const rp = g.net.remotes.get(m.rider);
+      // (grâce de 2 s : la position « à cheval » de l'invité arrive juste après sa demande)
+      return rp && rp.alive && (rp.flags & 128 || g.clock - (m.riderT || 0) < 2) ? rp : null;
     }
     addDrop(id, count, x, y, z, extra, vel) {
       if (this.remote) {
@@ -387,7 +404,7 @@
       const oldM = new Map(this.mobs.map((m) => [m.uid, m]));
       this.mobs = [];
       for (const a of s.m || []) {
-        const [uid, type, x, y, z, yaw, fl] = a;
+        const [uid, type, x, y, z, yaw, fl, pet] = a;
         if (!MOBS[type]) continue;
         let m = oldM.get(uid);
         if (!m || m.type !== type) {
@@ -409,6 +426,13 @@
         m.loveCd = fl & 16 ? 1 : 0;
         m.fire = fl & 32 ? 1 : 0;
         m.ai.special = !!(fl & 64); // rampant qui siffle, squelette qui bande son arc
+        // apprivoisé (1), assis (2), sellé (4), robe (8 × n), monté (64)
+        const pb = pet | 0;
+        m.tame = !!(pb & 1);
+        m.sit = !!(pb & 2);
+        m.saddle = !!(pb & 4);
+        m.variant = (pb >> 3) & 7;
+        m.ridden = !!(pb & 64);
         this.mobs.push(m);
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
@@ -449,6 +473,12 @@
       };
       for (const m of this.mobs) {
         const ox = m.x, oz = m.z;
+        if (m.uid === p.mount) {
+          m.tx = p.x;
+          m.ty = p.y;
+          m.tz = p.z;
+          m.tyaw = p.yaw;
+        }
         lerp(m);
         let d = m.tyaw - m.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
@@ -494,6 +524,25 @@
         return;
       }
       m.age += dt;
+      // monture : elle suit son cavalier (c'est lui qui la dirige)
+      if (m.rider !== undefined && m.rider !== null) {
+        const q = this.riderOf(m);
+        if (!q) m.rider = null;
+        else {
+          const ox = m.x, oz = m.z;
+          m.x = q.x;
+          m.y = q.y;
+          m.z = q.z;
+          m.yaw = q.yaw;
+          const sp = Math.hypot(m.x - ox, m.z - oz) / Math.max(dt, 1e-3);
+          m.speedVis = sp;
+          m.walk += Math.min(sp, 14) * dt * 2.2;
+          m.moving = sp > 0.3;
+          m.vx = m.vy = m.vz = 0;
+          m.hurt = Math.max(0, m.hurt - dt);
+          return;
+        }
+      }
       if (m.love > 0) {
         m.love -= dt;
         if (distL < 40 && r() < dt * 3) this.hearts(m, 1);
@@ -781,6 +830,8 @@
         g.net.hitMob(m, dmg, opts);
         return;
       }
+      // on ne blesse pas son propre animal
+      if (m.tame && m.owner !== undefined && by && by.alive !== undefined && CM.isPetOwner && CM.isPetOwner(g, by, m)) return;
       m.hp -= dmg;
       if (opts) {
         if (opts.fire) {
@@ -975,6 +1026,7 @@
         const m = this.addMob(a[0], a[1], a[2], a[3]);
         m.tame = true;
         if (a[4] > 0) this.setBaby(m, a[4]);
+        this.restoreTame(m, a[5]);
       }
       const nightfall = this.nightfall;
       this.nightfall = false;
@@ -1164,10 +1216,10 @@
         case BIO.SWAMP:
         case BIO.CRYSTAL: return pick([['boar', 0.5], ['chicken', 0.3], ['mouflon', 0.2]]);
         case BIO.PLAINS:
-        case BIO.FLOWERS: return pick([['mouflon', 0.3], ['cow', 0.3], ['chicken', 0.25], ['rabbit', 0.15]]);
+        case BIO.FLOWERS: return pick([['mouflon', 0.26], ['cow', 0.26], ['chicken', 0.2], ['rabbit', 0.13], ['horse', 0.15]]);
         case BIO.CHERRY: return pick([['mouflon', 0.4], ['rabbit', 0.3], ['deer', 0.3]]);
         case BIO.MUSHROOM: return pick([['cow', 0.7], ['mouflon', 0.3]]);
-        case BIO.SAVANNA: return pick([['cow', 0.45], ['mouflon', 0.3], ['chicken', 0.25]]);
+        case BIO.SAVANNA: return pick([['cow', 0.35], ['mouflon', 0.2], ['chicken', 0.2], ['horse', 0.25]]);
         case BIO.MOUNTAINS: return pick([['goat', 0.55], ['mouflon', 0.45]]);
         case BIO.DESERT:
         case BIO.BADLANDS: return r < 0.5 ? 'rabbit' : null;
@@ -1204,6 +1256,14 @@
     feedMob(m) {
       const foods = CM.BREED_FOOD[m.type];
       if (!foods || m.dead) return false;
+      const def = MOBS[m.type];
+      if (def.tameFirst && !m.tame) return false; // (loup, cheval : d'abord l'apprivoiser)
+      // loup blessé : la viande le soigne
+      if (def.healFood && m.hp < m.maxHp) {
+        m.hp = Math.min(m.maxHp, m.hp + 4);
+        this.hearts(m, 3);
+        return true;
+      }
       if (m.baby > 0) {
         m.baby = Math.max(0.01, m.baby - BABY_TIME * 0.1);
         this.hearts(m, 2);
@@ -1246,6 +1306,8 @@
       const baby = this.addMob(a.type, (a.x + b.x) / 2, Math.max(a.y, b.y), (a.z + b.z) / 2);
       this.setBaby(baby, BABY_TIME);
       baby.tame = true;
+      if (a.owner !== undefined) baby.owner = a.owner; // (petit d'animaux apprivoisés : même maître)
+      if (MOBS[a.type].mount) baby.variant = this.rand() < 0.5 ? a.variant : b.variant;
       baby.yaw = a.yaw;
       this.hearts(baby, 8);
       const p = this.game.player, here = this.game.dim === this.game.playerDim;
@@ -1258,19 +1320,37 @@
     stash(m) {
       const g = this.game;
       if (!g.animals) g.animals = [];
-      g.animals.push([m.type, Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, Math.round(m.z * 10) / 10, Math.round(m.baby)]);
+      g.animals.push(this.tameEntry(m));
+    }
+    tameEntry(m) {
+      const e = [m.type, Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, Math.round(m.z * 10) / 10, Math.round(m.baby)];
+      // animal apprivoisé : maître, assis, selle, robe, dressage
+      if (m.owner !== undefined || m.variant !== undefined || m.temper) e.push({ o: m.owner, s: m.sit ? 1 : 0, sa: m.saddle ? 1 : 0, v: m.variant, t: m.temper || 0, hp: Math.round(m.hp) });
+      return e;
     }
     // Pour la sauvegarde : animaux présents + mis de côté.
     tameList() {
       const out = (this.game.animals || []).slice();
-      for (const m of this.mobs) if (m.tame && !m.dead) out.push([m.type, Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, Math.round(m.z * 10) / 10, Math.round(m.baby)]);
+      for (const m of this.mobs) if (m.tame && !m.dead) out.push(this.tameEntry(m));
       return out;
+    }
+    restoreTame(m, x) {
+      if (!x || typeof x !== 'object') return;
+      if (typeof x.o === 'string') m.owner = x.o.slice(0, 32);
+      m.sit = !!x.s;
+      m.saddle = !!x.sa;
+      if (Number.isFinite(x.v)) m.variant = x.v | 0;
+      m.temper = +x.t || 0;
+      if (m.owner !== undefined && m.type === 'wolf') m.maxHp = 20;
+      if (Number.isFinite(x.hp) && x.hp > 0) m.hp = Math.min(m.maxHp, x.hp);
     }
 
     // Rayon vers les créatures (pour attaquer).
     raycastMob(ox, oy, oz, dx, dy, dz, maxD) {
       let best = null, bestT = maxD;
+      const mount = this.game.player && this.game.player.mount;
       for (const m of this.mobs) {
+        if (m.uid === mount || m.dead) continue;
         const hw = m.hw * (MOBS[m.type].pick || 1);
         const t = CM.rayBox(ox, oy, oz, dx, dy, dz, m.x - hw, m.y, m.z - hw, m.x + hw, m.y + m.h, m.z + hw);
         if (t >= 0 && t < bestT) {

@@ -185,6 +185,10 @@
     }
     // Dégâts infligés par l'hôte (créature, explosion, autre joueur) : envoyés à l'invité.
     damage(n, sx, sz, cause, bypass, vy, attacker) {
+      if (attacker && attacker.type) {
+        this.lastAttacker = attacker; // (son chien le défend)
+        this.lastAttackT = this.net.game.clock;
+      }
       this.net.hurtRemote(this, n, sx, sz, cause, bypass, vy, attacker);
     }
   }
@@ -565,7 +569,7 @@
     }
     stateOf(p) {
       const g = this.game;
-      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0);
+      const f = (p.sneaking ? 1 : 0) | (p.flying ? 2 : 0) | (p.alive ? 4 : 0) | (p.swing > 0.55 ? 8 : 0) | (p.hurtFlash > 0.25 ? 16 : 0) | (p.sleeping ? 32 : 0) | (p.blocking ? 64 : 0) | (p.mount !== null && p.mount !== undefined ? 128 : 0);
       const held = g.inventory.held();
       let armor = 0;
       g.inventory.armor.forEach((s, k) => {
@@ -698,7 +702,8 @@
         for (const o of ents.mobs) {
           if (o.dead || !near(o)) continue;
           const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0) | (o.ai.special ? 64 : 0);
-          m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
+          const pet = (o.tame ? 1 : 0) | (o.sit ? 2 : 0) | (o.saddle ? 4 : 0) | ((o.variant | 0) << 3) | (o.rider !== undefined && o.rider !== null ? 64 : 0);
+          m.push(pet ? [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl, pet] : [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
         }
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z), Math.round(o.age)]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
@@ -853,6 +858,8 @@
         case 'hit': {
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
           if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 8) break;
+          rp.lastTarget = mob; // (son chien l'attaque aussi)
+          rp.lastTargetT = g.clock;
           const lv = (v, max) => Math.min(max, Math.max(0, v | 0));
           g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp, { kb: lv(m.kb, 2), fire: lv(m.fi, 2), loot: lv(m.lo, 3) });
           break;
@@ -860,6 +867,30 @@
         case 'feed': {
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
           if (mob && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 7) g.entities.feedMob(mob);
+          break;
+        }
+        case 'mint': {
+          // clic droit de l'invité sur une créature (os, selle, seau, monter…)
+          const mob = g.entities.mobs.find((o) => o.uid === m.id);
+          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 7) break;
+          const r = g.entities.interact(mob, rp, m.it | 0, false);
+          if (r === 'mount' && (mob.rider === null || mob.rider === undefined)) {
+            mob.rider = e.pid;
+            mob.riderT = g.clock;
+          }
+          break;
+        }
+        case 'unmount':
+          for (const o of g.entities.mobs) if (o.rider === e.pid) o.rider = null;
+          break;
+        case 'mbuck': {
+          // dressage : le cheval accepte l'invité… ou le désarçonne
+          const mob = g.entities.mobs.find((o) => o.uid === m.id);
+          if (!mob || mob.rider !== e.pid || !CM.MOBS[mob.type].buck) break;
+          if (!CM.MOBS[mob.type].buck(g.entities, mob, rp)) {
+            mob.rider = null;
+            e.link.send({ t: 'buck' });
+          }
           break;
         }
         case 'tnt':
@@ -927,7 +958,7 @@
           if (!Array.isArray(m.p) || !Array.isArray(m.v)) break;
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
           if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > 4) break;
-          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp);
+          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, m.k === 'egg' ? 'egg' : undefined);
           break;
         }
         case 'cart': {
@@ -1148,6 +1179,10 @@
           break;
         case 'unride':
           if (p) p.riding = null;
+          break;
+        case 'buck':
+          // le cheval nous a désarçonnés
+          if (p && p.mount !== null && p.mount !== undefined) p.dismount(null, true);
           break;
         case 'meter':
           if (typeof m.s === 'string') g.ui.toast(m.s.slice(0, 300), 'info', 'meter');
@@ -1581,14 +1616,15 @@
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);
         const fl = rp.flags & 16 ? 2 : 0;
-        const sneak = rp.flags & 1;
+        const sneak = rp.flags & 1, rides = rp.flags & 128;
         const M = this.M;
-        mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0), rp.rz, rp.ryaw, 0, 0, 1);
-        const sw = rp.moving ? Math.sin(rp.walk) : 0;
+        mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0), rp.rz, rp.ryaw, 0, 0, 1);
+        const sw = rp.moving && !rides ? Math.sin(rp.walk) : rides ? 0 : 0;
         const shirt = L['concrete_' + rp.shirt] || L.sleeve;
         // (rotation autour de x : positif = vers l'avant pour un membre qui pend)
-        ents.part(batch, M, -0.12, 0.7, 0, sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl);
-        ents.part(batch, M, 0.12, 0.7, 0, -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl);
+        // (à cheval : jambes écartées de part et d'autre)
+        ents.part(batch, M, -0.12, 0.7, 0, rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, rides ? 0.5 : 0);
+        ents.part(batch, M, 0.12, 0.7, 0, rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], L.player_pants, l, fl, null, 0, rides ? -0.5 : 0);
         // corps (penché quand il est accroupi), tête qui suit le regard
         const lean = sneak ? 0.4 : 0;
         ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], shirt, l, fl);

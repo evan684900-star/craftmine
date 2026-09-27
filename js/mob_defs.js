@@ -14,12 +14,18 @@
     const { defItem } = K;
     defItem(1365, 'GUNPOWDER', { name: 'Poudre à canon', tex: 'gunpowder', desc: 'Laissée par les rampants. 5 poudres + 4 sables : une TNT.' });
     defItem(1366, 'MAGMA_CREAM', { name: 'Crème de magma', tex: 'magma_cream', desc: 'Laissée par les petits cubes de magma. 4 crèmes : un bloc de magma.' });
+    defItem(1367, 'BONE', { name: 'Os', tex: 'bone', desc: 'Laissé par les squelettes. Clic droit sur un loup pour l’apprivoiser ; donne 3 poudres d’os.' });
+    defItem(1368, 'SADDLE', { name: 'Selle', tex: 'saddle', stack: 1, desc: 'Clic droit sur un cheval dressé pour la lui mettre, puis clic droit pour le monter.' });
+    defItem(1369, 'EGG', { name: 'Œuf', tex: 'egg', stack: 16, type: 'egg', desc: 'Pondu par les poules. Clic droit pour le lancer (parfois, un poussin en sort).' });
+    defItem(1370, 'MILK_BUCKET', { name: 'Seau de lait', tex: 'milk_bucket', stack: 1, type: 'food', food: 1, sat: 0.5, milk: true, desc: 'Clic droit sur une vache avec un seau. À boire : enlève les effets (poison…).' });
   });
   M.recipes.push(function (K) {
     const { r } = K;
     const B = CM.B, I = CM.I;
     CM.recipes.push(r(B.TNT, 1, [[I.GUNPOWDER, 5], ['sand', 4]], 'table', 'deco'));
     if (B.MAGMA) CM.recipes.push(r(B.MAGMA, 1, [[I.MAGMA_CREAM, 4]], 'table', 'blocs'));
+    CM.recipes.push(r(I.BONE_MEAL, 3, [[I.BONE, 1]], null, 'objets'));
+    CM.recipes.push(r(I.SADDLE, 1, [[I.LEATHER, 5], [I.IRON_INGOT, 2]], 'table', 'objets'));
   });
 
   // ----------------------------------------------------- textures --
@@ -45,6 +51,50 @@
         if (k < 5.2) put(d, x, y, k < 2.5 ? [255, 214, 90] : vary([226, 110, 30], r, 16));
       }
     });
+    make('bone', (d, r) => {
+      for (let i = 0; i < 1024; i++) d[i] = 0;
+      for (let k = 2; k < 14; k++) put(d, k, 15 - k, vary([232, 230, 218], r, 8));
+      for (const [x, y] of [[2, 12], [3, 14], [1, 13], [13, 3], [12, 1], [14, 2]]) put(d, x, y, [236, 234, 222]);
+    });
+    make('saddle', (d, r) => {
+      for (let i = 0; i < 1024; i++) d[i] = 0;
+      for (let y = 4; y < 11; y++) for (let x = 2; x < 14; x++) if (!(y === 4 && (x < 4 || x > 11))) put(d, x, y, vary([120, 70, 36], r, 12));
+      for (let x = 5; x < 11; x++) put(d, x, 4, [150, 92, 50]);
+      for (let y = 11; y < 15; y++) { put(d, 4, y, [60, 40, 24]); put(d, 11, y, [60, 40, 24]); }
+      put(d, 4, 14, [190, 190, 196]); put(d, 11, 14, [190, 190, 196]);
+    });
+    make('egg', (d, r) => {
+      for (let i = 0; i < 1024; i++) d[i] = 0;
+      for (let y = 3; y < 15; y++) for (let x = 3; x < 13; x++) if (Math.hypot((x - 7.5) / 4.6, (y - 9.2) / (y < 9 ? 6.2 : 5)) < 1) put(d, x, y, vary([232, 214, 180], r, 8));
+      put(d, 6, 6, [248, 240, 222]);
+    });
+    make('milk_bucket', (d, r) => {
+      for (let i = 0; i < 1024; i++) d[i] = 0;
+      for (let y = 4; y < 15; y++) for (let x = 3 + Math.floor((y - 4) / 4); x < 13 - Math.floor((y - 4) / 4); x++) put(d, x, y, vary([176, 180, 188], r, 10));
+      for (let x = 4; x < 12; x++) { put(d, x, 5, [248, 248, 244]); put(d, x, 6, [240, 240, 236]); }
+      for (let x = 3; x < 13; x++) put(d, x, 4, [120, 124, 130]);
+    });
+    // cheval (4 robes)
+    const ROBES = [[120, 76, 40], [160, 96, 50], [228, 222, 210], [46, 36, 30]];
+    ROBES.forEach((c, i) => {
+      make('mob_horse_' + i, (d, r) => {
+        fill(d, r, c, 8);
+        for (let k = 0; k < 14; k++) put(d, Math.floor(r() * 16), Math.floor(r() * 16), vary(c.map((v) => v * 0.85), r, 6));
+      });
+      make('mob_horse_face_' + i, (d, r) => {
+        fill(d, r, c, 6);
+        eyes(d, 4, [16, 12, 10], [16, 12, 10], 2);
+        for (let y = 11; y < 16; y++) for (let x = 4; x < 12; x++) put(d, x, y, vary(c.map((v) => v * 0.7), r, 4));
+        put(d, 5, 13, [20, 16, 14]); put(d, 10, 13, [20, 16, 14]);
+        if (i !== 2) for (let y = 2; y < 10; y++) put(d, 7, y, [236, 232, 224]);
+      });
+    });
+    make('mob_mane', (d, r) => fill(d, r, [40, 30, 24], 10));
+    make('mob_leather', (d, r) => {
+      fill(d, r, [112, 64, 32], 10);
+      for (let x = 0; x < 16; x++) { put(d, x, 0, [80, 46, 24]); put(d, x, 15, [80, 46, 24]); }
+    });
+    make('mob_collar', (d, r) => fill(d, r, [200, 30, 36], 8));
     // poule
     make('mob_chicken', (d, r) => {
       fill(d, r, [238, 236, 230], 6);
@@ -252,10 +302,17 @@
   MOBS.chicken = {
     name: 'Poule', aliases: ['poule', 'poulet', 'chicken', 'cocotte'], hw: 0.22, h: 0.72, hp: 4, speed: 1.1, passive: true,
     sound: 'cluck', breed: ['SEEDS', 'BEETROOT_SEEDS', 'PUMPKIN_SEEDS', 'MELON_SEEDS'], group: [2, 4],
-    // bat des ailes et descend doucement ; pond parfois une plume
+    // bat des ailes et descend doucement ; pond un œuf toutes les 5 à 10 minutes
     tick(e, m, dt) {
       if (!m.onGround && m.vy < -3) m.vy = -3;
-      if (m.tame && m.baby <= 0 && e.rand() < dt / 400) drop(e, m, I().FEATHER, 1);
+      if (m.baby > 0) return;
+      if (m.eggT === undefined) m.eggT = 300 + e.rand() * 300;
+      m.eggT -= dt;
+      if (m.eggT <= 0) {
+        m.eggT = 300 + e.rand() * 300;
+        drop(e, m, I().EGG, 1);
+        if (Math.hypot(e.game.player.x - m.x, e.game.player.z - m.z) < 16) CM.Audio.play('pop');
+      }
     },
     loot(e, m, meat, more) {
       drop(e, m, I().FEATHER, Math.floor(e.rand() * 3) + more());
@@ -277,6 +334,16 @@
   MOBS.cow = {
     name: 'Vache', aliases: ['vache', 'cow', 'boeuf', 'taureau'], hw: 0.45, h: 1.35, hp: 10, speed: 1.1, passive: true,
     sound: 'moo', breed: ['WHEAT'], group: [1, 3],
+    // seau vide : on la trait
+    interact(e, m, x) {
+      if (x.id !== CM.I.BUCKET || m.baby > 0) return false;
+      if (x.local) {
+        x.consume(1);
+        x.give(CM.I.MILK_BUCKET, 1);
+        CM.Audio.play('splash');
+      }
+      return true;
+    },
     loot(e, m, meat, more) {
       drop(e, m, I().LEATHER, Math.floor(e.rand() * 3) + more());
       drop(e, m, meat, 1 + Math.floor(e.rand() * 3) + more());
@@ -388,19 +455,121 @@
   };
 
   // ==================================================== NEUTRE =======
-  // Loup : paisible tant qu'on ne le frappe pas ; alors toute la meute attaque.
+  // Nom du joueur (solo et hôte : « » ou son pseudo ; invité : son pseudo).
+  const pname = (g, q) => (q === g.player ? (g.net.active ? g.net.name : '') : q.name || '');
+  CM.playerName = pname;
+  const isOwner = (g, q, m) => m.owner !== undefined && (pname(g, q) === m.owner || (q === g.player && !g.net.isClient && (m.owner === '' || m.owner === g.net.name)));
+  CM.isPetOwner = isOwner;
+  // Le maître d'un animal apprivoisé (parmi les joueurs simulés ici).
+  function ownerOf(e, m) {
+    const g = e.game;
+    for (const q of e.plist) if (q.alive !== false && isOwner(g, q, m)) return q;
+    return null;
+  }
+  // Message à un joueur (d'ici ou invité).
+  function tell(e, q, s) {
+    const g = e.game;
+    if (q === g.player) g.ui.toast(s, 'good', 'pet');
+    else if (q && q.pid !== undefined) g.net.sendTo(q.pid, { t: 'cr', s, k: 'ok' });
+  }
+  CM.petTell = tell;
+  // Animal apprivoisé : suit son maître (ou reste assis) et le défend.
+  function petUpdate(e, m, dt, c, speed) {
+    const own = ownerOf(e, m);
+    m.ai.chasing = false;
+    if (m.sit) return {};
+    let tgt = m.ai.foe && !m.ai.foe.dead && m.ai.foe.type ? m.ai.foe : null;
+    if (own) {
+      for (const o of [own.lastAttacker, own.lastTarget]) {
+        if (!o || !o.type || o.dead || o === m || (o.tame && o.owner === m.owner) || e.game.clock - (o === own.lastAttacker ? own.lastAttackT || 0 : own.lastTargetT || 0) > 12) continue;
+        if (Math.hypot(o.x - own.x, o.z - own.z) < 16) tgt = o;
+      }
+      if (!tgt)
+        for (const o of e.mobs)
+          if (!o.dead && CM.MOBS[o.type].hostile && Math.hypot(o.x - own.x, o.z - own.z) < 8 && Math.abs(o.y - own.y) < 4) {
+            tgt = o;
+            break;
+          }
+    }
+    m.ai.foe = tgt;
+    if (tgt) {
+      m.ai.chasing = true;
+      const d = Math.hypot(tgt.x - m.x, tgt.z - m.z);
+      const [tvx, tvz] = walk(e, m, toward(tgt.x - m.x, tgt.z - m.z), 4.8, false);
+      if (d < m.hw + tgt.hw + 0.9 && Math.abs(tgt.y - m.y) < 2 && m.ai.attackCd <= 0) {
+        m.ai.attackCd = 1;
+        e.hurtMob(tgt, 4, [m.x, m.z]);
+        if (c.distL < 20) CM.Audio.play('growl', { pitch: 1.2 });
+      }
+      return { tvx, tvz };
+    }
+    if (!own) return { tvx: 0, tvz: 0 };
+    const d = Math.hypot(own.x - m.x, own.z - m.z);
+    // trop loin : il rejoint son maître d'un coup (comme dans Minecraft)
+    if ((d > 24 || Math.abs(own.y - m.y) > 12) && own.onGround !== false) {
+      const w = e.game.world, a = e.rand() * TAU, x = own.x + Math.cos(a) * 1.5, z = own.z + Math.sin(a) * 1.5;
+      if (w.loaded(x, z) && !solid(w, x, own.y + 0.1, z) && !solid(w, x, own.y + 1, z)) {
+        m.x = x;
+        m.y = own.y;
+        m.z = z;
+        m.vx = m.vy = m.vz = 0;
+      }
+      return {};
+    }
+    if (d > 3.5) {
+      const [tvx, tvz] = walk(e, m, toward(own.x - m.x, own.z - m.z), d > 8 ? 4.6 : speed || 2.4, false);
+      return { tvx, tvz };
+    }
+    return { face: toward(own.x - m.x, own.z - m.z) };
+  }
+
+  // Loup : paisible tant qu'on ne le frappe pas ; alors toute la meute attaque. Un os l'apprivoise :
+  // il suit son maître, le défend, s'assoit (clic droit) ; la viande le soigne.
   MOBS.wolf = {
-    name: 'Loup', aliases: ['loup', 'wolf', 'louve'], hw: 0.3, h: 0.85, hp: 12, speed: 1.4, passive: true, neutral: true,
-    sound: 'growl', group: [2, 4], xp: 3,
+    name: 'Loup', aliases: ['loup', 'wolf', 'louve', 'chien'], hw: 0.3, h: 0.85, hp: 12, speed: 1.4, passive: true, neutral: true,
+    sound: 'growl', group: [2, 4], xp: 3, tameFirst: true, healFood: true, breed: ['RAW_MEAT', 'COOKED_MEAT'],
     onHurt(e, m, by) {
+      if (m.tame) {
+        m.sit = false;
+        return;
+      }
       const foe = by && by.alive !== undefined ? by : e.nearestPlayer(m.x, m.y, m.z);
       for (const o of e.mobs) {
-        if (o.type !== 'wolf' || o.dead || Math.hypot(o.x - m.x, o.z - m.z) > 16) continue;
+        if (o.type !== 'wolf' || o.dead || o.tame || Math.hypot(o.x - m.x, o.z - m.z) > 16) continue;
         o.ai.angry = 25;
         o.ai.foe = foe;
       }
     },
+    interact(e, m, x) {
+      const I = CM.I;
+      if (!m.tame) {
+        if (x.id !== I.BONE || m.ai.angry > 0) return false;
+        if (x.local) x.consume(1);
+        if (x.host) {
+          if (e.rand() < 1 / 3) {
+            m.tame = true;
+            m.owner = x.name;
+            m.sit = false;
+            m.ai.angry = 0;
+            m.ai.foe = null;
+            m.hp = m.maxHp = 20;
+            e.hearts(m, 7);
+            tell(e, x.q, '🐺 Le loup est apprivoisé ! Il te suit et te défend (clic droit : assis / debout).');
+          } else e.burst(CM.Textures.layer.smoke, m.x, m.y + 0.8, m.z, 6, { speed: 0.8, grav: -1, life: 0.8, size: 0.15 });
+        }
+        return true;
+      }
+      if (x.id === I.RAW_MEAT || x.id === I.COOKED_MEAT) return false; // (nourrir : soin ou petit)
+      if (!isOwner(e.game, x.q, m)) return false;
+      if (x.host) {
+        m.sit = !m.sit;
+        m.ai.foe = null;
+        tell(e, x.q, m.sit ? '🐺 Assis !' : '🐺 Au pied !');
+      }
+      return true;
+    },
     update(e, m, dt, c) {
+      if (m.tame) return petUpdate(e, m, dt, c, 2.6);
       if (m.ai.angry > 0) {
         m.ai.angry -= dt;
         const p = m.ai.foe && m.ai.foe.alive !== false ? m.ai.foe : c.p;
@@ -419,16 +588,98 @@
     },
     loot: noLoot,
     render(e, batch, m, l, f, sw) {
-      const L = Lr(), W = L.mob_wolf, face = m.ai.chasing ? L.mob_wolf_angry : L.mob_wolf_face;
-      e.part(batch, e.M, 0, 0, 0, 0, [-0.18, 0.42, -0.42, 0.18, 0.76, 0.34], W, l, f);
+      const L = Lr(), W = L.mob_wolf, face = m.ai.chasing && !m.tame ? L.mob_wolf_angry : L.mob_wolf_face;
+      const sit = !!m.sit, bodyTilt = sit ? -0.55 : 0;
+      e.part(batch, e.M, 0, sit ? 0.2 : 0.42, 0.3, bodyTilt, [-0.18, 0, -0.72, 0.18, 0.34, 0.04], W, l, f);
       e.part(batch, e.M, 0, 0.44, -0.42, 0, [-0.23, 0.02, -0.02, 0.23, 0.4, 0.14], W, l, f);
       e.part(batch, e.M, 0, 0.66, -0.46, 0, [-0.16, -0.12, -0.26, 0.16, 0.18, 0.02], head6(W, face), l, f);
       e.part(batch, e.M, 0, 0.66, -0.46, 0, [-0.07, -0.12, -0.4, 0.07, 0.0, -0.26], W, l, f);
       e.part(batch, e.M, 0, 0.66, -0.46, 0, [-0.14, 0.18, -0.12, -0.06, 0.3, -0.06], W, l, f);
       e.part(batch, e.M, 0, 0.66, -0.46, 0, [0.06, 0.18, -0.12, 0.14, 0.3, -0.06], W, l, f);
-      e.part(batch, e.M, 0, 0.66, 0.34, m.ai.chasing ? -0.2 : 0.7, [-0.05, -0.05, 0, 0.05, 0.05, 0.36], W, l, f);
-      for (const [x, z, ph] of [[-0.1, -0.3, 1], [0.1, -0.3, -1], [-0.1, 0.26, -1], [0.1, 0.26, 1]])
-        e.part(batch, e.M, x, 0.44, z, sw * 0.8 * ph, [-0.05, -0.44, -0.05, 0.05, 0, 0.05], W, l, f);
+      if (m.tame) e.part(batch, e.M, 0, 0.44, -0.42, 0, [-0.24, 0.1, -0.03, 0.24, 0.2, 0.15], L.mob_collar, l, f);
+      e.part(batch, e.M, 0, sit ? 0.2 : 0.66, 0.34, m.ai.chasing ? -0.2 : 0.7, [-0.05, -0.05, 0, 0.05, 0.05, 0.36], W, l, f);
+      for (const [x, z, ph] of [[-0.1, -0.3, 1], [0.1, -0.3, -1]]) e.part(batch, e.M, x, 0.44, z, sit ? 0 : sw * 0.8 * ph, [-0.05, -0.44, -0.05, 0.05, 0, 0.05], W, l, f);
+      for (const [x, z, ph] of [[-0.1, 0.26, -1], [0.1, 0.26, 1]])
+        if (sit) e.part(batch, e.M, x, 0.12, z - 0.1, -1.4, [-0.05, -0.3, -0.05, 0.05, 0, 0.05], W, l, f);
+        else e.part(batch, e.M, x, 0.44, z, sw * 0.8 * ph, [-0.05, -0.44, -0.05, 0.05, 0, 0.05], W, l, f);
+    },
+  };
+
+  // Cheval : on le dresse en le montant (il rue, puis accepte) ; les pommes, le blé et les carottes
+  // dorées l'adoucissent. Dressé et sellé, on le monte et on le dirige (très rapide, saute haut).
+  const HORSE_FOOD = { WHEAT: 3, APPLE: 5, CARROT: 4, GOLDEN_CARROT: 12, GOLDEN_APPLE: 20 };
+  MOBS.horse = {
+    name: 'Cheval', aliases: ['cheval', 'horse', 'jument', 'poney'], hw: 0.6, h: 1.6, hp: 20, speed: 1.3, passive: true,
+    sound: 'neigh', breed: ['GOLDEN_CARROT', 'GOLDEN_APPLE'], group: [2, 4], xp: 2, tameFirst: true, mount: true,
+    init(m, e) {
+      m.variant = Math.floor(e.rand() * 4);
+    },
+    interact(e, m, x) {
+      const I = CM.I;
+      const food = Object.keys(HORSE_FOOD).find((k) => I[k] === x.id);
+      if (food && !(m.tame && (food === 'GOLDEN_CARROT' || food === 'GOLDEN_APPLE') && m.hp >= m.maxHp && m.baby <= 0 && !(m.love > 0))) {
+        if (x.local) x.consume(1);
+        if (x.host) {
+          m.temper = Math.min(100, (m.temper || 0) + HORSE_FOOD[food]);
+          m.hp = Math.min(m.maxHp, m.hp + 2);
+          e.hearts(m, 2);
+        }
+        if (x.local) CM.Audio.play('eat');
+        return true;
+      }
+      if (food) return false; // (carotte dorée à un cheval dressé : élevage)
+      if (x.id === I.SADDLE && m.tame && !m.saddle) {
+        if (x.local) x.consume(1);
+        if (x.host) m.saddle = true;
+        if (x.local) CM.Audio.play('equip', { mat: 'leather' });
+        return true;
+      }
+      if (m.baby > 0) return false;
+      if (m.tame && !m.saddle) {
+        if (x.local) CM.Audio.play('neigh');
+        if (x.local && x.q === e.game.player) e.game.ui.toast('Il lui faut une selle pour que tu le montes (5 cuirs + 2 fers à l’établi)', 'info', 'saddle');
+        return true;
+      }
+      return 'mount';
+    },
+    // monté pour le dresser : il rue ; plus il est habitué (nourriture, essais), plus il accepte
+    buck(e, m, q) {
+      m.temper = Math.min(100, (m.temper || 0) + 6);
+      if (e.rand() * 100 < m.temper + 10) {
+        m.tame = true;
+        m.owner = pname(e.game, q);
+        e.hearts(m, 7);
+        tell(e, q, '🐴 Le cheval est dressé ! Mets-lui une selle pour le diriger.');
+        return true;
+      }
+      e.burst(CM.Textures.layer.smoke, m.x, m.y + 1.2, m.z, 8, { speed: 1, grav: -1, life: 0.8, size: 0.15 });
+      m.vy = 5;
+      return false;
+    },
+    loot(e, m, meat, more) {
+      drop(e, m, I().LEATHER, Math.floor(e.rand() * 3) + more());
+      if (m.saddle) drop(e, m, I().SADDLE, 1);
+    },
+    render(e, batch, m, l, f, sw, t) {
+      const L = Lr(), v = m.variant || 0, H = L['mob_horse_' + v], face = L['mob_horse_face_' + v], mane = L.mob_mane;
+      const gal = m.moving ? Math.min(1.2, 0.6 + (m.speedVis || 0) * 0.08) : 0;
+      e.part(batch, e.M, 0, 0, 0, 0, [-0.34, 0.86, -0.72, 0.34, 1.46, 0.72], H, l, f);
+      const hb = m.moving ? Math.sin(m.walk * 2) * 0.05 : Math.sin(t * 1.3 + m.age) * 0.04;
+      // encolure, tête, crinière
+      e.part(batch, e.M, 0, 1.3, -0.6, -0.5 + hb, [-0.13, 0, -0.2, 0.13, 0.62, 0.1], H, l, f);
+      e.part(batch, e.M, 0, 1.3, -0.6, -0.5 + hb, [-0.04, 0.05, 0.08, 0.04, 0.74, 0.18], mane, l, f);
+      e.part(batch, e.M, 0, 1.3, -0.6, 0.35 + hb, [-0.15, 0.42, -0.62, 0.15, 0.72, -0.08], head6(H, face), l, f);
+      e.part(batch, e.M, 0, 1.3, -0.6, 0.35 + hb, [-0.12, 0.72, -0.2, -0.05, 0.84, -0.12], H, l, f);
+      e.part(batch, e.M, 0, 1.3, -0.6, 0.35 + hb, [0.05, 0.72, -0.2, 0.12, 0.84, -0.12], H, l, f);
+      // queue
+      e.part(batch, e.M, 0, 1.36, 0.72, 0.5 + (m.moving ? Math.sin(m.walk * 2) * 0.2 : 0), [-0.06, -0.62, 0, 0.06, 0, 0.1], mane, l, f);
+      // selle
+      if (m.saddle) {
+        e.part(batch, e.M, 0, 0, 0, 0, [-0.36, 1.4, -0.28, 0.36, 1.52, 0.3], L.mob_leather, l, f);
+        e.part(batch, e.M, 0, 0, 0, 0, [-0.37, 1.0, -0.06, 0.37, 1.4, 0.04], L.mob_leather, l, f);
+      }
+      for (const [x, z, ph] of [[-0.2, -0.56, 1], [0.2, -0.56, -1], [-0.2, 0.56, -1], [0.2, 0.56, 1]])
+        e.part(batch, e.M, x, 0.88, z, sw * (0.6 + gal) * ph, [-0.09, -0.88, -0.09, 0.09, 0, 0.09], H, l, f);
     },
   };
 
@@ -525,7 +776,7 @@
     },
     loot(e, m, meat, more) {
       drop(e, m, I().ARROW, Math.floor(e.rand() * 3) + more());
-      drop(e, m, I().BONE_MEAL, 1 + Math.floor(e.rand() * 2) + more());
+      drop(e, m, I().BONE, Math.floor(e.rand() * 3) + more());
       if (e.rand() < 0.04) e.addDrop(I().BOW, 1, m.x, m.y + 0.5, m.z, { xp: 0 });
     },
     render(e, batch, m, l, f, sw) {
@@ -639,7 +890,7 @@
     };
   }
   // (particules à la mort : la texture du corps)
-  const FX = { chicken: 'mob_chicken', cow: 'mob_cow', rabbit: 'mob_rabbit', deer: 'mob_deer', goat: 'mob_goat', bat: 'mob_bat', wolf: 'mob_wolf', spider: 'mob_spider', skeleton: 'mob_bone', rampant: 'mob_rampant' };
+  const FX = { horse: 'mob_horse_0', chicken: 'mob_chicken', cow: 'mob_cow', rabbit: 'mob_rabbit', deer: 'mob_deer', goat: 'mob_goat', bat: 'mob_bat', wolf: 'mob_wolf', spider: 'mob_spider', skeleton: 'mob_bone', rampant: 'mob_rampant' };
   for (const k in FX) MOBS[k].fxTex = FX[k];
   const blob = (o) =>
     Object.assign({ hostile: true, update: blobUpdate, onDeath: blobSplit, sound: 'squish', noJump: true, fxTex: o.fireproof ? 'mob_magma' : 'mob_slime' }, o, { hw: o.size / 2, h: o.size });

@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
 
   A.init = function () {
@@ -297,6 +297,11 @@
       case 'growl':
         tone(t, 0.6, 'sawtooth', 95 * pitch, 80, 0.08, 0.1);
         noise(t, 0.6, 'lowpass', 300 * pitch, 1, 0.08);
+        break;
+      case 'neigh':
+        // hennissement : un son qui monte puis tremble en descendant
+        tone(t, 0.25, 'sawtooth', 500 * pitch, 900 * pitch, 0.07, 0.03);
+        for (let i = 0; i < 5; i++) tone(t + 0.2 + i * 0.09, 0.1, 'sawtooth', (820 - i * 90) * pitch, (700 - i * 90) * pitch, 0.06);
         break;
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule

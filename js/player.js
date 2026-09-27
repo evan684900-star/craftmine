@@ -149,6 +149,24 @@
       }
 
       const k = input.keys;
+      // à cheval : s'accroupir pour descendre ; un cheval pas encore dressé finit par ruer
+      if (this.mount !== null && this.mount !== undefined) {
+        const mh = g.entities.mobs.find((o) => o.uid === this.mount && !o.dead);
+        if (!mh || input.pressed[K.sneak] || (this.riding !== null && this.riding !== undefined)) this.dismount(mh);
+        else {
+          this.mountTame = !!(mh.tame && mh.saddle);
+          this.flying = false;
+          if (!this.mountTame) {
+            this.buckT -= dt;
+            if (this.buckT <= 0) {
+              this.buckT = 99;
+              if (g.net.isClient) g.net.send({ t: 'mbuck', id: mh.uid });
+              else if (!CM.MOBS.horse.buck(g.entities, mh, this)) this.dismount(mh, true);
+            }
+          }
+        }
+      }
+      const mounted = this.mount !== null && this.mount !== undefined;
       const fx = Math.floor(this.x), fz = Math.floor(this.z);
       this.inWater = CM.isWater(w.get(fx, Math.floor(this.y + 0.4), fz));
       const wasHeadIn = this.headInWater;
@@ -186,7 +204,7 @@
       }
 
       const under = CM.blocks[w.get(fx, Math.floor(this.y - 0.05), fz)];
-      this.sneaking = !this.flying && !!k[K.sneak] && !this.inFluid;
+      this.sneaking = !this.flying && !!k[K.sneak] && !this.inFluid && !mounted;
       // assis dans un wagonnet : on suit le wagonnet (s'accroupir pour descendre)
       if (this.riding !== null && this.riding !== undefined) {
         const c = (g.entities.carts || []).find((o) => o.uid === this.riding && !o.dead);
@@ -215,7 +233,7 @@
           return;
         }
       }
-      this.eyeOffset += ((this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
+      this.eyeOffset += ((mounted ? -0.95 : this.sneaking ? 0.25 : 0) - this.eyeOffset) * Math.min(1, dt * 12);
       // course : maintenir ou basculer (option)
       const sprintKey = !!k[K.sprint];
       if (g.options.toggleSprint) {
@@ -247,9 +265,14 @@
       if (this.flying) speed = this.sprinting ? 21 : 11;
       if (mag < 1) speed *= Math.max(0.3, mag);
       if (this.cmdSpeed) speed *= this.cmdSpeed; // /vitesse
+      // cheval dressé et sellé : on galope ; pas encore dressé : il n'obéit pas
+      if (mounted) {
+        speed = this.mountTame ? (wantSprint && f > 0 ? 13 : 9) * Math.max(0.3, mag) : 0;
+        this.sprinting = this.mountTame && wantSprint && f > 0;
+      }
 
       // ----- ruée
-      if (input.pressed[K.dash] && this.dashCd <= 0 && !this.flying) {
+      if (input.pressed[K.dash] && this.dashCd <= 0 && !this.flying && !mounted) {
         if (!this.canSprint()) g.ui.toast('Trop faim pour la ruée', 'warn', 'nodash');
         else {
           let dx = wx, dz = wz;
@@ -343,7 +366,7 @@
         if ((k[K.jump] || autoJump) && this.onGround && this.jumpCd <= 0) {
           const bounce = standBlock === B.MUSHROOM || standBlock === B.SLIME_BLOCK;
           const honey = standBlock === B.HONEY_BLOCK;
-          this.vy = (bounce ? 14 : honey ? 5 : 8.6) * Math.sqrt(1 + 0.6 * (this.cmdJump || 0)); // /saut
+          this.vy = mounted ? (this.mountTame ? 10.5 : 0) : (bounce ? 14 : honey ? 5 : 8.6) * Math.sqrt(1 + 0.6 * (this.cmdJump || 0)); // /saut ; cheval : grand saut
           this.jumpCd = 0.15;
           if (bounce) CM.Audio.play('bounce');
           this.exhaust(this.sprinting ? EXH.sprintJump : EXH.jump);
@@ -391,7 +414,7 @@
       if (this.landed) {
         const under2 = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
         // (/saut amortit les chutes ; règle « dégâts de chute »)
-        const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0);
+        const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0) - (mounted ? 4 : 0);
         const bouncy = under2 === B.MUSHROOM || under2 === B.SLIME_BLOCK;
         if (bouncy && prevVy < -4 && !this.sneaking) {
           this.vy = Math.min(24, -prevVy * 0.85);
@@ -580,6 +603,60 @@
     }
 
     // Wagonnets : monter, descendre.
+    // Clic droit sur une créature avec l'objet en main : apprivoiser (os), seller, traire, monter…
+    interactMob(mob) {
+      const g = this.game, inv = g.inventory, st = inv.held(), id = st ? st.id : 0;
+      const give = (gid, n) => {
+        const left = inv.add(gid, n);
+        if (left > 0) g.dropNearPlayer(gid, left);
+      };
+      const r = g.entities.interact(mob, this, id, true, (n) => this.consume(n), give);
+      if (!r) return false;
+      if (g.net.isClient) g.net.send({ t: 'mint', id: mob.uid, it: id });
+      if (r === 'mount') this.mountOn(mob);
+      this.swing = 1;
+      this.useCd = 0.3;
+      return true;
+    }
+    mountOn(m) {
+      const g = this.game;
+      if ((this.riding !== null && this.riding !== undefined) || this.mount !== null && this.mount !== undefined) return;
+      if (!g.net.isClient) {
+        if (m.rider !== null && m.rider !== undefined) return;
+        m.rider = 'local';
+      } else if (m.ridden) return;
+      this.mount = m.uid;
+      this.mountTame = !!(m.tame && m.saddle);
+      this.buckT = m.tame ? 99 : 1.2 + Math.random() * 2;
+      this.x = m.x;
+      this.y = m.y + 0.05;
+      this.z = m.z;
+      this.vx = this.vz = 0;
+      this.h = 2.3;
+      this.stepUp = 1.05;
+      this.flying = false;
+      this.mining = null;
+      CM.Audio.play('neigh');
+      if (!this.mountTame) g.ui.toast(m.tame ? 'Il lui faut une selle' : 'Tiens bon : le cheval rue… (nourris-le pour l’adoucir)', 'info', 'mount');
+      else g.ui.toast('À cheval ! ' + g.keyName(g.binds.sneak) + ' pour descendre, ' + g.keyName(g.binds.sprint) + ' pour galoper', 'info', 'mount');
+    }
+    dismount(m, thrown) {
+      const g = this.game;
+      const mm = m || g.entities.mobs.find((o) => o.uid === this.mount);
+      this.mount = null;
+      this.h = 1.8;
+      this.stepUp = 0.55;
+      if (g.net.isClient) g.net.send({ t: 'unmount' });
+      else if (mm && mm.rider === 'local') mm.rider = null;
+      if (thrown) {
+        this.vy = 6;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vz = (Math.random() - 0.5) * 6;
+        CM.Audio.play('neigh', { pitch: 1.3 });
+        g.ui.toast('Le cheval t’a désarçonné ! Réessaie (il s’habitue à toi)', 'warn', 'mount');
+      }
+      this.fallStart = this.y;
+    }
     rideCart(c) {
       const g = this.game;
       if (c.type !== 'cart' || (c.rider !== null && c.rider !== undefined)) return false;
@@ -899,6 +976,7 @@
             g.ui.openTrade(vm.mob);
             return;
           }
+          if (this.interactMob(vm.mob)) return;
           if (this.feed(vm.mob)) return;
         }
       }
@@ -1035,6 +1113,12 @@
         g.ui.toast('Régénération (' + info.regen + ' s)', 'gold');
       }
       this.consume(1);
+      // seau de lait : on garde le seau ; le lait enlève les effets
+      if (info.milk) {
+        const left = g.inventory.add(CM.I.BUCKET, 1);
+        if (left > 0) g.dropNearPlayer(CM.I.BUCKET, left);
+        if (this.clearEffects) this.clearEffects();
+      }
       this.useCd = 0.35;
       CM.Audio.play('pop');
     }
@@ -1113,6 +1197,8 @@
 
     attack(mob) {
       const g = this.game;
+      this.lastTarget = mob;
+      this.lastTargetT = g.clock;
       const stack = g.inventory.held();
       const info = stack ? CM.itemInfo(stack.id) : null;
       let dmg = 1;
@@ -1411,6 +1497,16 @@
         if (input.pressed.mouse2) this.fireHook();
         return;
       }
+      // œuf : on le lance
+      if (info.type === 'egg') {
+        if (input.pressed.mouse2) {
+          const e = this.eye(), d = this.aim();
+          g.entities.shootArrow(e[0] + d[0] * 0.4, e[1] + d[1] * 0.4, e[2] + d[2] * 0.4, d[0] * 18, d[1] * 18 + 2, d[2] * 18, this, 'egg');
+          this.consume(1);
+          this.swing = 1;
+        }
+        return;
+      }
       // pistolet laser
       if (info.type === 'laser') {
         if (input.pressed.mouse2) this.fireLaser(stack, info);
@@ -1609,6 +1705,10 @@
     damage(n, sx, sz, cause, bypass, attacker) {
       const g = this.game;
       if (!this.alive || n <= 0) return;
+      if (attacker && attacker.type) {
+        this.lastAttacker = attacker;
+        this.lastAttackT = g.clock;
+      }
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
       if (this.cmdGod && cause !== 'Le vide') return; // /invincible
@@ -1714,6 +1814,7 @@
     die(cause) {
       const g = this.game;
       g.cmdBack = { x: this.x, y: this.y, z: this.z, dim: g.playerDim }; // (/retour)
+      if (this.mount !== null && this.mount !== undefined) this.dismount();
       this.alive = false;
       this.hook = null;
       this.flying = false;

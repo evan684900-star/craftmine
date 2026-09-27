@@ -590,6 +590,7 @@
       net.flushSets();
       if (this.ui.invOpen) this.ui.closeInventory();
       if (p.sleeping) this.wake('dim');
+      if (p.mount !== null && p.mount !== undefined) p.dismount();
       const from = this.world;
       const src = opts.from ? { x: opts.from[0], y: opts.from[1], z: opts.from[2], id: from.get(opts.from[0], opts.from[1], opts.from[2]) } : null;
       this.state = 'loading';

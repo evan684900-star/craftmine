@@ -26,16 +26,27 @@
   };
 
   // ------------------------------------------------------------ flèches --
-  E.shootArrow = function (x, y, z, vx, vy, vz, shooter) {
+  // kind : 'egg' pour un œuf lancé (sinon une flèche)
+  E.shootArrow = function (x, y, z, vx, vy, vz, shooter, kind) {
     if (this.remote) {
-      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)] });
+      this.game.net.send({ t: 'arrow', p: [r2(x), r2(y), r2(z)], v: [r2(vx), r2(vy), r2(vz)], k: kind });
       return;
     }
     const g = this.game;
     if (!this.arrows) this.arrows = [];
     // (flèches des squelettes : pas ramassables)
-    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, pick: !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
-    CM.Audio.play('bow', { pitch: 0.9 + Math.random() * 0.2 });
+    this.arrows.push({ uid: CM.newUid(), x, y, z, vx, vy, vz, age: 0, stuck: false, shooter: shooter || null, kind: kind || null, pick: !kind && !(shooter && shooter.type) && (!shooter || g.mode !== 'creative') });
+    CM.Audio.play(kind === 'egg' ? 'pop' : 'bow', { pitch: 0.9 + Math.random() * 0.2 });
+  };
+  // Un œuf se casse : parfois un poussin en sort.
+  E.eggHit = function (a) {
+    a.dead = true;
+    this.burst(CM.Textures.layer.egg, a.x, a.y, a.z, 8, { speed: 1.5, size: 0.05 });
+    if (Math.random() < 1 / 8) {
+      const c = this.addMob('chicken', a.x, Math.floor(a.y), a.z);
+      this.setBaby(c, 300);
+      this.hearts(c, 3);
+    }
   };
   E.updateArrows = function (dt) {
     const g = this.game, w = g.world;
@@ -78,6 +89,18 @@
           }
         }
         const bh = w.raycast(a.x, a.y, a.z, dx, dy, dz, ht, (id) => !CM.isFluid(id) && !(CM.blocks[id].rs && CM.blocks[id].rs.k === 'tripwire'));
+        if (bh && a.kind === 'egg') {
+          a.x += dx * Math.max(0, bh.t - 0.1);
+          a.y += dy * Math.max(0, bh.t - 0.1) + 0.1;
+          a.z += dz * Math.max(0, bh.t - 0.1);
+          this.eggHit(a);
+          continue;
+        }
+        if (hit && a.kind === 'egg') {
+          if (hit.m) this.hurtMob(hit.m, 0, [a.x - dx, a.z - dz]);
+          this.eggHit(a);
+          continue;
+        }
         if (bh) {
           // plantée dans le bloc
           a.x += dx * Math.max(0, bh.t - 0.04);
@@ -125,6 +148,11 @@
     const L = CM.Textures.layer.arrow_ent;
     for (const a of this.arrows || []) {
       const l = this.lightAt(a.x, a.y, a.z);
+      if (a.kind === 'egg') {
+        mat4.compose(this.M, a.x, a.y, a.z, 0, 0, 0, 1);
+        batch.box(this.M, -0.07, -0.08, -0.07, 0.07, 0.1, 0.07, CM.Textures.layer.mob_chicken, l[0], l[1], 0);
+        continue;
+      }
       let yaw = a.yaw, pitch = a.pitch;
       if (!a.stuck && (a.vx || a.vy || a.vz)) {
         yaw = Math.atan2(a.vx, a.vz);
@@ -436,7 +464,7 @@
     for (const a of this.arrows || []) {
       if (a.dead || !near(a)) continue;
       const yaw = a.stuck ? a.yaw : Math.atan2(a.vx, a.vz), pitch = a.stuck ? a.pitch : Math.atan2(-a.vy, Math.hypot(a.vx, a.vz));
-      ar.push([a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
+      ar.push(a.kind === 'egg' ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 1] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
     }
     for (const c of this.carts || []) {
       if (c.dead || !near(c)) continue;
@@ -447,9 +475,9 @@
   E.applyExtra = function (s) {
     const oldA = new Map((this.arrows || []).map((a) => [a.uid, a]));
     this.arrows = [];
-    for (const [uid, x, y, z, yaw, pitch] of s.ar || []) {
+    for (const [uid, x, y, z, yaw, pitch, k] of s.ar || []) {
       let a = oldA.get(uid);
-      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0 };
+      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : null };
       a.tx = x;
       a.ty = y;
       a.tz = z;
