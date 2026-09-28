@@ -289,6 +289,8 @@
       if (this.inWater && CM.Effects.lv(this, 'dolphins_grace')) speed *= 2.2; // nage avec les dauphins
       if (this.inLava) speed = this.sprinting ? 1.6 : 1.2;
       if (this.onGround && under.slow) speed *= under.slow;
+      this.inWeb = !this.flying && CM.Structures.inWeb(w, this.x, this.y, this.z, this.h);
+      if (this.inWeb) speed *= 0.2; // toile d'araignée
       if (this.onGround && under.slip) speed *= 1.15;
       if (this.flying) speed = this.sprinting ? 21 : 11;
       if (mag < 1) speed *= Math.max(0.3, mag);
@@ -422,6 +424,11 @@
       // ----- déplacement + collisions (accroupi : on ne tombe pas du bord)
       const prevVy = this.vy;
       const wasGround = this.onGround;
+      if (this.inWeb) {
+        // toile d'araignée : on s'y englue (et la chute est freinée)
+        this.vy = Math.max(-1.2, Math.min(this.vy, 1.2));
+        this.fallStart = this.y;
+      }
       if (this.sneaking && this.onGround) {
         const ox = this.x, oz = this.z;
         CM.Physics.move(w, this, this.vx * dt, 0, 0);

@@ -279,6 +279,8 @@
       // mares en surface dans les terres volcaniques (mondes récents seulement)
       this.lavaLakes = true;
       this.lavaPools = (this.settings.gen || 2) >= 5;
+      // donjons, puits de mine, temples du désert, cabanes de sorcière (mondes récents : générateur 6)
+      this.structures = !this.legacy && (this.settings.gen || 2) >= 6 && this.type !== 'nether';
       this.techOres = !!(this.settings.ext && this.settings.ext.tech); // extension Électricité : zinc, étain, bauxite, lithium
       this.villageCache = new Map();
       // Nether : pas de villages ni d'îles, un autre générateur (voir generateNether)
@@ -1085,6 +1087,7 @@
       this.islandsFor(c);
       this.ruinsFor(c);
       this.villagesFor(c);
+      if (this.structures && this.structuresFor) this.structuresFor(c);
 
       // 8) modifications du joueur
       const e = this.edits.get(ckey(cx, cz));

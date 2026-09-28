@@ -810,6 +810,12 @@
       m.vy = Math.max(m.vy, -40);
       if (jump) m.vy = def.hop ? 6 : 8.2;
       if (climb) m.vy = Math.max(m.vy, 3.5); // araignée : grimpe aux murs
+      // toile d'araignée : tout s'y englue (sauf les araignées)
+      if (m.type !== 'spider' && CM.Structures && CM.Structures.inWeb(w, m.x, m.y, m.z, m.h)) {
+        m.vx *= 0.25;
+        m.vz *= 0.25;
+        m.vy = Math.max(-1.2, Math.min(m.vy, 1.2));
+      }
       CM.Physics.move(w, m, m.vx * dt, m.vy * dt, m.vz * dt);
       if (m.hitY) m.vy = 0;
       const sp = Math.hypot(m.vx, m.vz);
@@ -1118,6 +1124,8 @@
       this.spawnBats(p, w, r);
       // poissons, calmars et dauphins dans les rivières, lacs et océans
       this.spawnWater(p, w, r);
+      // la sorcière de la cabane des marais
+      if (CM.Structures && r() < 0.2) CM.Structures.spawnWitch(g, p);
       // Ombres : plus nombreuses selon la difficulté et les jours passés.
       if (g.difficulty === 'peaceful' || g.mode === 'creative') return;
       const dif = { easy: 0.6, normal: 1, hard: 1.5 }[g.difficulty] || 1;
@@ -1198,6 +1206,7 @@
       const r = this.rand(), bi = w.column(x, z).bi;
       // gluants : dans les marais, et tout au fond (sous y = 0)
       if ((bi === CM.BIO.SWAMP || bi === CM.BIO.MANGROVE || y < 0) && r < 0.3) return 'slime';
+      if (MOBS.witch && w.structures && r > 0.975) return 'witch'; // (rare) une sorcière rôde
       if (r < 0.42) return 'ombre';
       if (r < 0.62) return 'spider';
       if (r < 0.81) return 'skeleton';

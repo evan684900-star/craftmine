@@ -185,7 +185,7 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 5 }, (save && save.settings) || settings || {});
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 6 }, (save && save.settings) || settings || {});
       // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
       if (save && (save.v || 2) < 4) ws.gen = 1;
       this.settings = ws;
@@ -1361,6 +1361,7 @@
     }
     // Butin (déterministe) des coffres trouvés dans les ruines.
     fillLoot(slots, x, y, z) {
+      if (CM.Structures && CM.Structures.fillLoot(this, slots, x, y, z)) return; // donjon, puits de mine, temple
       const r = CM.rng((CM.hash3(x, y, z, this.world.seed + 999) * 4294967296) >>> 0);
       const I = CM.I;
       // coffre de forteresse du Nether
@@ -1979,6 +1980,7 @@
       if (net.isHost) this.updateOtherDims(dt);
       CM.Weather.update(this, dt);
       if (!net.isClient) CM.Potions.tick(this, dt); // alambics, balises
+      if (!net.isClient) CM.Structures.tick(this, dt); // générateurs de monstres
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -2066,6 +2068,7 @@
       CM.Comfort.updateCompass(this); // boussoles
       CM.Comfort.checkAch(this, rdtC); // succès
       CM.Comfort.updateHighlights(this, rdtC); // coffres trouvés
+      CM.Structures.render(this, rdtC); // fumée des générateurs
     }
   }
 

@@ -155,6 +155,7 @@ Plus de 80 commandes, **en solo comme en multijoueur** : ouvre le tchat (**T**, 
 | 🧰 **Tri et recherche** | Tri de l'inventaire et des coffres (piles regroupées, rangées par type) ; recherche d'un objet dans les coffres à 48 blocs (distance, direction, étincelles ; aussi pour les invités). |
 | 🏆 **Succès** | 31 succès (bannière, annonce aux autres joueurs, liste dans le Journal), sauvegardés par joueur. |
 | 🎨 **Apparence** | Peau, cheveux, haut, pantalon, cape : vus par les autres joueurs en multijoueur (et bras à l'écran). |
+| 🏚 **Structures** | (Mondes créés depuis cette version.) **Donjons** souterrains avec un **générateur de monstres** et des coffres ; **puits de mine** (galeries étayées, rails, torches, **toiles d'araignée** qui engluent, coffres, générateurs d'araignées) ; **temples du désert** (deux tours, salle au trésor à 4 coffres piégée par une plaque de pression et 9 TNT) ; **cabanes de sorcière** sur pilotis dans les marais. Chaque structure a son propre butin. **Sorcière** : garde ses distances, lance des potions (lenteur, poison, dégâts, faiblesse), boit pour se soigner. |
 | 🐾 **Créatures** | **Paisibles** : mouflon, sanglier, manchot, **poule** (plumes, plane en tombant), **vache** (cuir, viande), **lapin** (bonds, déserts et prairies), **cerf** (s'enfuit), **chèvre** (montagnes, sauts géants, charge si on la frappe), **chauve-souris** (grottes). **Neutre** : **loup** (taïgas, en meute : frappe-en un, toute la meute attaque). **Hostiles** (la nuit, dans le noir) : l'Ombre, **araignée** (grimpe aux murs, bondit, neutre le jour ; corde), **squelette** (archer, garde ses distances, prend feu au soleil ; flèches, poudre d'os), **rampant** (siffle puis explose ; **poudre à canon** : 5 + 4 sables = TNT), **gluant** (marais et profondeurs, se divise en 2 à 4 plus petits ; boules de slime). **Nether** : Ombre ardente et **cube de magma** (se divise ; **crème de magma** : 4 = bloc de magma). Le golem de fer défend les villages contre tous les monstres. `/invoquer` les fait apparaître. |
 | 🌑 **Les Ombres** | La nuit et dans les grottes sombres. Une vague apparaît à la tombée de la nuit ; leur nombre dépend de la difficulté et des jours passés. Elles brûlent au soleil et refusent d'entrer dans la lumière des torches. |
 | 🎨 **Mode créatif** | Vol, blocs infinis, minage instantané, onglet *Créatif* avec tous les blocs et objets (recherche + catégories). Changeable en pause > Options > Jeu. |
@@ -233,6 +234,8 @@ js/deco_defs.js   panneaux, tableaux (peints par le jeu), cadres, porte-armures,
 js/deco.js        décoration posée (partagée), texte des panneaux, juke-box et musique
 js/comfort_defs.js boussoles, carte, textures de l'apparence
 js/comfort.js     mini-carte, boussoles, mort, tri, recherche dans les coffres, succès, apparence
+js/structure_defs.js générateur de monstres, toile d'araignée, sorcière
+js/structures.js  donjons, puits de mine, temples du désert, cabanes de sorcière (génération, butin, générateurs)
 js/player.js      joueur : déplacements, faim, minage, combat, grappin, mode créatif…
 js/touch.js       contrôles tactiles : joystick, caméra au doigt, boutons
 js/net.js         multijoueur pair à pair : hôte, invités, synchronisation, tchat

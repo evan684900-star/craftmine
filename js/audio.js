@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
 
   A.init = function () {
@@ -323,6 +323,10 @@
         // cliquetis et sifflement montant
         for (let i = 0; i < 4; i++) tone(t + i * 0.05, 0.02, 'square', 2400 * pitch, 2000 * pitch, 0.03);
         tone(t + 0.22, 0.3, 'sine', 1500 * pitch, 2600 * pitch, 0.06, 0.02);
+        break;
+      case 'cackle':
+        // ricanement de sorcière : petits « hi-hi-hi » qui descendent
+        for (let i = 0; i < 4; i++) tone(t + i * 0.11, 0.08, 'square', (720 - i * 60) * pitch, (560 - i * 60) * pitch, 0.05);
         break;
       case 'paddle':
         noise(t, 0.25, 'lowpass', 700, 0.8, 0.1 * (opt.vol || 1), 250);
