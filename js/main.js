@@ -185,9 +185,12 @@
       $('load-fill').style.width = '0%';
       await new Promise((r) => setTimeout(r, 30));
       this.renderer.freeAll();
-      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 6 }, (save && save.settings) || settings || {});
+      const ws = Object.assign({ mode: 'survival', difficulty: 'normal', type: 'normal', biomeSize: 'normal', bonusChest: false, dayCycle: true, gen: 7 }, (save && save.settings) || settings || {});
       // monde créé avant la version 4 : on garde l'ancien relief (les bases restent intactes)
       if (save && (save.v || 2) < 4) ws.gen = 1;
+      else if (save && save.settings && save.settings.gen === undefined) ws.gen = 6; // (valeur de la version précédente)
+      // saisons : dans les mondes créés depuis leur ajout (règle /regle saisons pour les autres)
+      if (ws.seasons === undefined) ws.seasons = !save || (ws.gen || 2) >= 7;
       this.settings = ws;
       this.mode = ws.mode;
       this.difficulty = ws.difficulty;
@@ -448,6 +451,8 @@
           this.entities.update(dt);
           this.ticks.update(dt);
           CM.Raids.tick(this, dt);
+          CM.Seasons.tick(this, dt);
+          CM.Caves.tick(this, dt);
           this.growTimer -= dt;
           if (this.growTimer <= 0) {
             this.growTimer = 1;
@@ -1477,7 +1482,7 @@
         }
         // terre irriguée : pousse deux fois et demie plus vite
         const wet = CM.blocks[w.get(x, y - 1, z)].wet;
-        if (Math.random() > (wet ? 1 / 40 : 1 / 100)) continue;
+        if (Math.random() > (wet ? 1 / 40 : 1 / 100) * CM.Seasons.growth(this, x, y, z)) continue;
         if (w.skyAt(x, y, z) < 9 && w.blockLightAt(x, y, z) < 9) continue;
         this.growAt(x, y, z, false);
       }
@@ -1899,6 +1904,10 @@
         handCol: CM.Light.colorAt(this.world, Math.floor(cam[0]), Math.floor(cam[1]), Math.floor(cam[2])),
       };
       CM.Weather.env(this, env); // pluie, orage
+      const nowE = performance.now(), dtE = Math.min(0.2, Math.max(0, (nowE - (this.envT || nowE)) / 1000));
+      this.envT = nowE;
+      CM.Seasons.env(this, env, dtE); // saisons, aurores, étoiles filantes
+      CM.Caves.env(this, env); // obscurité (gardien aveugle)
       return env;
     }
 
@@ -1993,6 +2002,8 @@
       if (!net.isClient) CM.Potions.tick(this, dt); // alambics, balises
       if (!net.isClient) CM.Structures.tick(this, dt); // générateurs de monstres
       if (!net.isClient) CM.Raids.tick(this, dt); // patrouilles, raids, boss
+      if (!net.isClient) CM.Seasons.tick(this, dt); // neige de l'hiver, fonte au printemps
+      if (!net.isClient) CM.Caves.tick(this, dt); // hurleurs de sculk, gardien aveugle
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }

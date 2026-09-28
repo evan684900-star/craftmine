@@ -72,6 +72,7 @@
     out float vIsWater;
     out vec3 vCol;
     out float vFlick;
+    out vec2 vSeas;
     void main() {
       vec3 p = vec3(aPos.xyz) / 16.0 + uOffset;
       float uvp = float(aPos.w);
@@ -98,6 +99,9 @@
       vUV = vec3(u / 16.0, v / 16.0, layer);
       vCol = aCol == 0u ? vec3(1.0, 0.82, 0.58) : vec3(float((aCol >> 11) & 31u) / 31.0, float((aCol >> 5) & 63u) / 63.0, float(aCol & 31u) / 31.0);
       vFlick = (fl & 8) != 0 ? 1.0 : 0.0;
+      // saisons : feuillage (32) ou herbe (64), avec une teinte qui varie par bosquets
+      vec2 cell = floor(vec2(wp.x, wp.y) / 3.0 + vec2(p.y * 0.21));
+      vSeas = vec2((fl & 32) != 0 ? 1.0 : (fl & 64) != 0 ? 2.0 : 0.0, fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453));
       vLight = aData.xy / 255.0;
       vShade = aData.z / 255.0;
       vPos = p;
@@ -117,14 +121,33 @@
     in float vIsWater;
     in vec3 vCol;
     in float vFlick;
+    in vec2 vSeas;
+    uniform vec3 uSeason; // printemps, automne, hiver (0 à 1)
     out vec4 outColor;
     ${LIGHT_FN}
+    // Couleur du feuillage et de l'herbe selon la saison.
+    vec3 seasonTint(vec3 c) {
+      if (vSeas.x < 0.5 || uSeason.x + uSeason.y + uSeason.z < 0.001) return c;
+      float lum = dot(c, vec3(0.3, 0.59, 0.11));
+      bool leaf = vSeas.x < 1.5;
+      vec3 spr = c * (leaf ? vec3(1.0, 1.14, 0.8) : vec3(1.02, 1.1, 0.84));
+      vec3 pal = vSeas.y < 0.3 ? vec3(1.0, 0.8, 0.22) : vSeas.y < 0.55 ? vec3(1.0, 0.58, 0.14) : vSeas.y < 0.85 ? vec3(0.95, 0.36, 0.1) : vec3(0.72, 0.2, 0.12);
+      vec3 aut = leaf ? pal * lum * 2.2 : mix(c, vec3(0.8, 0.68, 0.32) * lum * 1.9, 0.5);
+      // (hiver : givre pâle et bleuté sur les feuilles et l'herbe)
+      vec3 frost = vec3(0.86, 0.9, 0.96) * (0.45 + lum * 0.9);
+      vec3 win = leaf ? mix(mix(vec3(lum) * vec3(0.8, 0.86, 0.8), frost, 0.55), c, 0.2) : mix(c, frost, 0.5);
+      // (sous terre, loin du ciel : pas de saison)
+      float o = smoothstep(0.08, 0.35, vLight.x);
+      vec3 r = mix(c, spr, uSeason.x * o);
+      r = mix(r, aut, uSeason.y * o);
+      return mix(r, win, uSeason.z * o);
+    }
     void main() {
       vec2 uv = vUV.xy;
       if (vIsWater > 0.5) uv += vec2(uTime * 0.015, uTime * 0.03);
       vec4 tex = texture(uTex, vec3(uv, vUV.z));
       if (uWater < 0.5 && tex.a < 0.5) discard;
-      vec3 col = tex.rgb * shadeLight(vLight, vPos, vCol, vFlick) * vShade;
+      vec3 col = seasonTint(tex.rgb) * shadeLight(vLight, vPos, vCol, vFlick) * vShade;
       col = applyFog(col, vPos);
       outColor = vec4(col, uWater > 0.5 ? (vIsWater > 0.5 ? 0.78 : tex.a) : 1.0);
     }`;
@@ -218,6 +241,10 @@
     uniform vec3 uFlatSky;
     uniform float uClouds;
     uniform float uRain; // pluie, orage : ciel couvert
+    uniform float uAurora; // aurores boréales (0 à 1)
+    uniform vec3 uMeteorA; // étoile filante : départ, arrivée, avancement (0 à 1, < 0 : aucune)
+    uniform vec3 uMeteorB;
+    uniform float uMeteorT;
     in vec2 vNdc;
     out vec4 outColor;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -267,6 +294,34 @@
             col = mix(col, cc, 0.85 * fade);
           }
         }
+      }
+      // aurores boréales : rideaux verts et violets qui ondulent, surtout vers le nord
+      if (uAurora > 0.01 && h > 0.02) {
+        vec3 acc = vec3(0.0);
+        for (int i = 0; i < 14; i++) {
+          // couches superposées : projetées sur des plans de plus en plus hauts, elles forment des rideaux
+          float fi = float(i) / 14.0;
+          vec2 q = dir.xz / h * (1.0 + fi * 0.6);
+          float wave = sin(q.x * 0.9 + uTime * 0.1 + sin(q.x * 0.4 - uTime * 0.05) * 1.8) * 0.45 + sin(q.x * 2.7 + uTime * 0.25) * 0.08;
+          float dl = abs(q.y + 1.5 - wave);
+          float band = exp(-dl * dl * 7.0) * (0.55 + 0.45 * sin(q.x * 6.0 + uTime * 0.7 + fi * 3.0));
+          vec3 c = mix(vec3(0.15, 1.0, 0.5), vec3(0.65, 0.25, 1.0), fi * fi);
+          acc += c * band * (1.0 - fi) * 0.13;
+        }
+        col += acc * uAurora * smoothstep(0.03, 0.2, h) * (1.0 - uRain);
+      }
+      // étoile filante : une traînée qui s'efface derrière elle
+      if (uMeteorT > 0.0 && uMeteorT < 1.0 && h > 0.0) {
+        vec3 hd = normalize(mix(uMeteorA, uMeteorB, uMeteorT));
+        vec3 tl = normalize(mix(uMeteorA, uMeteorB, max(0.0, uMeteorT - 0.22)));
+        vec3 ab = hd - tl;
+        float k = clamp(dot(dir - tl, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+        float dd = length(dir - (tl + ab * k));
+        float wdt = 0.0018 + 0.0042 * k * k;
+        float fade = sin(uMeteorT * 3.14159) * uNight * (1.0 - uRain);
+        col += vec3(1.0, 0.95, 0.85) * (smoothstep(wdt, 0.0, dd) * 1.8 + exp(-dd * 260.0) * 0.35) * k * fade;
+        // tête plus brillante
+        col += vec3(1.0, 0.98, 0.9) * exp(-length(dir - hd) * 600.0) * 1.5 * fade;
       }
       // sous l'eau, dans la lave, dans le Nether : ciel uni
       if (uUnderwater > 0.5) col = uFlatSky;
@@ -658,6 +713,13 @@
       if (env.flatSky) gl.uniform3fv(su.uFlatSky, env.flatSky);
       gl.uniform1f(su.uClouds, this.clouds ? 1 : 0);
       if (su.uRain) gl.uniform1f(su.uRain, env.rain || 0);
+      gl.uniform1f(su.uAurora, env.aurora || 0);
+      const mt = env.meteor;
+      gl.uniform1f(su.uMeteorT, mt ? mt.t : -1);
+      if (mt) {
+        gl.uniform3fv(su.uMeteorA, mt.a);
+        gl.uniform3fv(su.uMeteorB, mt.b);
+      }
       gl.bindVertexArray(this.skyVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.depthMask(true);
@@ -675,6 +737,7 @@
       gl.uniform1f(cp.u.uTime, env.time);
       gl.uniform1f(cp.u.uWater, 0);
       gl.uniform1f(cp.u.uWaving, CM.Mesher.opts.waving ? 1 : 0);
+      gl.uniform3fv(cp.u.uSeason, env.season || [0, 0, 0]);
       gl.uniform2f(cp.u.uWaveOrigin, cam[0] % ((2 * Math.PI * 1000) / 1.3), cam[2] % ((2 * Math.PI * 1000) / 1.1));
       let drawn = 0, quads = 0;
       const waterList = [];

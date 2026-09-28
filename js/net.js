@@ -558,7 +558,7 @@
       const s = this.game.settings || {};
       return {
         pvp: this.rules.pvp, keep: !!this.game.options.keepInventory, cmds: !!this.rules.cmds,
-        fallDamage: s.fallDamage !== false, hunger: s.hunger !== false, mobSpawn: s.mobSpawn !== false,
+        fallDamage: s.fallDamage !== false, hunger: s.hunger !== false, mobSpawn: s.mobSpawn !== false, seasons: s.seasons === true,
       };
     }
     applyRules(r) {
@@ -568,6 +568,7 @@
       this.rules.cmds = !!r.cmds;
       // règles de la partie (/regle) qui jouent chez l'invité
       for (const k of ['fallDamage', 'hunger', 'mobSpawn']) this.rules[k] = r[k] !== false;
+      this.rules.seasons = r.seasons === true;
     }
     // Hôte : réglages du monde modifiés (mode, difficulté, règles).
     sendCfg() {
@@ -1417,6 +1418,8 @@
         }
       } else if (m.k === 'slam' || m.k === 'lvup' || m.k === 'totem') {
         if (d < 64 && CM.Raids) CM.Raids.onFx(g, m);
+      } else if (m.k === 'shriek' || m.k === 'sonic' || m.k === 'emerge') {
+        if (d < 64 && CM.Caves) CM.Caves.onFx(g, m);
       } else if (m.k === 'love') {
         if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }

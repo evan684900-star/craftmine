@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh', 'warden']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant', 'vlevel']);
 
   A.init = function () {
@@ -346,6 +346,24 @@
         // le totem se brise : éclat puis carillon qui monte
         noise(t, 0.3, 'highpass', 2500, 0.7, 0.2);
         for (let i = 0; i < 6; i++) tone(t + 0.08 + i * 0.07, 0.35, 'triangle', 520 * 1.26 ** i, 0, 0.09);
+        break;
+      case 'warden':
+        // gardien aveugle : grondement grave et battement de cœur
+        tone(t, 0.9, 'sawtooth', 55 * pitch, 42 * pitch, 0.12, 0.15);
+        noise(t, 0.9, 'lowpass', 220 * pitch, 1.2, 0.1);
+        tone(t + 0.1, 0.12, 'sine', 70, 40, 0.3);
+        tone(t + 0.42, 0.12, 'sine', 70, 40, 0.24);
+        break;
+      case 'shriek':
+        // hurleur de sculk : cri strident qui monte et tremble
+        for (let i = 0; i < 3; i++) tone(t + i * 0.05, 1.4, 'sawtooth', 700 + i * 90, 1500 + i * 120, 0.05 * (opt.vol || 1), 0.1);
+        noise(t, 1.3, 'bandpass', 2400, 3, 0.07 * (opt.vol || 1), 3800);
+        break;
+      case 'sonic':
+        // onde sonique : souffle qui enfle puis claque
+        noise(t, 0.5, 'lowpass', 300, 1, 0.3, 2000);
+        tone(t + 0.35, 0.6, 'sine', 180, 40, 0.4);
+        noise(t + 0.35, 0.5, 'highpass', 900, 0.8, 0.3);
         break;
       case 'vlevel':
         // villageois qui progresse

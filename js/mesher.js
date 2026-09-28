@@ -89,6 +89,9 @@
   const OPQ = new Uint8Array(65536); // cube plein opaque (cache les faces voisines)
   const SHAPE_H = new Uint8Array(65536); // hauteur (1/16) des blocs partiels opaques (dalles, tapis)
   const WAVE = new Uint8Array(65536); // ondule au vent
+  const SEAS = new Uint8Array(65536); // saisons : feuillage (32) ou herbe (64), toutes les faces
+  const SEAS_TOP = new Uint8Array(65536); // saisons : dessus seulement (blocs d'herbe)
+  let WETM = null; // eau, et plantes aquatiques (coraux…) : pas de face d'eau entre elles
   const ORIENT = new Uint8Array(65536); // orientation (+1) des blocs tournés : textures pivotées
   let LAYERS = null; // couches de texture par bloc et par face
   // Rotation des coordonnées de texture (quarts de tour autour du centre).
@@ -162,6 +165,17 @@
       for (const b of CM.blocks) if (b && b.light >= 6 && !b.portal && b.render !== 'water' && b.render !== 'lava') EMIT[b.id] = 1;
       ANIM.fill(0);
       for (const b of CM.blocks) if (b && b.animTex) ANIM[b.id] = 16;
+      // saisons : feuillus (pas les conifères ni les arbres étranges), herbe, hautes herbes
+      SEAS.fill(0);
+      SEAS_TOP.fill(0);
+      for (const b of CM.blocks) {
+        if (!b) continue;
+        if (/LEAVES$/.test(b.key) && !/SPRUCE|CRYSTAL|CRIMSON|WARPED|AZALEA|CHERRY/.test(b.key)) SEAS[b.id] = 32;
+        else if (b.key === 'TALLGRASS' || b.key === 'FERN') SEAS[b.id] = 64;
+        else if (b.key === 'GRASS' || b.key === 'LUSH_GRASS' || b.key === 'SWAMP_GRASS') SEAS_TOP[b.id] = 64;
+      }
+      WETM = new Uint8Array(CM.WATERY);
+      for (const b of CM.blocks) if (b && b.wet && b.id < WETM.length) WETM[b.id] = 1;
       SPECIAL.dust = [L.rs_dust_line, L.rs_dust_dot, L.rs_dust_cross];
       SPECIAL.bedrock = [0, 0, 0, 0, 0, 0].map(() => L.bedrock);
       CM.blockLayers = LAYERS;
@@ -310,13 +324,14 @@
     if (count === 0) return { opaque: null, water: null, emit: null };
     const emit = [];
     const defs = CM.blocks;
-    const WATERY = CM.WATERY;
+    const WATERY = WETM || CM.WATERY;
     const waving = opts.waving;
     // hauteur de la surface d'une case d'eau (en 1/16) : pleine sous de l'eau ou de la glace,
     // 14 pour une source ou une chute, de plus en plus basse en s'éloignant de la source
     const wTop = (pp) => {
       const ab = padId[pp + PP];
       if (ab !== BORDER && (WATERY[ab] === WATERY[padId[pp]] || (defs[ab] && defs[ab].render === 'tglass'))) return 16;
+      if (defs[padId[pp]].wet) return 16; // (plante aquatique : comme de l'eau pleine)
       const l = defs[padId[pp]].level;
       return l === 0 || l === 8 ? 14 : Math.max(2, 14 - Math.round(l * 1.6));
     };
@@ -344,7 +359,7 @@
                 const k = ROTK[fi * 6 + ORIENT[id] - 1];
                 if (k) for (let q = 0; q < 4; q++) rotUV(vs[q], k);
               }
-              emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3], wflag);
+              emitQuad(opaqueBuf, layers[fi], ao4[0] + ao4[2] < ao4[1] + ao4[3], wflag | SEAS[id] | (fi === 2 ? SEAS_TOP[id] : 0));
             }
           } else if (r === 'slab' || r === 'carpet') {
             const layers = LAYERS[id];
@@ -448,7 +463,7 @@
             }
             const layer = LAYERS[id][0];
             const a = 2, c = 14;
-            const pf = wflag ? 5 : 0; // plante : ondule, pied fixe
+            const pf = (wflag ? 5 : 0) | SEAS[id]; // plante : ondule, pied fixe
             crossQuad(bx + a, bz + a, bx + c, bz + c, by, layer, pf);
             crossQuad(bx + c, bz + a, bx + a, bz + c, by, layer, pf);
           } else if (r === 'door') {

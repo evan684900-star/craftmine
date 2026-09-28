@@ -1313,6 +1313,7 @@
     apparition_creatures: ['mobSpawn', 'setting', 'les créatures apparaissent'],
     degats_chute: ['fallDamage', 'setting', 'les chutes font mal'],
     faim: ['hunger', 'setting', 'la faim baisse'],
+    saisons: ['seasons', 'setting', 'les saisons passent (printemps, été, automne, hiver)'],
     pvp: ['pvp', 'net', 'combats entre joueurs'],
     triches_invites: ['cmds', 'net', 'les invités peuvent utiliser les triches'],
   };
@@ -1427,6 +1428,23 @@
       if (!v) bad('Aucun village à proximité');
       R.start(g, v);
       o.ok('⚔ Raid lancé sur le village (' + v.x + ', ' + v.z + ')');
+    },
+  });
+  def('saison season', {
+    cat: 'Monde', cheat: true, usage: '[printemps | ete | automne | hiver]', desc: 'la saison en cours (ou passe à une autre saison)',
+    args: [() => ['printemps', 'ete', 'automne', 'hiver']],
+    run(ctx, a, o) {
+      const g = G(), S = CM.Seasons;
+      if (!S.on(g)) bad('Les saisons sont désactivées (/regle saisons on)');
+      if (!a[0]) {
+        const st = S.state(g);
+        return o.info(S.ICONS[st.i] + ' ' + S.NAMES[st.i] + ' (jour ' + st.day + ' sur ' + S.LEN + ')');
+      }
+      const i = ['printemps', 'ete', 'automne', 'hiver'].findIndex((k) => k.startsWith(norm(a[0]).slice(0, 3)));
+      if (i < 0) bad('Saison inconnue : « ' + a[0] + ' » (printemps, ete, automne, hiver)');
+      g.dayCount = Math.floor(g.dayCount / (S.LEN * 4)) * S.LEN * 4 + i * S.LEN;
+      if (g.net.isHost) g.net.broadcast({ t: 'time', ti: g.time, d: g.dayCount, l: g.dayLen });
+      broadcastLine(S.ICONS[i] + ' Place au ' + (i === 1 ? 'l’été' : i === 2 ? 'l’automne' : i === 3 ? 'l’hiver' : 'printemps') + by(ctx), 'ok');
     },
   });
   def('foudre lightning eclair smite', {
