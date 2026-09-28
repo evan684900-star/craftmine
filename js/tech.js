@@ -55,13 +55,13 @@
     const g = rs.g, w = rs.w, t = b.tech;
     switch (t.gen) {
       case 'solar': {
-        if (g.dim === 'nether' || w.skyAt(x, y + 1, z) < 15) return 0;
+        if (g.dim !== 'overworld' || w.skyAt(x, y + 1, z) < 15) return 0;
         return t.max * Math.max(0, Math.min(1, (g.daylight - 0.2) / 0.8));
       }
       case 'water':
         return Math.min(t.max, waterAround(w, x, y, z, b.rs.axis) * 2.5);
       case 'wind':
-        if (g.dim === 'nether' || w.skyAt(x, y + 1, z) < 15) return 0;
+        if (g.dim !== 'overworld' || w.skyAt(x, y + 1, z) < 15) return 0;
         return windOf(y);
       case 'geo': {
         let n = 0;
@@ -323,9 +323,9 @@
     s.movers = movers;
     // données de blocs disparus
     if (g.techData && rs.gt % 200 === 0) {
-      const pre = g.dim === 'nether' ? 'N' : '';
+      const pre = CM.dimPre(g.dim);
       for (const k of Object.keys(g.techData)) {
-        const own = pre ? k[0] === 'N' : k[0] !== 'N';
+        const own = CM.dimPre(CM.dimOfKey(k)) === pre;
         if (own && !rs.watch.tech.has(pre ? k.slice(1) : k)) delete g.techData[k];
       }
     }
@@ -751,7 +751,7 @@
             else batch.box(M, -0.05, 0.22, -0.36, 0.05, 0.98, 0.36, L.wheel_paddle, l[0], l[1], 0);
           }
         } else if (b.anim === 'wind') {
-          const f = b.rs.facing, open = g.dim !== 'nether' && w.skyAt(x, y + 1, z) >= 15;
+          const f = b.rs.facing, open = g.dim === 'overworld' && w.skyAt(x, y + 1, z) >= 15;
           const spin = open ? t * windOf(y) * 0.45 : 0;
           const ry = f === 4 ? 0 : f === 5 ? Math.PI : f === 0 ? Math.PI / 2 : -Math.PI / 2;
           for (let i = 0; i < 3; i++) {

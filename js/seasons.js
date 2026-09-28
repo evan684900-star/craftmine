@@ -45,7 +45,7 @@
   S.winter = (g) => S.on(g) && S.state(g).w[3] > 0.5;
   // Pousse des cultures selon la saison (l'hiver, une serre éclairée pousse normalement).
   S.growth = function (g, x, y, z) {
-    if (!S.on(g) || g.world.nether) return 1;
+    if (!S.on(g) || g.dim !== 'overworld') return 1;
     const w = S.state(g).w;
     const f = w[0] * 1.5 + w[1] + w[2] * 0.8 + w[3] * 0.35;
     if (w[3] > 0.5 && g.world.blockLightAt(x, y, z) >= 9) return 1;
@@ -56,7 +56,7 @@
   const cold0 = CM.Weather.cold;
   CM.Weather.cold = function (g, x, z) {
     if (cold0(g, x, z)) return true;
-    if (!S.winter(g) || g.world.nether) return false;
+    if (!S.winter(g) || g.world.nether || g.world.end) return false;
     sets();
     return TEMPERATE.has(g.world.column(Math.floor(x), Math.floor(z)).bi);
   };
@@ -64,7 +64,7 @@
   // ---------------------------------------------------- neige (hôte) --
   // L'hiver, par temps de neige, elle recouvre le sol autour des joueurs ; au printemps, elle fond.
   S.tick = function (g, dt) {
-    if (!S.on(g) || g.world.nether || g.dim !== 'overworld') return;
+    if (!S.on(g) || g.dim !== 'overworld') return;
     S.snowT -= dt;
     if (S.snowT > 0) return;
     S.snowT = 0.5;
@@ -102,13 +102,13 @@
   // Teinte des feuillages, aurores boréales, étoiles filantes : pour le rendu.
   S.env = function (g, env, dt) {
     const w = g.world, p = g.player;
-    const on = S.on(g) && !w.nether;
+    const on = S.on(g) && !w.nether && !w.end;
     const st = on ? S.state(g) : null;
     env.season = st ? [st.w[0], st.w[2], st.w[3]] : [0, 0, 0];
     // aurores : biomes froids ; l'hiver partout (plus pâles)
     sets();
     let want = 0;
-    if (!w.nether && env.night > 0.5 && !(env.rain > 0.3)) {
+    if (!w.nether && !w.end && env.night > 0.5 && !(env.rain > 0.3)) {
       const bi = w.column(Math.floor(p.x), Math.floor(p.z)).bi;
       want = COLD.has(bi) ? 1 : st ? st.w[3] * 0.75 : 0;
       want *= CM.smoothstep(0.5, 0.9, env.night);
@@ -117,7 +117,7 @@
     env.aurora = S.aurora;
     // étoiles filantes (plus nombreuses l'été)
     env.meteor = null;
-    if (!w.nether && env.night > 0.7 && !(env.rain > 0.3)) {
+    if (!w.nether && !w.end && env.night > 0.7 && !(env.rain > 0.3)) {
       if (S.meteor) {
         S.meteor.t += dt / S.meteor.len;
         if (S.meteor.t >= 1) S.meteor = null;

@@ -11,6 +11,18 @@ CM.smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+// Dimensions : monde normal (0), Nether (1), End (2).
+CM.DIMS = ['overworld', 'nether', 'end'];
+CM.dimId = (d) => Math.max(0, CM.DIMS.indexOf(d));
+CM.dimName = (i) => CM.DIMS[i | 0] || 'overworld';
+CM.isDim = (d) => CM.DIMS.includes(d);
+// préfixe des clés de blocs (« N12,40,-3 » : dans le Nether, « E… » : dans l'End)
+CM.dimPre = (d) => (d === 'nether' ? 'N' : d === 'end' ? 'E' : '');
+CM.dimOfKey = (k) => (k[0] === 'N' ? 'nether' : k[0] === 'E' ? 'end' : 'overworld');
+CM.keyXYZ = (k) => (k[0] === 'N' || k[0] === 'E' ? k.slice(1) : k).split(',').map(Number);
+CM.dimLabel = (d) => (d === 'nether' ? 'le Nether' : d === 'end' ? 'l’End' : 'le monde normal');
+CM.dimTag = (d) => (d === 'nether' ? ' (Nether)' : d === 'end' ? ' (End)' : '');
+
 // Générateur pseudo-aléatoire déterministe (mulberry32).
 CM.rng = function (seed) {
   let a = seed >>> 0;

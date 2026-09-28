@@ -43,7 +43,7 @@
       if (g.net && g.net.isHost) g.net.broadcast({ t: 'wx', w: s.type, d: Math.round(s.t), n: natural ? 1 : 0 });
     },
     announce(g, type) {
-      if (!g.world || g.world.nether || !g.player) return;
+      if (!g.world || (g.world.nether || g.world.end) || !g.player) return;
       const snow = type !== 'clear' && W.cold(g, g.player.x, g.player.z);
       const msg = type === 'thunder' ? '⛈ Un orage éclate !' : type === 'rain' ? (snow ? '🌨 Il commence à neiger' : '🌧 Il commence à pleuvoir') : '☀ Le beau temps revient';
       g.ui.toast(msg, 'info', 'weather');
@@ -59,7 +59,7 @@
     },
     update(g, dt) {
       const s = W.state(g), net = g.net;
-      const wet = !g.world.nether && s.type !== 'clear';
+      const wet = !(g.world.nether || g.world.end) && s.type !== 'clear';
       g.wLevel = (g.wLevel || 0) + ((wet ? 1 : 0) - (g.wLevel || 0)) * Math.min(1, dt * 0.9);
       g.wDark = (g.wDark || 0) + ((s.type === 'thunder' ? 1 : s.type === 'rain' ? 0.6 : g.wDark || 0) - (g.wDark || 0)) * Math.min(1, dt);
       g.flash = Math.max(0, (g.flash || 0) - dt * 2.5);
@@ -74,7 +74,7 @@
           }
         } else if (W.auto(g)) s.t = W.natural(s.type);
         // orage : un éclair de temps en temps près d'un joueur
-        if (s.type === 'thunder' && !g.world.nether) {
+        if (s.type === 'thunder' && !(g.world.nether || g.world.end)) {
           g.boltT = (g.boltT === undefined ? 6 : g.boltT) - dt;
           if (g.boltT <= 0) {
             g.boltT = 4 + Math.random() * 12;
@@ -133,7 +133,7 @@
     },
     // Ciel plus sombre et plus gris, brume plus proche ; flash des éclairs.
     env(g, env) {
-      const k = g.world.nether ? 0 : g.wLevel || 0;
+      const k = (g.world.nether || g.world.end) ? 0 : g.wLevel || 0;
       env.rain = k;
       if (k > 0.001 && !env.underwater && !env.flatSky) {
         const dark = 0.3 + 0.3 * (g.wDark || 0);
@@ -146,7 +146,7 @@
         env.fog = [env.fog[0] * (1 - 0.55 * k), env.fog[1] * (1 - 0.3 * k)];
       }
       const f = g.flash || 0;
-      if (f > 0.01 && !g.world.nether) {
+      if (f > 0.01 && !(g.world.nether || g.world.end)) {
         env.day = Math.min(1.2, env.day + f * 0.9);
         env.zenith = mix(env.zenith, [0.85, 0.88, 1], f * 0.7);
         env.horizon = mix(env.horizon, [0.85, 0.88, 1], f * 0.6);
@@ -154,7 +154,7 @@
     },
     // Gouttes (ou flocons) autour de la caméra, arrêtées par ce qui les couvre ; éclairs.
     render(g, batch, cam) {
-      const k = g.world.nether ? 0 : g.wLevel || 0;
+      const k = (g.world.nether || g.world.end) ? 0 : g.wLevel || 0;
       const L = CM.Textures.layer;
       if (k > 0.03) {
         const w = g.world, cx = Math.floor(cam[0]), cz = Math.floor(cam[2]), cy = cam[1], t = g.clock;

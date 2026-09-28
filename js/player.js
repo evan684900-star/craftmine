@@ -527,6 +527,13 @@
         if (!inPortal) this.portalLock = false;
         this.portalT = Math.max(0, (this.portalT || 0) - dt * 2);
       }
+      // portail de l'End : on y tombe, on part aussitôt
+      const inEnd = !g.switching && this.touching((b) => b.endPortal);
+      // (invité : si l'hôte n'a pas encore vu qu'on était dans le portail, on redemande)
+      if (inEnd && (!this.endLock || (g.net.isClient && g.clock - this.endLock > 1.5))) {
+        this.endLock = g.clock || 1e-3;
+        g.enterEnd(Math.floor(this.x), Math.floor(this.y + 0.2), Math.floor(this.z));
+      } else if (!inEnd) this.endLock = false;
 
       // lampe torche allumée : elle se décharge doucement (une unité toutes les 3 s)
       for (const fl of [g.inventory.held(), g.inventory.offhand]) {
@@ -1163,6 +1170,7 @@
         g.ui.toast(ef.icon + ' ' + ef.name + (info.potion.l > 1 ? ' II' : '') + (info.potion.t ? ' (' + Math.floor(info.potion.t / 60) + ':' + String(info.potion.t % 60).padStart(2, '0') + ')' : ''), 'gold', 'potion');
       }
       if (info.eatEffect) CM.Effects.add(this, info.eatEffect[0], info.eatEffect[1], info.eatEffect[2]);
+      if (info.chorus && CM.End) CM.End.chorusHop(this); // fruit de chorus : on est téléporté un peu plus loin
       this.consume(1);
       // fiole bue : on garde la fiole vide
       if (info.drinkBottle && !this.creative) {
@@ -1564,6 +1572,11 @@
         if (input.pressed.mouse2) CM.Weapons.useRocket(this);
         return;
       }
+      // perle de l'Arpenteur (lancer : téléportation), œil de l'End (lancer, ou dans un cadre de portail)
+      if (info.type === 'pearl' || info.type === 'eye') {
+        if (input.pressed.mouse2) CM.End.use(this, info, t);
+        return;
+      }
       // canne à pêche : lancer / ferrer
       if (info.type === 'rod') {
         if (input.pressed.mouse2) CM.Fishing.use(this);
@@ -1963,8 +1976,8 @@
 
     respawn() {
       const g = this.game, w = g.world;
-      // mort dans le Nether : comme dans Minecraft, retour au monde normal (lit ou départ)
-      if (g.dim === 'nether') {
+      // mort dans le Nether ou l'End : comme dans Minecraft, retour au monde normal (lit ou départ)
+      if (g.dim !== 'overworld') {
         const rs = g.respawnPoint();
         g.ui.hideDeath();
         this.reset({ x: rs.x, y: rs.y, z: rs.z });

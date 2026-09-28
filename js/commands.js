@@ -553,7 +553,7 @@
     cat: 'Infos', local: true, usage: '', desc: 'ta position, ta direction, le biome et la dimension',
     run(ctx, a, o) {
       const g = G(), w = g.world;
-      o.info('📍 X ' + r1(ctx.x) + ' · Y ' + r1(ctx.y) + ' · Z ' + r1(ctx.z) + ' — ' + face(facing(ctx.yaw)) + ' — ' + w.biomeName(ctx.x, ctx.z) + ' — ' + (ctx.dim === 'nether' ? 'Nether' : 'monde normal') + ' — tronçon ' + Math.floor(ctx.x / 16) + ', ' + Math.floor(ctx.z / 16));
+      o.info('📍 X ' + r1(ctx.x) + ' · Y ' + r1(ctx.y) + ' · Z ' + r1(ctx.z) + ' — ' + face(facing(ctx.yaw)) + ' — ' + w.biomeName(ctx.x, ctx.z) + ' — ' + (ctx.dim === 'nether' ? 'Nether' : ctx.dim === 'end' ? 'End' : 'monde normal') + ' — tronçon ' + Math.floor(ctx.x / 16) + ', ' + Math.floor(ctx.z / 16));
     },
   });
   def('graine seed', {
@@ -581,7 +581,7 @@
     cat: 'Infos', local: true, usage: '', desc: 'les joueurs connectés',
     run(ctx, a, o) {
       const ps = players();
-      o.info('👥 ' + plural(ps.length, 'joueur') + ' : ' + ps.map((q) => q.name + (q.dim === 'nether' ? ' (Nether)' : '') + (q.alive === false ? ' 💀' : '')).join(', '));
+      o.info('👥 ' + plural(ps.length, 'joueur') + ' : ' + ps.map((q) => q.name + CM.dimTag(q.dim) + (q.alive === false ? ' 💀' : '')).join(', '));
     },
   });
   def('stats statistiques', {
@@ -1183,7 +1183,7 @@
     cat: 'Déplacement', local: true, usage: '', desc: 'liste tes maisons',
     run(ctx, a, o) {
       const h = homes(), k = Object.keys(h);
-      o.info(k.length ? '🏡 ' + k.map((n) => n + ' (' + Math.floor(h[n][0]) + ' ' + Math.floor(h[n][1]) + ' ' + Math.floor(h[n][2]) + (h[n][3] === 'nether' ? ', Nether' : '') + ')').join(', ') : 'Aucune maison');
+      o.info(k.length ? '🏡 ' + k.map((n) => n + ' (' + Math.floor(h[n][0]) + ' ' + Math.floor(h[n][1]) + ' ' + Math.floor(h[n][2]) + (h[n][3] === 'nether' ? ', Nether' : h[n][3] === 'end' ? ', End' : '') + ')').join(', ') : 'Aucune maison');
     },
   });
   def('suppmaison delhome', {
@@ -1204,6 +1204,13 @@
       o.ok('🌀 Direction le Nether');
     },
   });
+  def('end', {
+    cat: 'Déplacement', cheat: true, usage: '', desc: 'voyage dans l’End (sur la plateforme d’obsidienne)',
+    run(ctx, a, o) {
+      travel(ctx, 'end');
+      o.ok('🌀 Direction l’End');
+    },
+  });
   def('monde overworld surface_normale', {
     cat: 'Déplacement', cheat: true, usage: '', desc: 'retour au monde normal',
     run(ctx, a, o) {
@@ -1212,12 +1219,17 @@
     },
   });
   function travel(ctx, to) {
-    const g = G(), net = g.net;
-    if (ctx.dim === to) bad(to === 'nether' ? 'Tu es déjà dans le Nether' : 'Tu es déjà dans le monde normal');
-    if (ctx.self) g.changeDim(to, { from: [Math.floor(ctx.x), Math.floor(ctx.y), Math.floor(ctx.z)] });
+    const g = G(), net = g.net, sp = g.worlds.overworld.spawn;
+    if (ctx.dim === to) bad('Tu es déjà dans ' + CM.dimLabel(to));
+    // l'End : arrivée sur la plateforme ; en le quittant : au point de départ du monde
+    let opts;
+    if (to === 'end') opts = {};
+    else if (ctx.dim === 'end') opts = to === 'overworld' ? { at: { x: sp.x, y: sp.y, z: sp.z } } : { from: [Math.floor(sp.x), Math.floor(sp.y), Math.floor(sp.z)] };
+    else opts = { from: [Math.floor(ctx.x), Math.floor(ctx.y), Math.floor(ctx.z)] };
+    if (ctx.self) g.changeDim(to, opts);
     else {
       const e = net.links.get(ctx.pid);
-      if (e) net.travelGuest(e, to, { from: [Math.floor(ctx.x), Math.floor(ctx.y), Math.floor(ctx.z)] });
+      if (e) net.travelGuest(e, to, opts);
     }
   }
 

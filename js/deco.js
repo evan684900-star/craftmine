@@ -8,7 +8,7 @@
   const mat4 = CM.mat4;
   const TAU = Math.PI * 2;
   const r2 = (v) => Math.round(v * 100) / 100;
-  const key = (dim, x, y, z) => (dim === 'nether' ? 'N' : '') + x + ',' + y + ',' + z;
+  const key = (dim, x, y, z) => CM.dimPre(dim) + x + ',' + y + ',' + z;
   const clean = (s) =>
     String(s || '')
       .replace(/[\u0000-\u001f<>]/g, '')
@@ -55,7 +55,7 @@
         case 'add': {
           const e = o.e;
           if (!e || !['p', 'f', 's'].includes(e.t) || !Number.isFinite(e.u) || s.items.some((q) => q.u === e.u)) return false;
-          const it = { u: e.u, t: e.t, d: e.d === 'nether' ? 'nether' : 'overworld', x: e.x | 0, y: e.y | 0, z: e.z | 0 };
+          const it = { u: e.u, t: e.t, d: CM.isDim(e.d) ? e.d : 'overworld', x: e.x | 0, y: e.y | 0, z: e.z | 0 };
           if (e.t === 'p') {
             const p = CM.PAINTINGS.find((q) => q.k === e.a);
             if (!p || !Array.isArray(e.n)) return false;
@@ -388,7 +388,7 @@
     },
     // Planche du panneau : centre, normale (vers le lecteur), droite.
     signFrame(k, s) {
-      const [x, y, z] = k.replace(/^N/, '').split(',').map(Number);
+      const [x, y, z] = CM.keyXYZ(k);
       if (s.r !== undefined) {
         const a = (s.r * TAU) / 16, n = [Math.sin(a), Math.cos(a)];
         return { c: [x + 0.5, y + 0.78, z + 0.5], n, stand: true };
@@ -401,10 +401,10 @@
     render(g, batch) {
       const s = g.deco;
       if (!s) return;
-      const ents = g.entities, L = CM.Textures.layer, M = ents.M, p = g.player, pre = g.playerDim === 'nether' ? 'N' : '';
+      const ents = g.entities, L = CM.Textures.layer, M = ents.M, p = g.player, pre = CM.dimPre(g.playerDim);
       // panneaux
       for (const k in s.signs) {
-        if ((k[0] === 'N') !== (pre === 'N')) continue;
+        if (CM.dimPre(CM.dimOfKey(k)) !== pre) continue;
         const f = D.signFrame(k, s.signs[k]);
         if (Math.abs(f.c[0] - p.x) > 64 || Math.abs(f.c[2] - p.z) > 64) continue;
         const l = ents.lightAt(f.c[0] + f.n[0] * 0.6, f.c[1], f.c[2] + f.n[1] * 0.6);
@@ -483,10 +483,10 @@
       D.pool = D.pool || [];
       const s = g.deco, vp = g.renderer.viewProj, W = g.canvas.clientWidth, H = g.canvas.clientHeight, w = g.world;
       let n = 0;
-      const pre = g.playerDim === 'nether' ? 'N' : '';
+      const pre = CM.dimPre(g.playerDim);
       if (s && g.state === 'playing')
         for (const k in s.signs) {
-          if ((k[0] === 'N') !== (pre === 'N') || n >= 24) continue;
+          if (CM.dimPre(CM.dimOfKey(k)) !== pre || n >= 24) continue;
           const sg = s.signs[k];
           if (!sg.l.some((x) => x)) continue;
           const f = D.signFrame(k, sg);
@@ -575,18 +575,18 @@
     updateMusic(g, dt) {
       const s = g.deco, A = CM.Audio;
       if (!A.ctx || !s) return;
-      const p = g.player, pre = g.playerDim === 'nether' ? 'N' : '';
+      const p = g.player, pre = CM.dimPre(g.playerDim);
       for (const [k, h] of D.playing) {
         const j = s.jukes[k];
-        if (!j || j.n !== h.n || (k[0] === 'N') !== (pre === 'N') || Math.hypot(h.x + 0.5 - p.x, h.z + 0.5 - p.z) > 72 || h.ended) {
+        if (!j || j.n !== h.n || CM.dimPre(CM.dimOfKey(k)) !== pre || Math.hypot(h.x + 0.5 - p.x, h.z + 0.5 - p.z) > 72 || h.ended) {
           if (h.ended) D.done[k] = h.n;
           CM.Music.stop(h);
           D.playing.delete(k);
         }
       }
       for (const k in s.jukes) {
-        if ((k[0] === 'N') !== (pre === 'N') || D.playing.has(k) || D.done[k] === s.jukes[k].n) continue;
-        const [x, y, z] = k.replace(/^N/, '').split(',').map(Number);
+        if (CM.dimPre(CM.dimOfKey(k)) !== pre || D.playing.has(k) || D.done[k] === s.jukes[k].n) continue;
+        const [x, y, z] = CM.keyXYZ(k);
         if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) > 56) continue;
         const h = CM.Music.play(s.jukes[k].d);
         if (!h) continue;

@@ -904,7 +904,7 @@
         const rs = blk(w.get(x, y, z)).rs;
         if (!rs || rs.k !== 'daylight' || !w.loaded(x, z)) continue;
         const sky = w.skyAt(x, y, z);
-        let p = w.nether ? 0 : Math.round(sky * CM.clamp((g.daylight - 0.1) / 0.8, 0, 1));
+        let p = w.nether || w.end ? 0 : Math.round(sky * CM.clamp((g.daylight - 0.1) / 0.8, 0, 1));
         if (rs.inv) p = 15 - p;
         if (p !== this.getD(x, y, z, 'dl')) {
           this.setD(x, y, z, 'dl', p);

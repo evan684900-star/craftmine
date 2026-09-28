@@ -1064,13 +1064,14 @@
       for (const m of this.mobs) {
         let dist = Infinity;
         for (const q of pls) dist = Math.min(dist, Math.hypot(m.x - q.x, m.z - q.z));
+        if (MOBS[m.type].persist) continue; // (dragon, cristaux : ils restent)
         if (dist > (MOBS[m.type].passive || MOBS[m.type].boss ? 110 : 70)) {
           if (m.tame) this.stash(m);
           m.dead = true;
         }
       }
       // animaux d'élevage mis de côté : ils reviennent quand un joueur s'approche
-      const pen = w.nether ? [] : g.animals || []; // (les animaux restent dans le monde normal)
+      const pen = w.nether || w.end ? [] : g.animals || []; // (les animaux restent dans le monde normal)
       for (let i = pen.length - 1; i >= 0; i--) {
         const a = pen[i];
         if (!w.loaded(a[1], a[3]) || !pls.some((q) => Math.hypot(a[1] - q.x, a[3] - q.z) < 90)) continue;
@@ -1093,6 +1094,7 @@
     spawnAround(p, w, r, nightfall) {
       const g = this.game;
       if (w.nether) return this.spawnNether(p, w, r);
+      if (w.end) return this.spawnEnd ? this.spawnEnd(p, w, r) : undefined;
       const { H } = CM.WORLD;
       let nMouf = 0, nOmbre = 0;
       for (const m of this.mobs) {
@@ -1254,6 +1256,7 @@
       // gluants : dans les marais, et tout au fond (sous y = 0)
       if ((bi === CM.BIO.SWAMP || bi === CM.BIO.MANGROVE || y < 0) && r < 0.3) return 'slime';
       if (MOBS.witch && w.structures && r > 0.975) return 'witch'; // (rare) une sorcière rôde
+      if (MOBS.arpenteur && r > 0.94 && r <= 0.975 && y > 0) return 'arpenteur'; // (rare) un Arpenteur, la nuit en surface
       if (r < 0.42) return 'ombre';
       if (r < 0.62) return 'spider';
       if (r < 0.81) return 'skeleton';

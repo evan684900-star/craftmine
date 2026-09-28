@@ -141,7 +141,7 @@
       const g = e.game, w = g.world, p = c.p, r = e.rand;
       m.ai.attackCd = Math.max(0, (m.ai.attackCd || 0) - dt);
       const wet = water(w, m.x, m.y + 1, m.z);
-      if (!wet && g.daylight > 0.45 && !w.nether && w.skyAt(Math.floor(m.x), Math.floor(m.y + 1.6), Math.floor(m.z)) >= 12) m.fire = Math.max(m.fire || 0, 1.5);
+      if (!wet && g.daylight > 0.45 && !w.nether && !w.end && w.skyAt(Math.floor(m.x), Math.floor(m.y + 1.6), Math.floor(m.z)) >= 12) m.fire = Math.max(m.fire || 0, 1.5);
       const see = p.alive && c.distP < 24 && Math.abs(c.dyp) < 10;
       m.ai.chasing = see;
       let tvx = 0, tvz = 0, tvy = 0, jump = false;

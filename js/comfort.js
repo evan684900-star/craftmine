@@ -16,7 +16,7 @@
 
   // ============================================================ CARTE ==
   // Couleur du dessus de chaque colonne (mise en cache, effacée quand un bloc change).
-  const cache = { overworld: new Map(), nether: new Map() };
+  const cache = { overworld: new Map(), nether: new Map(), end: new Map() };
   const bcol = [];
   function blockColor(id) {
     if (bcol[id]) return bcol[id];
@@ -213,7 +213,7 @@
       txt = 'Tu n’es encore jamais mort';
     } else if (t.dim !== g.playerDim) {
       ang = Math.sin(g.clock * 3) * 2 + g.clock * 5; // l'aiguille s'affole dans une autre dimension
-      txt = t.label + ' : dans ' + (t.dim === 'nether' ? 'le Nether' : 'le monde normal');
+      txt = t.label + ' : dans ' + CM.dimLabel(t.dim);
     } else {
       const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz);
       // angle du but par rapport au regard (0 : droit devant)
@@ -229,12 +229,12 @@
   C.onDeath = function (g, p) {
     g.lastDeath = { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, z: Math.round(p.z * 10) / 10, dim: g.playerDim };
     const el = $('death-where');
-    if (el) el.textContent = '✝ Tu es mort en X ' + Math.floor(p.x) + ', Y ' + Math.floor(p.y) + ', Z ' + Math.floor(p.z) + (g.playerDim === 'nether' ? ' (Nether)' : '') + ' — tes objets y restent 20 minutes.';
+    if (el) el.textContent = '✝ Tu es mort en X ' + Math.floor(p.x) + ', Y ' + Math.floor(p.y) + ', Z ' + Math.floor(p.z) + CM.dimTag(g.playerDim) + ' — tes objets y restent 20 minutes.';
   };
   C.onRespawn = function (g) {
     const d = g.lastDeath;
     if (!d) return;
-    const s = '✝ Lieu de ta mort : X ' + Math.floor(d.x) + ', Y ' + Math.floor(d.y) + ', Z ' + Math.floor(d.z) + (d.dim === 'nether' ? ' (Nether)' : '') + ' — une boussole de récupération t’y mène.';
+    const s = '✝ Lieu de ta mort : X ' + Math.floor(d.x) + ', Y ' + Math.floor(d.y) + ', Z ' + Math.floor(d.z) + CM.dimTag(d.dim) + ' — une boussole de récupération t’y mène.';
     if (g.net && g.net.sys) g.net.sys(s);
     else g.ui.toast(s, 'info', 'death');
   };
@@ -286,8 +286,8 @@
     const n = norm(q), out = [];
     if (n.length < 2) return out;
     for (const [k, slots] of g.chests) {
-      if ((k[0] === 'N') !== (dim === 'nether')) continue;
-      const [cx, cy, cz] = k.replace(/^N/, '').split(',').map(Number);
+      if (k[0] === 'C' || CM.dimOfKey(k) !== dim) continue;
+      const [cx, cy, cz] = CM.keyXYZ(k);
       if (Math.hypot(cx - x, cz - z) > 48 || Math.abs(cy - y) > 32) continue;
       let cnt = 0;
       for (const s of slots || []) if (s && norm(CM.itemName(s.id)).includes(n)) cnt += s.count;

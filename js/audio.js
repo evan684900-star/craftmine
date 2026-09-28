@@ -3,7 +3,7 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh', 'warden']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh', 'warden', 'teleport', 'roar']);
   const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant', 'vlevel']);
 
   A.init = function () {
@@ -346,6 +346,18 @@
         // le totem se brise : éclat puis carillon qui monte
         noise(t, 0.3, 'highpass', 2500, 0.7, 0.2);
         for (let i = 0; i < 6; i++) tone(t + 0.08 + i * 0.07, 0.35, 'triangle', 520 * 1.26 ** i, 0, 0.09);
+        break;
+      case 'teleport':
+        // téléportation : glissando qui descend puis remonte
+        tone(t, 0.25, 'sine', 900 * pitch, 300 * pitch, 0.1, 0.01);
+        tone(t + 0.2, 0.25, 'sine', 300 * pitch, 1100 * pitch, 0.08, 0.01);
+        noise(t, 0.4, 'bandpass', 1800, 4, 0.04, 600);
+        break;
+      case 'roar':
+        // rugissement du dragon
+        tone(t, 1.3, 'sawtooth', 110 * pitch, 60 * pitch, 0.14, 0.2);
+        tone(t, 1.3, 'sawtooth', 164 * pitch, 90 * pitch, 0.07, 0.2);
+        noise(t, 1.3, 'lowpass', 500 * pitch, 0.9, 0.12, 180);
         break;
       case 'warden':
         // gardien aveugle : grondement grave et battement de cœur

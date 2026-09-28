@@ -276,7 +276,7 @@
   // Brûle au soleil.
   function sunBurn(e, m, dt, c) {
     const g = e.game, w = g.world;
-    if (w.nether || g.daylight <= 0.45 || w.skyAt(Math.floor(m.x), Math.floor(m.y + 1.5), Math.floor(m.z)) < 12) return;
+    if (w.nether || w.end || g.daylight <= 0.45 || w.skyAt(Math.floor(m.x), Math.floor(m.y + 1.5), Math.floor(m.z)) < 12) return;
     // prend feu (1 point par seconde, flammes visibles de tous) ; l'eau et l'ombre le sauvent
     if (!CM.isWater(w.get(Math.floor(m.x), Math.floor(m.y + 0.4), Math.floor(m.z)))) m.fire = Math.max(m.fire || 0, 1.5);
   }
@@ -694,7 +694,7 @@
     update(e, m, dt, c) {
       const { p, distP, dyp, g } = c;
       const w = g.world;
-      const day = !w.nether && g.daylight > 0.45 && w.skyAt(Math.floor(m.x), Math.floor(m.y + 1), Math.floor(m.z)) >= 12;
+      const day = !w.nether && !w.end && g.daylight > 0.45 && w.skyAt(Math.floor(m.x), Math.floor(m.y + 1), Math.floor(m.z)) >= 12;
       if (m.ai.angry > 0) m.ai.angry -= dt;
       let tvx = 0, tvz = 0, climb = false;
       if ((!day || m.ai.angry > 0) && p.alive && distP < 20 && Math.abs(dyp) < 12) {

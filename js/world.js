@@ -92,6 +92,7 @@
     DARK_FOREST: 15, CHERRY: 16, MANGROVE: 17, BAMBOO: 18, MUSHROOM: 19, VOLCANIC: 20,
     FUNGUS: 21, ICE_SPIKES: 22, FLOWERS: 23, WARM_OCEAN: 24,
     NETHER_WASTES: 25, CRIMSON_FOREST: 26, WARPED_FOREST: 27, SOUL_VALLEY: 28, BASALT_DELTAS: 29,
+    THE_END: 30,
   };
   const BIOME_NAMES = [
     'Plaines', 'Désert', 'Forêt', 'Montagnes', 'Forêt de bouleaux', 'Taïga', 'Taïga enneigée', 'Toundra glacée',
@@ -99,6 +100,7 @@
     'Forêt de chênes noirs', 'Bosquet de cerisiers', 'Mangrove', 'Bambouseraie', 'Champignonnière', 'Terres volcaniques',
     'Forêt fongique', 'Pics de glace', 'Prairie fleurie', 'Océan chaud',
     'Désolation du Nether', 'Forêt carmin', 'Forêt biscornue', 'Vallée des âmes', 'Deltas de basalte',
+    'L’End',
   ];
   CM.BIO = BIO;
   CM.BIOME_NAMES = BIOME_NAMES;
@@ -280,14 +282,15 @@
       this.lavaLakes = true;
       this.lavaPools = (this.settings.gen || 2) >= 5;
       // donjons, puits de mine, temples du désert, cabanes de sorcière (mondes récents : générateur 6)
-      this.structures = !this.legacy && (this.settings.gen || 2) >= 6 && this.type !== 'nether';
+      this.structures = !this.legacy && (this.settings.gen || 2) >= 6 && this.type !== 'nether' && this.type !== 'end';
       // grottes luxuriantes, profondeurs sombres, récifs plus riches (générateur 7)
-      this.caveBiomes = !this.legacy && (this.settings.gen || 2) >= 7 && this.type !== 'nether' && this.type !== 'flat';
+      this.caveBiomes = !this.legacy && (this.settings.gen || 2) >= 7 && this.type !== 'nether' && this.type !== 'flat' && this.type !== 'end';
       this.techOres = !!(this.settings.ext && this.settings.ext.tech); // extension Électricité : zinc, étain, bauxite, lithium
       this.villageCache = new Map();
       // Nether : pas de villages ni d'îles, un autre générateur (voir generateNether)
       this.nether = this.type === 'nether';
-      if (this.nether) this.hasVillages = false;
+      this.end = this.type === 'end'; // l'End : îles flottantes dans le vide (voir end.js)
+      if (this.nether || this.end) this.hasVillages = false;
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
       this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
@@ -446,6 +449,7 @@
     column(x, z) {
       const Bk = CM.B;
       if (this.nether) return this.netherColumn(x, z);
+      if (this.end) return this.endColumn(x, z);
       if (this.legacy) return this.columnV3(x, z);
       if (this.type === 'flat') return { h: SEA + 8, bi: BIO.PLAINS, topB: Bk.GRASS, subB: Bk.DIRT, subDepth: 3, deepSub: 0, frozen: false, flat: true };
       const { nA, nB, nC, nD, nE, nF } = this;
@@ -796,6 +800,7 @@
 
     findSpawn() {
       if (this.nether) return { x: 0.5, y: 64, z: 0.5 }; // on y arrive par un portail
+      if (this.end) return { x: 60.5, y: 52, z: 0.5 }; // (plateforme d'arrivée)
       for (let rad = 0; rad < 4000; rad += 3) {
         const n = rad === 0 ? 1 : 24;
         for (let k = 0; k < n; k++) {
@@ -832,6 +837,14 @@
     // ------------------------------------------------------ génération ---
     generateChunk(cx, cz) {
       if (this.nether) return this.generateNether(cx, cz);
+      if (this.end) {
+        // l'End : îles flottantes (end.js)
+        const c = new Chunk(cx, cz);
+        if (this.fillEnd) this.fillEnd(c);
+        const e = this.edits.get(ckey(cx, cz));
+        if (e) for (const [i, id] of e) c.blocks[i] = id;
+        return c;
+      }
       const Bk = CM.B;
       const c = new Chunk(cx, cz);
       const blocks = c.blocks, seed = this.seed;
@@ -1091,6 +1104,7 @@
       this.villagesFor(c);
       if (this.structures && this.structuresFor) this.structuresFor(c);
       if (this.caveBiomes && this.caveBiomesFor) this.caveBiomesFor(c, infos);
+      if (this.caveBiomes && this.strongholdsFor) this.strongholdsFor(c); // forts souterrains (end.js)
 
       // 8) modifications du joueur
       const e = this.edits.get(ckey(cx, cz));

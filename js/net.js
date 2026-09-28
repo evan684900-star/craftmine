@@ -167,7 +167,7 @@
       this.flags = a[5] | 0;
       this.held = a[6] | 0;
       this.armor = a[7] | 0;
-      this.dim = (a[8] | 0) === 1 ? 'nether' : 'overworld';
+      this.dim = CM.dimName(a[8]);
       this.offhand = CM.itemInfo(a[9] | 0) ? a[9] | 0 : 0; // main secondaire
       this.bob = Array.isArray(a[10]) && a[10].length === 3 ? a[10].map(num) : null; // flotteur de canne à pêche
       this.blocking = !!(this.flags & 64);
@@ -410,11 +410,11 @@
       const you = w.you || {};
       const sp = w.spawn;
       // l'invité revient dans sa dimension (l'hôte l'a décidé d'après sa sauvegarde)
-      const nether = w.dim === 'nether';
       return {
         v: 4, seed: w.seed, settings: w.settings, spawn: sp, edits: w.edits || {},
-        dim: nether ? 'nether' : 'overworld',
+        dim: CM.isDim(w.dim) ? w.dim : 'overworld',
         nether: w.ne ? { edits: w.ne } : undefined,
+        end: w.en || w.es ? { edits: w.en || null, state: w.es && typeof w.es === 'object' ? w.es : { dragon: 0 } } : undefined,
         player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
         ach: you.ach && typeof you.ach === 'object' ? you.ach : {}, lastDeath: you.lastDeath || null,
@@ -445,7 +445,7 @@
         for (const c of Object.values(g.ctxs || {})) this.attachWorld(c.world, c.dim);
         return;
       }
-      const d = dim === 'nether' ? 1 : 0;
+      const d = CM.dimId(dim);
       w.onSet = (x, y, z, id) => {
         if (this.muted || !this.active) return;
         if (this.isClient) {
@@ -540,15 +540,15 @@
       if (last && last[0] === origin && last[2] === d) last[1].push(x, y, z, id);
       else this.outSets.push([origin, [x, y, z, id], d]);
     }
-    // Numéro de la dimension courante (0 : monde normal, 1 : Nether), joint aux blocs modifiés.
+    // Numéro de la dimension courante (0 : monde normal, 1 : Nether, 2 : End), joint aux blocs modifiés.
     get dimId() {
-      return this.game.dim === 'nether' ? 1 : 0;
+      return CM.dimId(this.game.dim);
     }
     flushSets() {
       if (!this.outSets.length) return;
       if (this.isHost) {
         // chacun ne reçoit que les blocs de la dimension où il se trouve
-        for (const [o, b, d] of this.outSets) for (const e of this.links.values()) if ((e.rp.dim === 'nether' ? 1 : 0) === d) e.link.send({ t: 'set', o, b, d });
+        for (const [o, b, d] of this.outSets) for (const e of this.links.values()) if (CM.dimId(e.rp.dim) === d) e.link.send({ t: 'set', o, b, d });
       } else if (this.hostLink) {
         for (const [, b, d] of this.outSets) this.hostLink.send({ t: 'set', b, d });
       }
@@ -585,7 +585,7 @@
         if (s && !CM.itemInfo(s.id).elytra) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
       });
       const off = g.inventory.offhand;
-      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, g.playerDim === 'nether' ? 1 : 0, off ? off.id : 0, CM.Fishing.netState(p)];
+      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, CM.dimId(g.playerDim), off ? off.id : 0, CM.Fishing.netState(p)];
     }
     sendMyState(withInv) {
       const g = this.game;
@@ -697,7 +697,7 @@
       const all = [[0, ...this.stateOf(g.player)]];
       for (const e of this.links.values()) {
         const rp = e.rp;
-        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, rp.dim === 'nether' ? 1 : 0, rp.offhand || 0, rp.bob || 0]);
+        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, CM.dimId(rp.dim), rp.offhand || 0, rp.bob || 0]);
       }
       for (const e of this.links.values()) e.link.send({ t: 'ps', p: all.filter((a) => a[0] !== e.pid) });
     }
@@ -779,13 +779,14 @@
       e.rp.look = CM.Comfort.cleanLook(m.look);
       // il revient dans la dimension où il était (chacun voyage seul)
       const you = this.guests[name] || null;
-      if (you && you.dim === 'nether' && you.player && Number.isFinite(you.player.x)) e.rp.dim = 'nether';
-      const w = g.worlds.overworld, nw = g.worlds.nether;
+      if (you && (you.dim === 'nether' || you.dim === 'end') && you.player && Number.isFinite(you.player.x)) e.rp.dim = you.dim;
+      const w = g.worlds.overworld, nw = g.worlds.nether, ew = g.worlds.end;
       e.link.send({
         t: 'welcome', v: PROTO, pid: e.pid, host: this.name,
         seed: w.seed, settings: Object.assign({}, g.settings, { mode: g.mode, difficulty: g.difficulty }),
         spawn: w.spawn, edits: w.editsObject(), notes: g.noteBlocks,
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
+        en: e.rp.dim === 'end' ? (ew ? ew.editsObject() : g.endEdits) : undefined, es: g.endState,
         time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {}, deco: CM.Deco.save(g),
         players: [[0, this.name, CM.Comfort.myLook(g)], ...[...this.links.values()].map((x) => [x.pid, x.name, x.rp.look])],
         you,
@@ -823,7 +824,7 @@
       switch (m.t) {
         case 'st':
           // (position envoyée avant un voyage : ignorée, l'hôte a déjà placé le joueur à l'arrivée)
-          if (!Array.isArray(m.s) || ((m.s[8] | 0) === 1 ? 'nether' : 'overworld') !== rp.dim) break;
+          if (!Array.isArray(m.s) || CM.dimName(m.s[8]) !== rp.dim) break;
           {
             const ox = rp.x, oy = rp.y, oz = rp.z, was = rp.seen;
             rp.setState(m.s);
@@ -851,15 +852,25 @@
           let pid = 0;
           for (let dy = -1; dy <= 1 && !pid; dy++) for (let dz = -1; dz <= 1 && !pid; dz++) for (let dx = -1; dx <= 1 && !pid; dx++) {
             const id = g.world.get(x + dx, y + dy, z + dz);
-            if (CM.blocks[id].portal) pid = id;
+            if (m.e ? CM.blocks[id].endPortal : CM.blocks[id].portal) pid = id;
           }
           if (!pid || Math.hypot(rp.x - x, rp.z - z) > 4) break;
+          // portail de l'End : vers l'End, ou retour dans le monde normal (au point de départ)
+          if (m.e) {
+            if (rp.dim === 'end') {
+              const sp = g.worlds.overworld.spawn, at = Array.isArray(m.at) ? { x: num(m.at[0]), y: num(m.at[1]), z: num(m.at[2]) } : { x: sp.x, y: sp.y, z: sp.z };
+              this.travelGuest(e, 'overworld', { at });
+            }
+            else if (rp.dim === 'overworld') this.travelGuest(e, 'end', {});
+            break;
+          }
+          if (rp.dim === 'end') break;
           this.travelGuest(e, rp.dim === 'nether' ? 'overworld' : 'nether', { from: [x, y, z], axis: pid === CM.PORTALS[1] ? 1 : 0 });
           break;
         }
         case 'respawn': {
-          // mort dans le Nether : retour au monde normal, à son lit ou au point de départ
-          if (rp.dim !== 'nether' || !Array.isArray(m.at)) break;
+          // mort dans le Nether ou l'End : retour au monde normal, à son lit ou au point de départ
+          if (rp.dim === 'overworld' || !Array.isArray(m.at)) break;
           this.travelGuest(e, 'overworld', { at: { x: num(m.at[0]), y: num(m.at[1]), z: num(m.at[2]) }, respawn: true });
           break;
         }
@@ -1005,10 +1016,10 @@
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
           if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > (m.k === 'rocket' ? 7 : 4)) break;
           const it = m.k === 'potion' && CM.itemInfo(m.it | 0) && CM.itemInfo(m.it | 0).potion ? m.it | 0 : 0;
-          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : m.k === 'trident' ? 'trident' : m.k === 'rocket' ? 'rocket' : undefined;
+          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : m.k === 'trident' ? 'trident' : m.k === 'rocket' ? 'rocket' : m.k === 'pearl' ? 'pearl' : m.k === 'eye' ? 'eye' : undefined;
           const xo = m.x && typeof m.x === 'object' ? m.x : {};
           const extra = { pi: Math.min(4, xo.pi | 0), np: xo.np ? 1 : 0, pw: Math.min(5, xo.pw | 0), pu: Math.min(2, xo.pu | 0), fl: xo.fl ? 1 : 0, ench: CM.cleanEnch(xo.ench) };
-          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, kind, kind === 'trident' ? CM.I.TRIDENT : kind === 'rocket' ? CM.I.FIREWORK : it, extra);
+          g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, kind, kind === 'trident' ? CM.I.TRIDENT : kind === 'rocket' ? CM.I.FIREWORK : kind === 'pearl' ? CM.I.ENDER_PEARL : kind === 'eye' ? CM.I.EYE_OF_ENDER : it, extra);
           break;
         }
         case 'cart': {
@@ -1266,9 +1277,10 @@
           break;
         case 'dim': {
           // l'hôte nous envoie dans l'autre dimension (portail, ou réapparition après une mort)
-          if (m.to !== 'nether' && m.to !== 'overworld') break;
+          if (!CM.isDim(m.to)) break;
           const at = Array.isArray(m.at) ? { x: num(m.at[0]), y: num(m.at[1]), z: num(m.at[2]) } : null;
           if (!at) break;
+          if (m.es && typeof m.es === 'object') g.endState = m.es;
           this.pending.clear();
           g.changeDim(m.to, { at, edits: m.e && typeof m.e === 'object' ? m.e : {}, quiet: !!m.r, then: m.r ? () => g.player.respawn() : null });
           break;
@@ -1345,7 +1357,7 @@
         case 'rtoast':
           // annonce (raid, boss) : bandeau + tchat
           if (typeof m.s === 'string') {
-            g.ui.toast(cleanText(m.s), m.k === 'good' ? 'good' : 'warn', 'raid');
+            g.ui.toast(cleanText(m.s), m.k === 'good' ? 'good' : 'warn', typeof m.id === 'string' ? m.id.slice(0, 20) : 'raid');
             this.sys(m.s);
           }
           break;
@@ -1418,6 +1430,8 @@
         }
       } else if (m.k === 'slam' || m.k === 'lvup' || m.k === 'totem') {
         if (d < 64 && CM.Raids) CM.Raids.onFx(g, m);
+      } else if (m.k === 'dcloud') {
+        if (d < 96 && CM.End) CM.End.onFx(g, m);
       } else if (m.k === 'shriek' || m.k === 'sonic' || m.k === 'emerge') {
         if (d < 64 && CM.Caves) CM.Caves.onFx(g, m);
       } else if (m.k === 'love') {
@@ -1474,6 +1488,13 @@
           w.loadAround(dest.x, dest.z, 1);
           return;
         }
+        // l'End : la plateforme d'obsidienne (et le dragon, s'il n'est pas encore là)
+        if (to === 'end') {
+          w.loadAround(CM.End.ARRIVAL.x, CM.End.ARRIVAL.z, 2);
+          dest = CM.End.platform(g, w);
+          CM.End.onEnter(g);
+          return;
+        }
         const k = to === 'nether' ? 1 / 8 : 8;
         const tx = Math.floor(opts.from[0] * k), tz = Math.floor(opts.from[2] * k);
         w.loadAround(tx, tz, 2);
@@ -1483,8 +1504,8 @@
       rp.x = rp.rx = dest.x;
       rp.y = rp.ry = dest.y;
       rp.z = rp.rz = dest.z;
-      e.link.send({ t: 'dim', to, e: g.worlds[to].editsObject(), at: [r2(dest.x), r2(dest.y), r2(dest.z)], r: opts.respawn ? 1 : 0 });
-      if (!opts.respawn) this.sysAll('🌀 ' + e.name + (to === 'nether' ? ' est parti dans le Nether' : ' est revenu dans le monde normal'));
+      e.link.send({ t: 'dim', to, e: g.worlds[to].editsObject(), at: [r2(dest.x), r2(dest.y), r2(dest.z)], r: opts.respawn ? 1 : 0, es: g.endState });
+      if (!opts.respawn) this.sysAll('🌀 ' + e.name + (to === 'nether' ? ' est parti dans le Nether' : to === 'end' ? ' est parti dans l’End' : ' est revenu dans le monde normal'));
     }
     // Invité mort dans le Nether : on attend que l'hôte nous renvoie le monde normal.
     requestRespawn(rs) {
@@ -1715,11 +1736,11 @@
     }
     playersHTML() {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-      const g = this.game, nth = (d) => (d === 'nether' ? ' · Nether' : '');
+      const g = this.game, nth = (d) => (d === 'nether' ? ' · Nether' : d === 'end' ? ' · End' : '');
       const host = this.isHost ? null : this.remotes.get(0);
       const list = [(this.isHost ? this.name : this.hostName) + ' (hôte' + nth(this.isHost ? g.playerDim : host && host.dim) + ')'];
       if (this.isClient) list.push(this.name + ' (toi' + nth(g.playerDim) + ')');
-      for (const rp of this.remotes.values()) if (rp.pid !== 0) list.push(rp.name + (rp.dim === 'nether' ? ' (Nether)' : ''));
+      for (const rp of this.remotes.values()) if (rp.pid !== 0) list.push(rp.name + CM.dimTag(rp.dim));
       return 'Multijoueur — code <b>' + this.code + '</b>' + (this.rules.pvp ? ' · combats entre joueurs activés' : '') + '<br>Joueurs : ' + list.map(esc).join(', ');
     }
 
