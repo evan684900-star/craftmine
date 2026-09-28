@@ -165,30 +165,51 @@
     ['Bibliothécaire', 'wool', [
       [[['PAPER', 24]], ['EMERALD', 1]], [[['EMERALD', 1]], ['BOOK', 2]], [[['EMERALD', 1]], ['GLASS', 6]],
       [[['EMERALD', 1]], ['LANTERN', 2]], [[['EMERALD', 2]], ['BOOKSHELF', 1]], [[['EMERALD', 5]], ['LAPIS', 8]],
+      [[['BOOK', 4]], ['EMERALD', 1]], [[['EMERALD', 4]], ['COMPASS', 1]], [[['EMERALD', 6]], ['MAP', 1]],
+      [[['EMERALD', 12]], ['ENCHANTING_TABLE', 1]],
     ]],
     ['Berger', 'wool_green', [
       [[['WOOL', 16]], ['EMERALD', 1]], [[['EMERALD', 1]], ['WOOL_RED', 4]], [[['EMERALD', 1]], ['WOOL_BLUE', 4]],
-      [[['EMERALD', 1]], ['WOOL_YELLOW', 4]], [[['EMERALD', 2]], ['LOOM', 1]],
+      [[['EMERALD', 1]], ['WOOL_YELLOW', 4]], [[['EMERALD', 2]], ['LOOM', 1]], [[['STRING', 14]], ['EMERALD', 1]],
+      [[['EMERALD', 2]], ['CARPET', 8]], [[['EMERALD', 3]], ['BED', 1]], [[['EMERALD', 2]], ['PAINTING', 3]],
+      [[['EMERALD', 4]], ['ITEM_FRAME', 4]],
     ]],
     ['Boucher', 'wool_red', [
       [[['RAW_MEAT', 10]], ['EMERALD', 1]], [[['LEATHER', 6]], ['EMERALD', 1]], [[['EMERALD', 1]], ['COOKED_MEAT', 5]],
       [[['EMERALD', 1]], ['MUSHROOM_STEW', 2]], [[['EMERALD', 2]], ['CHESTPLATE_LEATHER', 1]], [[['EMERALD', 1]], ['BOOTS_LEATHER', 1]],
+      [[['EMERALD', 1]], ['COOKED_SALMON', 4]], [[['EMERALD', 2]], ['CAKE', 1]], [[['EMERALD', 4]], ['SADDLE', 1]],
+      [[['EMERALD', 5]], ['GOLDEN_CARROT', 4]],
     ]],
     ['Prêtre', 'wool_purple', [
       [[['SHADOW_ESSENCE', 4]], ['EMERALD', 1]], [[['EMERALD', 1]], ['REDSTONE', 4]], [[['EMERALD', 2]], ['GLOWSTONE_DUST', 4]],
-      [[['EMERALD', 3]], ['TORCH', 16]], [[['EMERALD', 8]], ['RUBY', 1]],
+      [[['EMERALD', 3]], ['TORCH', 16]], [[['EMERALD', 8]], ['RUBY', 1]], [[['NETHER_WART', 6]], ['EMERALD', 1]],
+      [[['EMERALD', 4]], ['POTION_HEALING', 1]], [[['EMERALD', 5]], ['POTION_NIGHT_VISION', 1]],
+      [[['EMERALD', 6]], ['POTION_REGENERATION', 1]], [[['EMERALD', 10]], ['GOLDEN_APPLE', 2]],
     ]],
   ];
+  // Niveaux des villageois : échanges faits pour atteindre chaque niveau (novice → maître).
+  const VLV = [0, 3, 8, 16, 28];
+  CM.VILLAGER_LEVELS = ['Novice', 'Apprenti', 'Compagnon', 'Expert', 'Maître'];
+  CM.villagerLevel = (xp) => {
+    let l = 1;
+    while (l < VLV.length && xp >= VLV[l]) l++;
+    return l;
+  };
+  CM.villagerNext = (lv) => VLV[lv]; // échanges pour le niveau suivant (undefined : maître)
+  CM.PROF_COUNT = PROFS.length;
   const itemId = (k) => (CM.I[k] !== undefined ? CM.I[k] : CM.B[k]);
-  // Métier d'un villageois (déterminé par son identifiant : le même pour tous les joueurs).
+  // Métier d'un villageois : fixé par sa maison (village + numéro d'habitant), sinon par son identifiant.
+  // Chaque niveau débloque de nouveaux échanges (les 2 premiers dès le niveau Novice).
   CM.villagerProf = function (m) {
-    const [name, robe, offers] = PROFS[Math.floor(CM.hash3(m.uid, 5, 7, 0) * PROFS.length)];
-    return {
-      name, robe,
-      offers: offers
-        .map(([give, get]) => ({ give: give.map(([k, n]) => [itemId(k), n]), get: [itemId(get[0]), get[1]] }))
-        .filter((o) => o.give.every(([id]) => id !== undefined && CM.itemInfo(id)) && o.get[0] !== undefined && CM.itemInfo(o.get[0])),
-    };
+    const pi = m.profIdx !== undefined ? m.profIdx % PROFS.length : Math.floor(CM.hash3(m.uid, 5, 7, 0) * PROFS.length);
+    const [name, robe, offers] = PROFS[pi];
+    const lv = m.vlv || 1;
+    const all = offers
+      .map(([give, get]) => ({ give: give.map(([k, n]) => [itemId(k), n]), get: [itemId(get[0]), get[1]] }))
+      .filter((o) => o.give.every(([id]) => id !== undefined && CM.itemInfo(id)) && o.get[0] !== undefined && CM.itemInfo(o.get[0]));
+    const n = all.length;
+    all.forEach((o, i) => (o.lv = i < 2 ? 1 : Math.min(5, 2 + Math.floor(((i - 2) * 4) / Math.max(1, n - 2)))));
+    return { name, robe, lv, offers: all, pi };
   };
 
   let NEXT_UID = 1; // identifiant des entités (partagé avec les invités en multijoueur)
@@ -407,7 +428,7 @@
       const oldM = new Map(this.mobs.map((m) => [m.uid, m]));
       this.mobs = [];
       for (const a of s.m || []) {
-        const [uid, type, x, y, z, yaw, fl, pet] = a;
+        const [uid, type, x, y, z, yaw, fl, pet, ex] = a;
         if (!MOBS[type]) continue;
         let m = oldM.get(uid);
         if (!m || m.type !== type) {
@@ -436,6 +457,16 @@
         m.saddle = !!(pb & 4);
         m.variant = (pb >> 3) & 7;
         m.ridden = !!(pb & 64);
+        // villageois : métier et niveau ; boss : points de vie (%)
+        if (ex !== undefined) {
+          if (type === 'villager') {
+            const pi = ex & 15, lv = (ex >> 4) & 7;
+            if (m.profIdx !== pi || m.vlv !== lv) m.prof = null;
+            m.profIdx = pi;
+            m.vlv = lv;
+            m.vxp = ex >> 7;
+          } else m.hpPct = ex;
+        }
         this.mobs.push(m);
       }
       const oldD = new Map(this.drops.map((d) => [d.uid, d]));
@@ -517,6 +548,7 @@
     }
 
     updateMob(m, dt) {
+      if (m.dead) return; // (tuée entre deux images)
       const g = this.game, w = g.world, r = this.rand;
       const p = this.nearestPlayer(m.x, m.y, m.z);
       const lp = g.player;
@@ -685,7 +717,9 @@
         let speed = def.speed;
         if (m.ai.flee > 0) {
           m.ai.flee -= dt;
-          m.ai.dir = Math.atan2(dxp, dzp);
+          // (fuit ce qui l'a frappé, ou un pillard proche ; sinon le joueur)
+          const ff = m.ai.fleeFrom;
+          m.ai.dir = ff ? Math.atan2(ff[0] - m.x, ff[1] - m.z) : Math.atan2(dxp, dzp);
           speed = 4.2;
           if (m.hitX || m.hitZ) m.ai.dir += (r() - 0.5) * 2;
         } else if (CM.BREED_FOOD[m.type] && (this.findMate(m) || this.tempter(m))) {
@@ -882,7 +916,10 @@
         }
         if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 32) CM.Audio.play(m.type === 'ombre' || m.type === 'ardent' ? 'shadow_hurt' : 'hit');
         if (m.type === 'boar' || MOBS[m.type].retaliate) m.ai.angry = 12;
-        else if (MOBS[m.type].passive && !MOBS[m.type].neutral) m.ai.flee = 5;
+        else if (MOBS[m.type].passive && !MOBS[m.type].neutral) {
+          m.ai.flee = 5;
+          m.ai.fleeFrom = src && !(by && by.alive !== undefined) ? [src[0], src[1]] : null;
+        }
         if (MOBS[m.type].onHurt) MOBS[m.type].onHurt(this, m, by);
         if (m.type === 'golem') CM.Audio.play('golem');
       }
@@ -937,7 +974,7 @@
       }
       this.killFx(m.type, m.x, m.y, m.z);
       if (g.net) g.net.fx({ k: 'kill', ty: m.type, x: m.x, y: m.y, z: m.z });
-      if (def.onDeath) def.onDeath(this, m); // gluant : se divise
+      if (def.onDeath) def.onDeath(this, m, by); // gluant : se divise ; capitaine pillard : mauvais présage
     }
     // Nuage de particules à la mort d'une créature.
     killFx(type, x, y, z) {
@@ -1027,7 +1064,7 @@
       for (const m of this.mobs) {
         let dist = Infinity;
         for (const q of pls) dist = Math.min(dist, Math.hypot(m.x - q.x, m.z - q.z));
-        if (dist > (MOBS[m.type].passive ? 110 : 70)) {
+        if (dist > (MOBS[m.type].passive || MOBS[m.type].boss ? 110 : 70)) {
           if (m.tame) this.stash(m);
           m.dead = true;
         }
@@ -1087,11 +1124,21 @@
       if (vil && r() < 0.5) {
         let n = 0;
         for (const m of this.mobs) if (m.type === 'villager' && !m.dead && m.home && m.home[0] === vil.x && m.home[1] === vil.z) n++;
-        if (n < vil.pop) {
+        // (pas pendant un raid sur ce village)
+        if (n < vil.pop && !(CM.Raids && CM.Raids.busy(g, vil))) {
           const [sx, sy, sz] = vil.spots[Math.floor(r() * vil.spots.length)];
           if (w.loaded(sx, sz) && !w.solidAt(sx, sy, sz) && !w.solidAt(sx, sy + 1, sz) && w.solidAt(sx, sy - 1, sz) && Math.hypot(sx - p.x, sz - p.z) > 6) {
             const m = this.addMob('villager', sx + 0.5, sy, sz + 0.5);
             m.home = [vil.x, vil.z];
+            // habitant n° i du village : il garde son métier et son expérience (sauvegardée)
+            const used = new Set(this.mobs.filter((o) => o !== m && o.type === 'villager' && !o.dead && o.home && o.home[0] === vil.x && o.home[1] === vil.z).map((o) => o.vidx));
+            let i = 0;
+            while (used.has(i)) i++;
+            m.vidx = i;
+            m.vid = vil.x + ',' + vil.z + ',' + i;
+            m.profIdx = Math.floor(CM.hash3(vil.x, i, vil.z, 5) * PROFS.length);
+            m.vxp = (g.vilXp && g.vilXp[m.vid]) || 0;
+            m.vlv = CM.villagerLevel(m.vxp);
           }
         }
       }
@@ -1513,6 +1560,10 @@
           const vh = L.villager_head;
           this.part(batch, this.M, 0, 1.45, 0, nod, [-0.23, 0, -0.23, 0.23, 0.56, 0.23], [vh, vh, vh, skin, vh, L.villager_face], l, flags);
           this.part(batch, this.M, 0, 1.45, 0, nod, [-0.05, 0.08, -0.34, 0.05, 0.3, -0.23], skin, l, flags);
+          // insigne de niveau sur la robe : pierre, fer, or, émeraude, diamant
+          const bk = ['STONE', 'IRON_BLOCK', 'GOLD_BLOCK', 'EMERALD_BLOCK', 'DIAMOND_BLOCK'][(m.vlv || 1) - 1];
+          const bl = CM.B[bk] !== undefined && CM.blockLayers[CM.B[bk]];
+          if (bl) this.part(batch, this.M, 0, 0.95, -0.17, 0, [-0.07, -0.07, -0.02, 0.07, 0.07, 0], bl[0], l, flags);
         } else {
           const body = m.type === 'ardent' ? L.ardent_body : L.ombre_body;
           this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);

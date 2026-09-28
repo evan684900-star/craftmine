@@ -226,6 +226,13 @@
       CM.Deco.load(this, save && save.deco); // panneaux, tableaux, cadres, porte-armures, juke-box
       this.ach = (save && save.ach && typeof save.ach === 'object' && save.ach) || {}; // succès
       this.lastDeath = (save && save.lastDeath) || null;
+      // villageois (expérience par habitant), forteresses dont le gardien est vaincu, nuit du géant
+      this.vilXp = (save && save.vilXp && typeof save.vilXp === 'object' && save.vilXp) || {};
+      this.guardians = (save && save.guardians && typeof save.guardians === 'object' && save.guardians) || {};
+      this.giantDay = save && Number.isFinite(save.giantDay) ? save.giantDay : -1;
+      CM.Raids.raid = null;
+      CM.Raids.remote = null;
+      CM.Raids.omens.clear();
       CM.Deco.bindUI(this);
       this.brewT = {};
       this.cmdBack = null;
@@ -440,6 +447,7 @@
           if (cs.length) this.world.stream(cs[0][0], cs[0][1], cs[0][2], 3, cs.slice(1));
           this.entities.update(dt);
           this.ticks.update(dt);
+          CM.Raids.tick(this, dt);
           this.growTimer -= dt;
           if (this.growTimer <= 0) {
             this.growTimer = 1;
@@ -747,6 +755,9 @@
         deco: CM.Deco.save(this),
         ach: this.ach,
         lastDeath: this.lastDeath,
+        vilXp: this.vilXp,
+        guardians: this.guardians,
+        giantDay: this.giantDay,
         golems: this.golemHomes,
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(['overworld', 'nether'].map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -1981,6 +1992,7 @@
       CM.Weather.update(this, dt);
       if (!net.isClient) CM.Potions.tick(this, dt); // alambics, balises
       if (!net.isClient) CM.Structures.tick(this, dt); // générateurs de monstres
+      if (!net.isClient) CM.Raids.tick(this, dt); // patrouilles, raids, boss
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -2069,6 +2081,7 @@
       CM.Comfort.checkAch(this, rdtC); // succès
       CM.Comfort.updateHighlights(this, rdtC); // coffres trouvés
       CM.Structures.render(this, rdtC); // fumée des générateurs
+      CM.Raids.hud(this, rdtC); // barres du raid et des boss
     }
   }
 

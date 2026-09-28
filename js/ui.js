@@ -25,8 +25,10 @@
     ['🎵 Juke-box et disques', "Clic droit sur un juke-box avec un disque : la musique joue (on l'entend à 48 blocs, à gauche ou à droite selon où il est), des notes s'en échappent ; clic droit encore pour reprendre le disque. 8 disques, 8 morceaux composés par le jeu (Aube, Clairière, Cavernes, Marée, Forge, Étoiles, Pixel, Orage). On les trouve dans les coffres des ruines, et un rampant tué par la flèche d'un squelette en laisse un."],
     ['🗺 Carte, boussoles, mort', "Mini-carte en haut à droite (touche M : masquée, petite, grande) : relief, eau, toi (flèche), les autres joueurs, ton lit, le lieu de ta mort (croix) et les monstres (points rouges). Carte (8 papiers + 1 boussole) : tenue en main, une grande carte des environs. Boussole (4 lingots de fer + 1 redstone) : tenue en main (ou en main secondaire), elle montre la direction et la distance de ton lit (ou du point de départ). Boussole de récupération (boussole + 4 essences d'ombre) : elle mène au lieu de ta dernière mort. À la mort, l'écran et le tchat donnent tes coordonnées ; tes objets restent 20 minutes au sol (au lieu de 5)."],
     ['🧰 Tri et recherche', "Inventaire : bouton « ⇅ Trier » (regroupe les piles et range par type, sans toucher à la barre d'objets). Coffre ouvert : son propre bouton « ⇅ Trier ». Champ « Chercher dans les coffres proches » : tape un nom (par exemple « diamant ») puis Entrée : le jeu indique combien il en trouve, à quelle distance et dans quelle direction, et des étincelles montent des coffres pendant 20 secondes (48 blocs autour de toi, aussi en multijoueur)."],
-    ['🏆 Succès et apparence', "31 succès à débloquer (premier bois, diamants, Nether, potion, pêche, bateau, cheval, loup, élytres, juke-box, 100 Ombres, 50 jours…) : une bannière dorée s'affiche, les autres joueurs sont prévenus, la liste est dans l'onglet Journal de l'inventaire. Options > Apparence : peau, cheveux, haut, pantalon et cape de ton personnage, tel que les autres le voient en multijoueur (et tes bras à l'écran)."],
+    ['🏆 Succès et apparence', "36 succès à débloquer (premier bois, diamants, Nether, potion, pêche, bateau, cheval, loup, élytres, juke-box, 100 Ombres, 50 jours…) : une bannière dorée s'affiche, les autres joueurs sont prévenus, la liste est dans l'onglet Journal de l'inventaire. Options > Apparence : peau, cheveux, haut, pantalon et cape de ton personnage, tel que les autres le voient en multijoueur (et tes bras à l'écran)."],
     ['🏚 Structures', "Dans les mondes créés depuis cette version. Donjons : petites salles de galets moussus enfouies sous terre, avec un générateur de monstres (Ombres, squelettes ou araignées apparaissent autour tant que tu es à moins de 16 blocs : casse la cage avec une pioche) et un ou deux coffres (os, fer, or, selle, disques, pommes dorées…). Puits de mine : longues galeries étayées de bois, avec des rails, des torches, des toiles d'araignée (elles engluent tout ce qui les traverse), des coffres et parfois un générateur d'araignées. Temples du désert : grand bâtiment de grès à deux tours ; sous la croix bleue du sol, une salle au trésor avec 4 coffres… et une plaque de pression reliée à 9 TNT : ne marche pas dessus ! Cabanes de sorcière : dans les marais, sur pilotis ; une sorcière y vit. Elle lance des potions (lenteur, poison, dégâts, faiblesse), boit une potion de soin quand elle est blessée et en laisse parfois en mourant."],
+    ['🏴 Pillards et raids', "À partir du 3e jour, des patrouilles de pillards (arbalète) et de vindicateurs (hache) parcourent le monde. Leur capitaine porte une bannière : le tuer te donne « Mauvais présage » (1 h). Entre dans un village avec cet effet et un raid commence (3 vagues en facile, 4 en normal, 5 en difficile) : pillards, vindicateurs, puis sorcière et ravageur (énorme, il projette tout ce qu'il frappe) ; ils attaquent aussi les villageois et les golems. Une barre en haut de l'écran suit la vague en cours. Raid repoussé : « Héros du village » (40 min, émeraudes moins chères chez les villageois), un totem d'immortalité et des émeraudes pour chaque défenseur. Totem d'immortalité : tenu en main (ou en main secondaire), il te sauve de la mort une fois (1 cœur, régénération, résistance au feu). Commande /raid pour en lancer un (triches)."],
+    ['👊 Boss', "Géant des Ombres : une nuit sur dix (jours 10, 20, 30…), il surgit près de toi. Il frappe le sol (onde de choc qui projette), lance des orbes d'ombre (dégâts et lenteur) et appelle des Ombres ; il se dissipe à l'aube. Vaincu : essences d'ombre, diamants, pommes dorées, fragments de netherite. Gardien du Nether : chaque forteresse a le sien ; il se réveille quand tu approches du donjon, vole autour de toi et lance des boules de feu (en rafales sous la moitié de sa vie), appelle des Ombres ardentes et des cubes de magma. Vaincu : étoile du Nether (balise : 5 verres + 3 obsidiennes + 1 étoile), lingot de netherite et or. Leur vie s'affiche en haut de l'écran."],
     ['🐑 Élevage', "Clic droit sur un animal avec sa nourriture : blé pour les mouflons, les vaches et les chèvres ; carotte, pomme de terre ou betterave pour les sangliers ; graines pour les poules ; carotte pour les lapins ; pomme pour les cerfs. Deux animaux nourris se rejoignent et font un petit, qui grandit en 5 minutes (le nourrir l'accélère). Les animaux suivent celui qui tient leur nourriture. Un animal nourri devient un animal d'élevage : il reste à sa place et il est gardé dans la sauvegarde."],
     ['🛡 Armures', "Cinq matériaux (cuir, or, fer, diamant, netherite) et quatre pièces : casque (5 matériaux), plastron (8), jambières (7), bottes (4), à l'Établi. La netherite s'obtient en améliorant une pièce en diamant avec un lingot de netherite à la table de forgeron. Pour l'enfiler : clic droit avec la pièce en main, Maj+clic dans l'inventaire, ou pose-la dans les 4 cases d'armure en haut de l'inventaire. L'armure réduit les dégâts des créatures, des explosions et des autres joueurs (jusqu'à 80 %), mais pas ceux de la chute, de la faim ou de la noyade. Chaque coup reçu l'use ; à 0 elle casse. Les icônes au-dessus des cœurs montrent ta protection, le panneau en bas à droite la durabilité de chaque pièce. Le forgeron et le boucher des villages en vendent, les coffres en cachent."],
     ['✨ Expérience', "La barre verte au-dessus de la barre d'objets montre ton niveau. On gagne de l'expérience en minant du charbon, des diamants, des émeraudes, du lapis, de la redstone, du quartz, du cristal ou des rubis, en tuant des Ombres (5) et des animaux, en échangeant avec les villageois, en faisant naître des petits et en fondant à la forge. À la mort, elle est perdue (sauf si l'inventaire est conservé)."],
@@ -50,7 +52,7 @@
     ['🌋 Lave', "La lave coule comme l'eau, mais lentement et sur 3 blocs seulement (7 dans le Nether). Elle éclaire, brûle tout ce qui y tombe (4 points de dégâts par demi-seconde, puis 15 s en feu), détruit les objets (sauf la netherite) et peut enflammer le bois voisin. Au contact de l'eau : une source devient de l'obsidienne, la lave qui coule des galets, et la lave qui tombe dans l'eau de la pierre. Le seau la ramasse et la reverse. On en trouve au fond des cavernes (vers y = −55), dans les terres volcaniques et partout dans le Nether."],
     ['🌀 Le Nether', "Construis un cadre d'obsidienne (4 de large, 5 de haut au minimum, coins facultatifs) et allume l'intérieur au briquet. Reste 3 secondes et demie dans le portail violet (1 s en créatif) pour passer dans le Nether : cavernes géantes, océan de lave, forêts carmin et biscornues, vallées des âmes, deltas de basalte, pierre lumineuse, quartz, or et débris antiques. Des Ombres ardentes y rôdent de jour comme de nuit, sans craindre la lumière, et mettent le feu. Les forteresses en briques du Nether cachent un coffre. Un bloc parcouru dans le Nether vaut 8 blocs dans le monde normal : le portail d'arrivée est construit tout seul, ou retrouvé s'il existe déjà. Casser le cadre éteint le portail. L'eau s'y évapore et les lits y explosent ! Mort dans le Nether : retour au monde normal. En multijoueur, chacun voyage seul, comme dans Minecraft : on ne voit que les joueurs de sa dimension (la liste des joueurs, en pause, indique qui est dans le Nether)."],
     ['🕳 Profondeurs', "Le monde descend jusqu'à y = −64, comme dans Minecraft : sous y = 0, l'ardoise des abîmes remplace la pierre (plus longue à miner), avec de grandes cavernes, beaucoup de diamants et de redstone, du lapis, de l'or, du fer, du cristal et de rares débris antiques (netherite). Zones de sculk, géodes d'améthyste profondes, et du magma brûlant près du socle. Prends des torches !"],
-    ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs (blé, carottes, pommes de terre, betteraves), forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
+    ['🏘 Villages', "Dans les plaines, forêts, taïgas, savanes et déserts, des villages entourent un puits : maisons, champs (blé, carottes, pommes de terre, betteraves), forge, bibliothèque et lampadaires. Certaines maisons ont un coffre. Clic droit (ou toucher) sur un villageois pour échanger : vends-lui récoltes, viande, charbon, papier, laine ou essences d'ombre contre des émeraudes, puis achète pain, outils, lanternes, rubis… Chaque villageois progresse avec les échanges : Novice, Apprenti, Compagnon, Expert puis Maître (insigne de pierre, fer, or, émeraude puis diamant sur sa robe) ; chaque niveau débloque de nouveaux échanges (boussole, carte, table d'enchantement, lit, selle, potions, pommes dorées…). Chaque habitant garde son métier et sa progression. Les villages n'apparaissent que dans les mondes créés depuis leur ajout."],
     ['🚪 Portes et lits', "Porte : 6 planches d'une même essence (chêne, sapin, bouleau, acacia) donnent 3 portes à l'Établi ; clic droit pour l'ouvrir ou la fermer. Lit : 3 laines + 3 planches. Clic droit sur un lit pour y placer ton point de réapparition ; la nuit, tu t'y couches et passes au matin (en multijoueur, quand tout le monde est couché). Pas de sommeil si des Ombres rôdent tout près !"],
     ['📦 Objets au sol', "Un objet jeté ou tombé au sol disparaît au bout de 5 minutes : il clignote pendant ses 10 dernières secondes. Tant que son tronçon n'est pas chargé (trop loin des joueurs), le temps ne passe pas pour lui."],
     ['💬 Commandes', "Ouvre le tchat (T, Entrée, / ou 💬 sur téléphone) et tape « / » : plus de 80 commandes, en solo comme en multijoueur. Des suggestions s'affichent pendant la frappe ; Tab complète, ↑ reprend la commande précédente. /aide les liste par catégorie. Exemples : /donner diamant 64 · /donner épée_en_diamant · /kit outils · /mode créatif · /temps midi · /météo orage · /tp ~ ~20 ~ · /tp Bob · /spawn · /defmaison base puis /maison base · /retour · /vol · /vitesse 2 · /soigner · /xp 30L · /enchanter tranchant 5 · /invoquer ombre 3 · /tuer ombres · /remplir ~-3 ~ ~-3 ~3 ~4 ~3 verre creux · /sphere 5 verre · /annuler · /localiser village · /regle faim off. Les objets s'écrivent en français avec des _ à la place des espaces (lingot_de_fer), ~ veut dire « ici ». En multijoueur, l'hôte autorise les triches aux invités avec /triche on."],
@@ -799,23 +801,51 @@
     // Échanges avec un villageois.
     openTrade(m) {
       if (this.invOpen || !this.game.player.alive) return;
-      if (!m.prof) m.prof = CM.villagerProf(m);
-      this.trade = m.prof;
+      this.tradeMob = m;
+      this.trade = this.tradeInfo();
       this.chest = null;
-      $('trade-title').textContent = 'Villageois — ' + m.prof.name;
       CM.Audio.play('hmm');
       this.openInventory(true);
     }
+    // Métier et échanges du villageois (recalculés quand il change de niveau).
+    tradeInfo() {
+      const m = this.tradeMob;
+      if (!m.prof || m.prof.lv !== (m.vlv || 1)) m.prof = CM.villagerProf(m);
+      return m.prof;
+    }
+    // Prix d'un échange : Héros du village = émeraudes moins chères.
+    tradePrice(o) {
+      const hero = CM.Effects.lv(this.game.player, 'hero');
+      if (!hero) return o.give;
+      return o.give.map(([id, n]) => [id, id === CM.I.EMERALD ? Math.max(1, Math.floor(n * (0.7 - 0.1 * (hero - 1)) + 0.01)) : n]);
+    }
     renderTrade() {
-      const inv = this.game.inventory, t = this.trade;
+      const inv = this.game.inventory, m = this.tradeMob;
+      const t = (this.trade = this.tradeInfo());
+      const lv = t.lv, LV = CM.VILLAGER_LEVELS, next = CM.villagerNext(lv);
+      $('trade-title').textContent = 'Villageois — ' + t.name;
       const list = $('trade-list');
       list.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'trade-lv';
+      const xp = m.vxp || 0, prev = CM.villagerNext(lv - 1) || 0;
+      head.innerHTML = '<b>' + LV[lv - 1] + '</b> <span>(niveau ' + lv + '/5)</span>' +
+        (next !== undefined ? '<div class="vbar"><i style="width:' + Math.round(Math.min(1, (xp - prev) / (next - prev)) * 100) + '%"></i></div><small>' + (xp - prev) + ' / ' + (next - prev) + ' échanges avant « ' + LV[lv] + ' »</small>' : '<small>Il a appris tous ses échanges.</small>') +
+        (CM.Effects.lv(this.game.player, 'hero') ? '<small class="hero">🏅 Héros du village : prix réduits !</small>' : '');
+      list.appendChild(head);
       const icon = (id, n) => '<span class="ti"><i style="background-image:url(' + CM.Textures.icons[id] + ')"></i>' + n + '</span>';
       t.offers.forEach((o) => {
-        const can = o.give.every(([id, n]) => inv.count(id) >= n);
         const row = document.createElement('div');
+        if (o.lv > lv) {
+          row.className = 'trade off locked';
+          row.innerHTML = '<span class="lock">🔒</span>' + icon(o.get[0], o.get[1]) + '<span class="tname">' + esc(CM.itemName(o.get[0])) + ' — au niveau ' + LV[o.lv - 1] + '</span>';
+          list.appendChild(row);
+          return;
+        }
+        const give = this.tradePrice(o);
+        const can = give.every(([id, n]) => inv.count(id) >= n);
         row.className = 'trade' + (can ? '' : ' off');
-        row.innerHTML = o.give.map(([id, n]) => icon(id, n)).join('') + '<span class="arrow">→</span>' + icon(o.get[0], o.get[1]) +
+        row.innerHTML = give.map(([id, n]) => icon(id, n)).join('') + '<span class="arrow">→</span>' + icon(o.get[0], o.get[1]) +
           '<span class="tname">' + esc(CM.itemName(o.get[0])) + '</span>';
         const b = document.createElement('button');
         b.textContent = 'Échanger';
@@ -826,11 +856,13 @@
       });
     }
     doTrade(o, many) {
-      const g = this.game, inv = g.inventory;
+      const g = this.game, inv = g.inventory, m = this.tradeMob;
+      if (o.lv > ((m && m.vlv) || 1)) return;
+      const give = this.tradePrice(o);
       let n = 0;
       do {
-        if (!o.give.every(([id, k]) => inv.count(id) >= k)) break;
-        for (const [id, k] of o.give) inv.remove(id, k);
+        if (!give.every(([id, k]) => inv.count(id) >= k)) break;
+        for (const [id, k] of give) inv.remove(id, k);
         const [gid, gk] = o.get;
         const extra = CM.freshExtra(gid);
         const left = inv.add(gid, gk, extra);
@@ -841,6 +873,12 @@
         CM.Audio.play('pop');
         CM.Audio.play('hmm');
         g.player.addXp(n * (3 + Math.floor(Math.random() * 4)));
+        g.stats.trades = (g.stats.trades || 0) + n;
+        // le villageois gagne de l'expérience (l'hôte la garde)
+        if (m && CM.Villagers) {
+          if (g.net.isClient) g.net.send({ t: 'vtrade', id: m.uid, n });
+          else CM.Villagers.gain(g, m, n);
+        }
         inv.changed();
       }
     }

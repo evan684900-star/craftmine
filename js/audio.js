@@ -3,8 +3,8 @@
 (function () {
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
-  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle']);
-  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant']);
+  const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh']);
+  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant', 'vlevel']);
 
   A.init = function () {
     if (A.ctx) {
@@ -330,6 +330,26 @@
         break;
       case 'paddle':
         noise(t, 0.25, 'lowpass', 700, 0.8, 0.1 * (opt.vol || 1), 250);
+        break;
+      case 'huh':
+        // illageois : grognement nasal
+        tone(t, 0.22, 'sawtooth', 210 * pitch, 150 * pitch, 0.06, 0.02);
+        noise(t, 0.15, 'bandpass', 700 * pitch, 3, 0.05);
+        break;
+      case 'horn':
+        // cor des pillards : longue note grave qui monte un peu
+        tone(t, 2.2, 'sawtooth', 98, 110, 0.12, 0.3);
+        tone(t, 2.2, 'sawtooth', 147, 165, 0.06, 0.3);
+        noise(t, 2.2, 'lowpass', 300, 0.7, 0.05);
+        break;
+      case 'totem':
+        // le totem se brise : éclat puis carillon qui monte
+        noise(t, 0.3, 'highpass', 2500, 0.7, 0.2);
+        for (let i = 0; i < 6; i++) tone(t + 0.08 + i * 0.07, 0.35, 'triangle', 520 * 1.26 ** i, 0, 0.09);
+        break;
+      case 'vlevel':
+        // villageois qui progresse
+        for (let i = 0; i < 3; i++) tone(t + i * 0.09, 0.18, 'triangle', [660, 830, 990][i], 0, 0.08);
         break;
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule

@@ -49,7 +49,7 @@
       if (x2.np) a.pick = false;
     }
     this.arrows.push(a);
-    CM.Audio.play(kind === 'trident' ? 'bow' : kind === 'rocket' ? 'fuse' : kind ? 'pop' : 'bow', { pitch: kind === 'trident' ? 0.55 : 0.9 + Math.random() * 0.2 });
+    if (kind !== 'orb' && kind !== 'fireball') CM.Audio.play(kind === 'trident' ? 'bow' : kind === 'rocket' ? 'fuse' : kind ? 'pop' : 'bow', { pitch: kind === 'trident' ? 0.55 : 0.9 + Math.random() * 0.2 });
   };
   // Un œuf se casse : parfois un poussin en sort.
   E.eggHit = function (a) {
@@ -67,7 +67,7 @@
       a.age += dt;
       if (a.age > 60 && !(a.kind === 'trident' && a.pick)) a.dead = true;
       if (a.dead) continue;
-      if ((a.kind === 'trident' || a.kind === 'rocket') && this.updateSpecialArrow(a, dt)) continue;
+      if ((a.kind === 'trident' || a.kind === 'rocket' || a.kind === 'orb' || a.kind === 'fireball') && this.updateSpecialArrow(a, dt)) continue;
       if (a.stuck) {
         if (!w.get(a.bx, a.by, a.bz)) a.stuck = false; // le bloc a disparu : la flèche retombe
         else {
@@ -88,6 +88,8 @@
         let hit = null, ht = len;
         for (const m of a.spent ? [] : this.mobs) {
           if (m.dead || m === a.shooter || (a.hitSet && a.hitSet.has(m.uid))) continue;
+          // (les pillards ne se tirent pas dessus entre eux)
+          if (a.shooter && a.shooter.type && CM.MOBS[a.shooter.type].raider && CM.MOBS[m.type].raider) continue;
           const t = CM.rayBox(a.x, a.y, a.z, dx, dy, dz, m.x - m.hw, m.y, m.z - m.hw, m.x + m.hw, m.y + m.h, m.z + m.hw);
           if (t >= 0 && t < ht) {
             ht = t;
@@ -529,8 +531,8 @@
     for (const a of this.arrows || []) {
       if (a.dead || !near(a)) continue;
       const yaw = a.stuck ? a.yaw : Math.atan2(a.vx, a.vz), pitch = a.stuck ? a.pitch : Math.atan2(-a.vy, Math.hypot(a.vx, a.vz));
-      const k = a.kind === 'egg' ? 1 : a.kind === 'potion' ? 2 : a.kind === 'trident' ? 3 : a.kind === 'rocket' ? 4 : 0;
-      ar.push(k === 1 || k === 4 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, k] : k === 2 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 2, a.item] : k === 3 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0), 3] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
+      const k = a.kind === 'egg' ? 1 : a.kind === 'potion' ? 2 : a.kind === 'trident' ? 3 : a.kind === 'rocket' ? 4 : a.kind === 'orb' ? 5 : a.kind === 'fireball' ? 6 : 0;
+      ar.push(k === 1 || k >= 4 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, k] : k === 2 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), 0, 0, 2, a.item] : k === 3 ? [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0), 3] : [a.uid, r2(a.x), r2(a.y), r2(a.z), r2(yaw || 0), r2(pitch || 0)]);
     }
     for (const c of this.carts || []) {
       if (c.dead || !near(c)) continue;
@@ -543,7 +545,7 @@
     this.arrows = [];
     for (const [uid, x, y, z, yaw, pitch, k, it] of s.ar || []) {
       let a = oldA.get(uid);
-      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: k === 1 ? 'egg' : k === 2 ? 'potion' : k === 3 ? 'trident' : k === 4 ? 'rocket' : null, item: k === 2 && CM.itemInfo(it) ? it : 0 };
+      if (!a) a = { uid, x, y, z, vx: 0, vy: 0, vz: 0, kind: [null, 'egg', 'potion', 'trident', 'rocket', 'orb', 'fireball'][k | 0] || null, item: k === 2 && CM.itemInfo(it) ? it : 0 };
       a.tx = x;
       a.ty = y;
       a.tz = z;

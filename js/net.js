@@ -713,7 +713,10 @@
           if (o.dead || !near(o)) continue;
           const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0) | (o.ai.special ? 64 : 0);
           const pet = (o.tame ? 1 : 0) | (o.sit ? 2 : 0) | (o.saddle ? 4 : 0) | ((o.variant | 0) << 3) | (o.rider !== undefined && o.rider !== null ? 64 : 0);
-          m.push(pet ? [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl, pet] : [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
+          // (villageois : métier, niveau, expérience ; boss : vie en %)
+          const ex = o.type === 'villager' && o.profIdx !== undefined ? (o.profIdx & 15) | ((o.vlv || 1) << 4) | (Math.min(1023, o.vxp | 0) << 7) : CM.MOBS[o.type].boss ? Math.max(0, Math.ceil((o.hp / o.maxHp) * 100)) : undefined;
+          if (ex !== undefined) m.push([o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl, pet, ex]);
+          else m.push(pet ? [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl, pet] : [o.uid, o.type, r2(o.x), r2(o.y), r2(o.z), r2(o.yaw), fl]);
         }
         for (const o of ents.drops) if (!o.dead && near(o) && w.loaded(o.x, o.z)) d.push([o.uid, o.id, o.count, r2(o.x), r2(o.y), r2(o.z), Math.round(o.age - ((o.life || CM.DROP_LIFE) - CM.DROP_LIFE))]);
         for (const o of ents.tnts) if (near(o)) tn.push([o.uid, r2(o.x), r2(o.y), r2(o.z), r2(o.fuse)]);
@@ -873,6 +876,12 @@
           rp.lastTargetT = g.clock;
           const lv = (v, max) => Math.min(max, Math.max(0, v | 0));
           g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp, { kb: lv(m.kb, 2), fire: lv(m.fi, 2), loot: lv(m.lo, 3) });
+          break;
+        }
+        case 'vtrade': {
+          // l'invité a fait des échanges : le villageois progresse
+          const mob = g.entities.mobs.find((o) => o.uid === m.id && o.type === 'villager');
+          if (mob && CM.Villagers && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 16) CM.Villagers.gain(g, mob, Math.max(1, Math.min(64, m.n | 0)));
           break;
         }
         case 'feed': {
@@ -1332,6 +1341,17 @@
         case 'sys':
           this.sys(m.s);
           break;
+        case 'rtoast':
+          // annonce (raid, boss) : bandeau + tchat
+          if (typeof m.s === 'string') {
+            g.ui.toast(cleanText(m.s), m.k === 'good' ? 'good' : 'warn', 'raid');
+            this.sys(m.s);
+          }
+          break;
+        case 'raid':
+          // barre du raid en cours (null : fini)
+          if (CM.Raids) CM.Raids.remote = Array.isArray(m.r) ? m.r : null;
+          break;
         case 'cr':
           // réponse d'une commande, ou ligne pour tous (/moi, /dé…)
           if (typeof m.s === 'string') CM.Commands.print(m.s.replace(/[\u0000-\u001f]/g, ' ').slice(0, 600), ['ok', 'err', 'info', 'msg', 'me', 'ann'].includes(m.k) ? m.k : 'info');
@@ -1395,6 +1415,8 @@
           e.burst(L[cols[Math.floor(Math.random() * cols.length)]] || L.white, m.x, m.y, m.z, 40, { speed: 7, grav: 2, life: 1.4, size: 0.1, emissive: true, full: true });
           CM.Audio.play('explode', { pitch: 1.8, vol: 0.5 });
         }
+      } else if (m.k === 'slam' || m.k === 'lvup' || m.k === 'totem') {
+        if (d < 64 && CM.Raids) CM.Raids.onFx(g, m);
       } else if (m.k === 'love') {
         if (d < 40) e.burst(CM.Textures.layer.heart, m.x, m.y + 0.2, m.z, Math.min(10, m.n | 0) || 6, { speed: 0.6, grav: -1.2, life: 1, size: 0.12, spread: 0.4, emissive: true, full: true });
       }

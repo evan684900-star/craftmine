@@ -578,3 +578,21 @@ body.touch #effects { top: 150px; }
 .chest-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .look-prev { display: flex; justify-content: center; }
 .look-prev canvas { background: rgba(255, 255, 255, 0.06); border-radius: 10px; image-rendering: pixelated; }
+
+/* ---------------------------------------------- raids et boss ------ */
+#bossbars { position: absolute; top: 10px; left: 50%; transform: translateX(-50%) scale(var(--gui, 1)); transform-origin: top center; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: min(420px, 70vw); }
+#bossbars .bb { width: 100%; text-align: center; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px #000; }
+#bossbars .bbar { margin-top: 3px; height: 9px; border-radius: 5px; background: rgba(10, 12, 20, 0.7); border: 1px solid rgba(255, 255, 255, 0.25); overflow: hidden; }
+#bossbars .bbar i { display: block; height: 100%; background: linear-gradient(#e24a4a, #9a1f1f); transition: width 0.25s; }
+#bossbars .bb.shadow .bbar i { background: linear-gradient(#b067ff, #5a1f9a); }
+#bossbars .bb.fire .bbar i { background: linear-gradient(#ffc24a, #c85a10); }
+.trade-lv { padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); font-size: 13px; }
+.trade-lv span { color: var(--muted); font-size: 12px; }
+.trade-lv small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.trade-lv small.hero { color: #7ee07e; font-weight: 700; }
+.trade-lv .vbar { margin-top: 4px; height: 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.4); overflow: hidden; }
+.trade-lv .vbar i { display: block; height: 100%; background: linear-gradient(90deg, #2acb57, #8ef0a8); }
+.trade.locked { opacity: 0.55; }
+.trade.locked .lock { margin-right: 6px; }
+.totem-pop { position: absolute; left: 50%; top: 45%; width: 160px; height: 160px; margin: -80px 0 0 -80px; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; pointer-events: none; animation: totempop 1.6s ease-out forwards; filter: drop-shadow(0 0 18px rgba(255, 220, 90, 0.8)); }
+@keyframes totempop { 0% { transform: scale(0.2) rotate(-20deg); opacity: 0; } 15% { transform: scale(1.25) rotate(8deg); opacity: 1; } 35% { transform: scale(1) rotate(0); } 75% { opacity: 1; } 100% { transform: scale(1.6) translateY(-40px); opacity: 0; } }

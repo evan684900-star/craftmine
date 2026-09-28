@@ -349,6 +349,12 @@
       case 'effclear':
         CM.Effects.clear(p);
         break;
+      case 'effrm':
+        if (p.effects && p.effects[a.k]) {
+          delete p.effects[a.k];
+          g.ui.effDirty = true;
+        }
+        break;
       case 'launch':
         p.vy = Math.min(40, +a.v || 20);
         p.onGround = false;
@@ -1404,6 +1410,23 @@
         made++;
       }
       o.ok('🐾 ' + made + ' × ' + mobName(type));
+    },
+  });
+  def('raid', {
+    cat: 'Créatures', cheat: true, usage: '[stop]', desc: 'lance un raid de pillards sur le village le plus proche (ou l’arrête)',
+    args: [() => ['stop']],
+    run(ctx, a, o) {
+      const g = G(), R = CM.Raids;
+      if (a[0] && /^(stop|fin|arret)/.test(norm(a[0]))) {
+        if (!R.stop(g)) bad('Aucun raid en cours');
+        return o.ok('🏳 Raid arrêté');
+      }
+      if (g.dim !== 'overworld') bad('Les raids n’ont lieu que dans le monde normal');
+      if (R.raid) bad('Un raid est déjà en cours (/raid stop pour l’arrêter)');
+      const v = g.world.villageNear(ctx.x, ctx.z, 48);
+      if (!v) bad('Aucun village à proximité');
+      R.start(g, v);
+      o.ok('⚔ Raid lancé sur le village (' + v.x + ', ' + v.z + ')');
     },
   });
   def('foudre lightning eclair smite', {

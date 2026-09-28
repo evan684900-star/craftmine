@@ -1871,6 +1871,8 @@
         this.vy = Math.max(this.vy, 5);
       }
       if (this.health <= 0) {
+        // totem d'immortalité en main : il se brise et nous sauve
+        if (CM.Raids && CM.Raids.useTotem(this, cause)) return;
         this.health = 0;
         this.die(cause);
       }
