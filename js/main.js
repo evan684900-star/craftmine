@@ -1119,6 +1119,7 @@
       on('btn-wake', () => this.wake('button'));
       // multijoueur
       on('btn-multi', () => this.openMulti());
+      on('btn-server', () => this.menuMsg('🖥️ Le serveur CraftMine (un monde ouvert 24 h/24, sans code à taper) arrive prochainement !', 'good'));
       on('btn-mp-back', () => {
         this.ui.hide('multi');
         this.ui.show('menu');
