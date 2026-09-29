@@ -440,6 +440,31 @@
       case 'flame':
         noise(t, 0.25, 'bandpass', 700, 0.6, 0.12 * (opt.vol || 1), 1400);
         break;
+      // véhicules
+      case 'engine': {
+        const v = opt.vol === undefined ? 0.5 : opt.vol;
+        tone(t, 0.11, 'sawtooth', 55 * pitch, 58 * pitch, 0.05 * v, 0.01);
+        tone(t, 0.11, 'square', 110 * pitch, 112 * pitch, 0.018 * v, 0.01);
+        noise(t, 0.1, 'lowpass', 300 * pitch, 1, 0.03 * v);
+        break;
+      }
+      case 'klaxon': {
+        const v = opt.vol === undefined ? 1 : opt.vol;
+        tone(t, 0.45, 'square', 415 * pitch, 0, 0.07 * v, 0.01);
+        tone(t, 0.45, 'square', 523 * pitch, 0, 0.06 * v, 0.01);
+        break;
+      }
+      case 'siren': {
+        const v = opt.vol === undefined ? 0.5 : opt.vol;
+        tone(t, 0.48, 'triangle', 700 * pitch, 900 * pitch, 0.08 * v, 0.02);
+        break;
+      }
+      case 'rotor': {
+        const v = opt.vol === undefined ? 0.5 : opt.vol;
+        noise(t, 0.07, 'lowpass', 220, 1.5, 0.35 * v, 90);
+        tone(t, 0.06, 'sine', 70, 45, 0.12 * v);
+        break;
+      }
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule
         noise(t, 0.25 * pitch, 'highpass', 1800, 0.6, 0.5);

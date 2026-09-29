@@ -8,7 +8,7 @@
   const GRAVITY = 28;
   const REACH = 5;
   // objets dont le clic droit a déjà un usage (le bouclier ne se lève pas, la main secondaire attend)
-  const MAIN_USES = ['food', 'bucket', 'bow', 'grapple', 'cart', 'seeds', 'bonemeal', 'igniter', 'armor'];
+  const MAIN_USES = ['food', 'bucket', 'bow', 'grapple', 'cart', 'seeds', 'bonemeal', 'igniter', 'armor', 'vehicle'];
   // objets de la main secondaire utilisables quand la main principale n'a rien à faire
   const OFF_USES = ['bucket', 'igniter', 'bonemeal', 'seeds', 'grapple', 'cart'];
   const GRAPPLE_RANGE = 34;
@@ -217,8 +217,17 @@
       // assis dans un wagonnet : on suit le wagonnet (s'accroupir pour descendre)
       if (this.riding !== null && this.riding !== undefined) {
         const c = (g.entities.carts || []).find((o) => o.uid === this.riding && !o.dead);
-        if (!c || (!g.net.isClient && c.rider !== 'local') || input.pressed[K.sneak]) this.leaveCart(c);
-        else if (c.type === 'boat') {
+        const aboard = c && CM.VEH[c.type] ? CM.Vehicles.seatOf(c, g.net.isClient ? g.net.pid : 'local') >= 0 || g.net.isClient : c && (g.net.isClient || c.rider === 'local');
+        if (!c || !aboard || input.pressed[K.sneak]) this.leaveCart(c);
+        else if (CM.VEH[c.type]) {
+          // véhicule (extension) : conducteur ou passager
+          CM.Vehicles.ride(this, c, dt, input);
+          CM.Fishing.update(this, dt);
+          this.updateVitals(dt, wasHeadIn);
+          this.updateTarget();
+          this.updateActions(dt, input);
+          return;
+        } else if (c.type === 'boat') {
           // en bateau : il va là où l'on se dirige
           const wl2 = Math.hypot(wx, wz);
           CM.Boats.drive(this, c, dt, wl2 > 0.01 ? [wx / wl2, wz / wl2, Math.min(1, mag)] : null);
@@ -703,7 +712,8 @@
     }
     rideCart(c) {
       const g = this.game;
-      if ((c.type !== 'cart' && c.type !== 'boat') || (c.rider !== null && c.rider !== undefined)) return false;
+      const veh = !!CM.VEH[c.type];
+      if (veh ? !CM.Vehicles.seatsFree(c) : (c.type !== 'cart' && c.type !== 'boat') || (c.rider !== null && c.rider !== undefined)) return false;
       if (this.mount !== null && this.mount !== undefined) return false;
       if (g.net.isClient) g.net.send({ t: 'ride', id: c.uid });
       else if (!g.entities.mount(c, 'local')) return false;
@@ -718,7 +728,16 @@
       this.eyeOffset = 0;
       if (g.net.isClient) g.net.send({ t: 'unride' });
       else if (c && c.rider === 'local') c.rider = null;
-      if (c) this.y = c.y + (c.type === 'boat' ? 0.65 : 0.1);
+      if (c && CM.VEH[c.type]) {
+        // on descend à côté du véhicule
+        if (!g.net.isClient && c.pax) c.pax = c.pax.filter((q) => q !== 'local');
+        const at = CM.Vehicles.exitSpot(g, c);
+        this.x = at[0];
+        this.y = at[1];
+        this.z = at[2];
+        this.vx = this.vz = 0;
+        this.vehLight = 0;
+      } else if (c) this.y = c.y + (c.type === 'boat' ? 0.65 : 0.1);
       this.fallStart = this.y;
     }
     // Arc : la flèche part d'autant plus vite que l'arc a été bandé longtemps (1 s = pleine puissance).
@@ -1019,7 +1038,8 @@
         const ch = g.entities.raycastCart(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
         if (ch && ch.cart.uid !== this.riding && (!this.target || ch.t < this.target.t)) {
           const c = ch.cart;
-          if (c.type === 'chest' || c.type === 'hopper') g.openCartChest(c);
+          if (CM.VEH[c.type]) CM.Vehicles.interact(this, c); // plein, réparation, peinture, benne, monter
+          else if (c.type === 'chest' || c.type === 'hopper') g.openCartChest(c);
           else if ((c.type === 'cart' || c.type === 'boat') && (this.riding === null || this.riding === undefined)) this.rideCart(c);
           this.swing = 1;
           return;
@@ -1588,6 +1608,11 @@
         if (input.pressed.mouse2) CM.Fishing.use(this);
         return;
       }
+      // véhicule (extension) : on le pose devant soi
+      if (info.type === 'vehicle') {
+        if (input.pressed.mouse2) CM.Vehicles.place(this, stack, info);
+        return;
+      }
       // bateau : on le pose sur l'eau (ou par terre)
       if (info.type === 'boat') {
         if (!input.pressed.mouse2) return;
@@ -2079,6 +2104,7 @@
     // Lumière dynamique : tenir une torche ou une lanterne éclaire autour.
     heldLight() {
       const inv = this.game.inventory;
+      if (this.vehLight && this.riding !== null && this.riding !== undefined) return 1; // phares du véhicule
       return Math.max(this.lightOf(inv.held()), this.lightOf(inv.offhand));
     }
     lightOf(s) {

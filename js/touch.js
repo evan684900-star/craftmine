@@ -22,6 +22,7 @@
     't-jump': 'Sauter', 't-sneak': 'S’accroupir', 't-sprint': 'Courir', 't-dash': 'Ruée', 't-use': 'Poser au centre',
     't-inv': 'Inventaire', 't-drop': 'Jeter', 't-chat': 'Tchat', 't-pause': 'Pause',
     't-fire': 'Tirer (arme à feu)', 't-aim': 'Viser (arme à feu)', 't-reload': 'Recharger (arme à feu)',
+    't-horn': 'Klaxon (véhicule)', 't-view': 'Vue de derrière',
   };
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -85,6 +86,12 @@
         inp.pressed[K().jump] = true;
       }, () => (inp.keys[K().jump] = false));
       hold('t-sneak', () => {
+        // à bord (bateau, wagonnet, véhicule, monture) : descendre
+        const p = g.player;
+        if (p && ((p.riding !== null && p.riding !== undefined) || (p.mount !== null && p.mount !== undefined))) {
+          inp.pressed[K().sneak] = true;
+          return;
+        }
         this.sneak = !this.sneak;
         $('t-sneak').classList.toggle('on', this.sneak);
       });
@@ -118,6 +125,8 @@
         $('t-aim').classList.toggle('on', this.aimOn);
       });
       hold('t-reload', () => (inp.pressed[K().reload] = true));
+      hold('t-horn', () => (inp.pressed[K().horn] = true));
+      hold('t-view', () => g.toggleView());
       this.buildEditor();
       // barre rapide : toucher une case la sélectionne
       $('hotbar').addEventListener('pointerdown', (e) => {
@@ -484,6 +493,12 @@
         }
       }
       if (this.fireHeld && active && gun) inp.mouse[0] = true;
+      // véhicule : bouton du klaxon (conducteur)
+      const inVeh = !!(p && p.alive && p.riding !== null && p.riding !== undefined && (p.vehSeat || 0) === 0 && CM.VEH[(g.entities.cartByUid(p.riding) || {}).type]);
+      if (inVeh !== this.vehShown) {
+        this.vehShown = inVeh;
+        $('t-horn').classList.toggle('hidden', !inVeh);
+      }
       if (this.aimOn || this.aimSet) inp.mouse[2] = active && gun && this.aimOn;
       this.aimSet = this.aimOn;
       if (p) {

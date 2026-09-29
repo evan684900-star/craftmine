@@ -1030,7 +1030,15 @@
         }
         case 'hitcart': {
           const c = g.entities.cartByUid(m.id);
-          if (c && Math.hypot(c.x - rp.x, c.z - rp.z) < 8) g.entities.hitCart(c, Math.min(20, Math.max(0, num(m.d))));
+          if (!c || Math.hypot(c.x - rp.x, c.z - rp.z) > 8) break;
+          if (CM.VEH[c.type]) CM.Vehicles.hit(g.entities, c, Math.min(20, Math.max(0, num(m.d))) * 3, { sneaking: !!m.s });
+          else g.entities.hitCart(c, Math.min(20, Math.max(0, num(m.d))));
+          break;
+        }
+        case 'vact': {
+          // un invité fait le plein, répare, peint, klaxonne ou allume la sirène
+          const c = g.entities.cartByUid(m.id);
+          if (c && CM.VEH[c.type] && Math.hypot(c.x - rp.x, c.z - rp.z) < 10 && typeof m.a === 'string') CM.Vehicles.apply(g, c, m.a, m, e.pid);
           break;
         }
         case 'ride': {
@@ -1042,14 +1050,31 @@
         case 'unride': {
           const c = (g.entities.carts || []).find((o) => o.rider === e.pid);
           if (c) c.rider = null;
+          // (passager d'un véhicule)
+          for (const o of g.entities.carts || []) if (o.pax && o.pax.includes(e.pid)) o.pax = o.pax.filter((q) => q !== e.pid);
           break;
         }
         case 'bpos': {
           // l'invité pilote son bateau
           const c = g.entities.cartByUid(m.id);
-          if (!c || c.type !== 'boat' || c.rider !== e.pid || !Array.isArray(m.p)) break;
+          if (!c || (c.type !== 'boat' && !CM.VEH[c.type]) || c.rider !== e.pid || !Array.isArray(m.p)) break;
           const [x, y, z, yaw] = m.p.map(num);
           if (Math.hypot(x - c.x, z - c.z) > 12 || Math.hypot(x - rp.x, z - rp.z) > 8) break;
+          if (CM.VEH[c.type]) {
+            // véhicule piloté par un invité : sa vitesse, son braquage, son assiette
+            const v = Array.isArray(m.v) ? m.v.map(num) : [];
+            c.x = x;
+            c.y = y;
+            c.z = z;
+            c.yaw = yaw;
+            c.vx = c.vy = c.vz = 0;
+            c.spd = v[0] || 0;
+            c.steer = v[1] || 0;
+            c.pitchV = v[2] || 0;
+            c.roll = v[3] || 0;
+            c.thrIn = v[4] || 0;
+            break;
+          }
           const d = Math.hypot(x - c.x, z - c.z);
           c.row = (c.row || 0) + d * 1.6;
           c.x = x;
@@ -1445,6 +1470,8 @@
         if (d < 64) g.explodeFx(m.x, m.y, m.z);
       } else if (typeof m.k === 'string' && m.k.startsWith('gun_')) {
         if (d < 160 && CM.Guns) CM.Guns.onFx(g, m);
+      } else if (typeof m.k === 'string' && m.k.startsWith('veh_')) {
+        if (CM.Vehicles) CM.Vehicles.onFx(g, m);
       } else if (m.k === 'fuse') {
         if (d < 24) CM.Audio.play('fuse');
       } else if (m.k === 'kill') {
@@ -1780,20 +1807,28 @@
     // ------------------------------------------------------ rendu ----
     renderPlayers(batch) {
       if (!this.active) return;
-      const L = CM.Textures.layer, ents = this.game.entities, mat4 = CM.mat4;
-      const head = [L.player_head, L.player_head, L.player_hair, L.skin, L.player_hair, L.player_face];
       const me = this.game.player;
       for (const rp of this.remotes.values()) {
         if (!rp.seen || !rp.alive || rp.dim !== this.game.playerDim) continue;
         if (rp.flags & 256) continue; // invisible (potion)
         // caméra à l'intérieur du personnage (même point d'apparition) : on ne le dessine pas
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
+        this.drawPlayer(batch, rp);
+      }
+    }
+    // Un personnage (autre joueur, ou soi-même vu de derrière) : rp donne position, regard et état.
+    drawPlayer(batch, rp) {
+      const L = CM.Textures.layer, ents = this.game.entities, mat4 = CM.mat4;
+      const head = [L.player_head, L.player_head, L.player_hair, L.skin, L.player_hair, L.player_face];
+      {
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);
         const fl = rp.flags & 16 ? 2 : 0;
         const sneak = rp.flags & 1, rides = rp.flags & 128, seated = rp.flags & 512, glides = rp.flags & 1024;
         const M = this.M;
+        // (assis dans un véhicule : tourné comme lui)
+        const vc = seated && CM.Vehicles ? CM.Vehicles.vehicleAt(ents, rp.rx, rp.ry, rp.rz) : null;
         if (glides) CM.Weapons.glideMatrix(M, this.Q, this.P, rp.rx, rp.ry, rp.rz, rp.ryaw, rp.pitch);
-        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, rp.ryaw, 0, 0, 1);
+        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, vc ? vc.yaw : rp.ryaw, 0, 0, 1);
         if (rp.flags & 2048) CM.Weapons.renderWings(ents, batch, M, l, fl, glides);
         // canne à pêche : la ligne jusqu'au flotteur
         if (rp.bob) {

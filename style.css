@@ -353,6 +353,7 @@ body.touch #debug { bottom: auto; top: 110px; }
 #t-fire { right: calc(4px * var(--t)); bottom: calc(168px * var(--t)); background: rgba(160, 40, 30, 0.5); }
 #t-aim { right: calc(96px * var(--t)); bottom: calc(160px * var(--t)); }
 #t-reload { right: calc(160px * var(--t)); bottom: calc(110px * var(--t)); }
+#t-horn { right: calc(96px * var(--t)); bottom: calc(160px * var(--t)); }
 /* disposition personnalisée (Options > Contrôles > Disposer les boutons) */
 #touch .t-custom { position: fixed !important; right: auto !important; bottom: auto !important; translate: -50% -50%; margin: 0; }
 #touch .t-hidden { display: none !important; }
@@ -360,7 +361,7 @@ body.touch-edit #touch { display: block; position: fixed; inset: 0; z-index: 70;
 body.touch-edit #touch button { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 body.touch-edit #touch .t-hidden { display: block !important; outline: 2px dashed rgba(255, 255, 255, 0.6); }
 body.touch-edit #touch .net-only { display: block; }
-body.touch-edit #touch #t-fire, body.touch-edit #touch #t-aim, body.touch-edit #touch #t-reload { display: block !important; }
+body.touch-edit #touch #t-fire, body.touch-edit #touch #t-aim, body.touch-edit #touch #t-reload, body.touch-edit #touch #t-horn { display: block !important; }
 body.touch-edit #touch .te-sel { outline: 3px solid var(--gold); outline-offset: 3px; }
 body.touch-edit #t-stick, body.touch-edit #t-hint { display: none !important; }
 #touch-editor .te-bg { position: fixed; inset: 0; z-index: 60; background: rgba(5, 6, 12, 0.6); }
@@ -630,3 +631,16 @@ body.touch #effects { top: 150px; }
 #scope .scope-ring::before { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
 #scope .scope-ring::after { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
 @media (max-width: 700px) { #gun-hud { bottom: auto; top: 64px; right: 10px; min-width: 110px; } #gun-hud .gh-ammo { font-size: 18px; } }
+
+/* --------------------------------------------------------- véhicules */
+#veh-hud {
+  position: absolute; left: 18px; bottom: 96px; width: 190px; box-sizing: border-box; padding: 8px 12px; border-radius: 10px;
+  background: rgba(10, 12, 20, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; text-shadow: 0 1px 2px #000;
+  transform: scale(var(--gui, 1)); transform-origin: bottom left;
+}
+#veh-hud .vh-name { font-size: 12px; font-weight: 700; color: #9fd8ff; }
+#veh-hud .vh-speed { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.1; }
+#veh-hud .vh-speed small { font-size: 13px; font-weight: 700; color: #cfd6e6; }
+#veh-hud .vh-bars { font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; color: #dfe6f3; }
+#veh-hud .vh-bars .low { color: #ff7a6a; font-weight: 800; }
+@media (max-width: 700px) { #veh-hud { bottom: auto; top: 64px; left: 10px; width: 150px; } #veh-hud .vh-speed { font-size: 20px; } }

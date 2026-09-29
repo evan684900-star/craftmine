@@ -92,6 +92,11 @@
       // clic droit sur une porte, un coffre, une station… : on laisse faire
       const tb = p.target ? CM.blocks[p.target.id] : null;
       if (input.pressed.mouse2 && tb && (tb.door || tb.container || tb.station || tb.bed || tb.use || tb.enchanter || tb.anvil) && !input.mouse[0]) return false;
+      // (clic droit sur un véhicule : on monte dedans)
+      if (input.pressed.mouse2 && (p.riding === null || p.riding === undefined)) {
+        const e = p.eye(), d = p.aim(), ch = g.entities.raycastCart(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
+        if (ch && CM.VEH[ch.cart.type]) return false;
+      }
       const busy = g.ui.invOpen;
       const aiming = !!input.mouse[2] && !busy && !p.gunReload && !p.sprinting;
       p.gunAim = Math.max(0, Math.min(1, (p.gunAim || 0) + (aiming ? dt * 7 : -dt * 9)));
@@ -253,9 +258,24 @@
             const t = CM.rayBox(ox, oy, oz, d[0], d[1], d[2], rp.x - 0.3, rp.y, rp.z - 0.3, rp.x + 0.3, rp.y + 1.8, rp.z + 0.3);
             if (t >= 0 && t < maxT) cands.push({ t, rp });
           }
+        // véhicules (extension) : la carrosserie arrête la balle
+        for (const v of g.entities.carts || []) {
+          if (v.dead || !CM.VEH[v.type] || p.riding === v.uid) continue;
+          const vd = CM.VEH[v.type];
+          const t = CM.rayBox(ox, oy, oz, d[0], d[1], d[2], v.x - vd.hw, v.y, v.z - vd.hw, v.x + vd.hw, v.y + vd.h, v.z + vd.hw);
+          if (t >= 0 && t < maxT) cands.push({ t, v });
+        }
         cands.sort((a, b) => a.t - b.t);
         for (const c of cands) {
           const hy = oy + d[1] * c.t;
+          if (c.v) {
+            const hx = ox + d[0] * c.t, hz = oz + d[2] * c.t;
+            g.entities.burst(CM.Textures.layer.white, hx, hy, hz, 4, { speed: 3, grav: 6, life: 0.3, size: 0.05, emissive: true });
+            CM.Audio.play('dig', { mat: 'metal' });
+            if (g.net.isClient) g.net.send({ t: 'hitcart', id: c.v.uid, d: r2(gd.dmg / 6) });
+            else CM.Vehicles.damage(g, c.v, gd.dmg * 0.5, 'hit');
+            return [hx, hy, hz];
+          }
           if (c.m) {
             hitSet.add(c.m);
             const head = hy > c.m.y + c.m.h * 0.78, st = g.stats;

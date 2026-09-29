@@ -289,6 +289,11 @@
         CM.Boats.hostTick(this, c, dt);
         continue;
       }
+      // véhicule (extension) : conduit par son pilote, sinon l'hôte le simule
+      if (CM.VEH[c.type]) {
+        CM.Vehicles.hostTick(this, c, dt);
+        continue;
+      }
       const r = railAt(w, c);
       if (r) this.cartOnRail(c, r, dt);
       else {
@@ -486,8 +491,9 @@
   E.renderCarts = function (batch) {
     const L = CM.Textures.layer;
     CM.Boats.render(this, batch);
+    if (CM.Vehicles) CM.Vehicles.render(this, batch);
     for (const c of this.carts || []) {
-      if (c.dead || c.type === 'boat') continue;
+      if (c.dead || c.type === 'boat' || CM.VEH[c.type]) continue;
       const l = this.lightAt(c.x, c.y + 0.4, c.z);
       mat4.compose(this.M, c.x, c.y, c.z, c.yaw || 0, 0, 0, 1);
       const M = this.M, body = L.cart_body, inner = L.cart_inner;
@@ -540,7 +546,9 @@
     }
     for (const c of this.carts || []) {
       if (c.dead || !near(c)) continue;
-      ca.push([c.uid, c.type, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw || 0), c.rider === 'local' ? 0 : c.rider === null || c.rider === undefined ? -1 : c.rider, c.fuse > 0 ? 1 : 0]);
+      const row = [c.uid, c.type, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw || 0), c.rider === 'local' ? 0 : c.rider === null || c.rider === undefined ? -1 : c.rider, c.fuse > 0 ? 1 : 0];
+      if (CM.VEH[c.type]) row.push(CM.Vehicles.snap(c)); // carburant, état, couleur, passagers…
+      ca.push(row);
     }
     return { ar, ca };
   };
@@ -560,9 +568,19 @@
     }
     const oldC = new Map((this.carts || []).map((c) => [c.uid, c]));
     this.carts = [];
-    for (const [uid, type, x, y, z, yaw, rider, lit] of s.ca || []) {
+    for (const [uid, type, x, y, z, yaw, rider, lit, vx] of s.ca || []) {
       let c = oldC.get(uid);
       if (!c) c = { uid, type, x, y, z, vx: 0, vy: 0, vz: 0, hw: type === 'boat' ? CM.Boats.HW : 0.45, h: type === 'boat' ? CM.Boats.H : 0.7 };
+      // véhicule que l'on conduit : notre copie fait foi (seuls carburant, état et passagers changent)
+      if (CM.VEH[type]) {
+        const mine = this.game.player.riding === uid && rider === this.game.net.pid && oldC.has(uid);
+        CM.Vehicles.unsnap(c, vx, mine);
+        c.rider = rider === -1 ? null : rider;
+        if (mine) {
+          this.carts.push(c);
+          continue;
+        }
+      }
       // notre propre bateau : c'est nous qui le pilotons
       if (type === 'boat' && oldC.has(uid) && this.game.player.riding === uid) {
         this.carts.push(c);

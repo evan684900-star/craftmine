@@ -35,6 +35,7 @@
     <div id="scope" class="hidden"><div class="scope-ring"></div></div>
     <div id="hitmarker" class="hidden"></div>
     <div id="gun-hud" class="hidden"></div>
+    <div id="veh-hud" class="hidden"></div>
     <div id="combo" class="hidden"><span id="combo-text">COMBO x2</span><div id="combo-bar"><div id="combo-fill"></div></div></div>
     <div id="objective">
       <button id="obj-close" title="Masquer le guide" aria-label="Masquer le guide">✕</button>
@@ -88,6 +89,7 @@
       <button id="t-inv" title="Inventaire">🎒</button>
       <button id="t-drop" title="Jeter l'objet">🗑</button>
       <button id="t-chat" title="Tchat et commandes">💬</button>
+      <button id="t-view" title="Vue de derrière / 1re personne">👁</button>
       <button id="t-pause" title="Pause">⏸</button>
     </div>
     <div class="t-right">
@@ -95,6 +97,7 @@
       <button id="t-fire" class="t-btn big hidden" title="Tirer">🔫</button>
       <button id="t-aim" class="t-btn small hidden" title="Viser">🎯</button>
       <button id="t-reload" class="t-btn small hidden" title="Recharger">↻</button>
+      <button id="t-horn" class="t-btn small hidden" title="Klaxon / sirène">📯</button>
       <button id="t-dash" class="t-btn small" title="Ruée">⚡</button>
       <button id="t-sprint" class="t-btn small" title="Courir">»</button>
       <button id="t-sneak" class="t-btn" title="S'accroupir / descendre">⤓</button>
@@ -188,6 +191,7 @@
             <button data-f="redstone">Redstone</button>
             <button data-f="tech" class="ext-tech">⚡ Électricité</button>
             <button data-f="armes" class="ext-guns">🔫 Armes</button>
+            <button data-f="vehicules" class="ext-vehicles">🚗 Véhicules</button>
             <button data-f="nourriture">Nourriture</button>
             <label><input type="checkbox" id="only-can" /> Réalisables</label>
             <input id="recipe-search" type="search" placeholder="Rechercher une recette…" />
@@ -208,6 +212,7 @@
               <option value="redstone">Redstone et wagonnets</option>
               <option value="tech" class="ext-tech">⚡ Électricité</option>
               <option value="guns" class="ext-guns">🔫 Armes à feu</option>
+              <option value="vehicles" class="ext-vehicles">🚗 Véhicules</option>
             </select>
             <input id="creative-search" type="search" placeholder="Rechercher un bloc ou un objet…" />
           </div>
@@ -290,6 +295,7 @@
         <label class="nw-ext-row"><input id="nw-ext-tech" type="checkbox" /> <span><b>⚡ Électricité</b> — nouveaux minerais (zinc, étain, bauxite, lithium), câbles, générateurs (solaire, éolienne, roue à eau, charbon), batteries, lampes et néons, broyeur, four électrique, foreuse, tapis roulants, ventilateurs.</span></label>
         <label class="nw-ext-row"><input id="nw-ext-light" type="checkbox" /> <span><b>💡 Lumière réaliste</b> — lumières colorées (torches orangées, néons, redstone, lave…), flammes qui vacillent, halos la nuit, torches qui éclairent aussi les coins sombres en plein jour.</span></label>
         <label class="nw-ext-row"><input id="nw-ext-guns" type="checkbox" /> <span><b>🔫 Armes à feu</b> — pistolet, revolver, pistolet-mitrailleur, fusil d’assaut, fusil à pompe, double canon, carabine, fusil de précision à lunette, mitrailleuse, lance-roquettes, lance-grenades, lance-flammes, grenades ; munitions et établi d’armurier ; des bandits armés rôdent la nuit.</span></label>
+        <label class="nw-ext-row"><input id="nw-ext-vehicles" type="checkbox" /> <span><b>🚗 Véhicules</b> — voiture, voiture de sport, 4x4, camion avec benne, moto, quad, voiture de police avec sirène, hélicoptère, avion et bateau à moteur ; essence, réparations, peinture, passagers, vue de derrière (V) ; établi de mécanicien.</span></label>
         <label class="nw-ext-row"><input id="nw-ext-gravity" type="checkbox" /> <span><b>🧱 Gravité réaliste</b> — <b>tous</b> les blocs obéissent à la gravité, terrain naturel compris : ce qui n'a plus d'appui tombe d'un seul morceau (un arbre dont on creuse le pied, un plafond de grotte trop large, une construction mal soutenue). Porte-à-faux possible : métal 7 blocs, roche 6, bois et feuilles 5, pierre taillée et briques 4, glace 3, terre et laine 2, verre 1, sable et gravier 0.</span></label>
       </div>
       <div id="nw-desc" class="small-note"></div>
@@ -454,6 +460,7 @@
   <script src="js/cave_defs.js"></script>
   <script src="js/end_defs.js"></script>
   <script src="js/gun_defs.js"></script>
+  <script src="js/vehicle_defs.js"></script>
   <script src="js/weather.js"></script>
   <script src="js/blocks.js"></script>
   <script src="js/textures.js"></script>
@@ -478,6 +485,7 @@
   <script src="js/seasons.js"></script>
   <script src="js/end.js"></script>
   <script src="js/guns.js"></script>
+  <script src="js/vehicles.js"></script>
   <script src="js/gravity.js"></script>
   <script src="js/player.js"></script>
   <script src="js/touch.js"></script>

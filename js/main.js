@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR', horn: 'KeyH', view: 'KeyV',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -365,7 +365,9 @@
         for (const c of this.dimCarts[dim]) {
           if (!c || !CM.CART_ITEMS[c.type] || !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z)) continue;
           const slots = Array.isArray(c.slots) ? c.slots.map((s) => (s && CM.itemInfo(s.id) ? s : null)) : undefined;
-          ctx.entities.addCart(c.type, c.x, c.y, c.z, { yaw: c.yaw || 0, slots });
+          // (véhicule : carburant, état, couleur)
+          const v = c.v && typeof c.v === 'object' ? { fuel: +c.v.f || 0, vhp: +c.v.h || 1, color: typeof c.v.c === 'string' ? c.v.c : undefined } : {};
+          ctx.entities.addCart(c.type, c.x, c.y, c.z, Object.assign({ yaw: c.yaw || 0, slots }, v));
         }
         delete this.dimCarts[dim];
       }
@@ -1027,6 +1029,7 @@
         }
         if (c === K.drop) this.dropHeld(e.ctrlKey);
         if (c === K.swap && !e.repeat && this.player.alive) this.swapHands();
+        if (c === K.view && !e.repeat) this.toggleView();
         inp.keys[c] = true;
         if (!e.repeat) inp.pressed[c] = true;
       });
@@ -1785,6 +1788,49 @@
       CM.Audio.play('golem');
     }
 
+    // ------------------------------------------------ vue de derrière ----
+    // Vue à la 3e personne : { dist, c (véhicule) } ou null.
+    thirdView() {
+      const p = this.player;
+      if (!p || !p.alive || p.sleeping) return null;
+      const c = p.riding !== null && p.riding !== undefined && this.entities.cartByUid ? this.entities.cartByUid(p.riding) : null;
+      if (c && CM.VEH[c.type]) return this.vehView === false ? null : { dist: CM.Vehicles.camDist(c), c };
+      return this.view3 ? { dist: 4, c: null } : null;
+    }
+    toggleView() {
+      const p = this.player;
+      const c = p && p.riding !== null && p.riding !== undefined ? this.entities.cartByUid(p.riding) : null;
+      if (c && CM.VEH[c.type]) this.vehView = this.vehView === false;
+      else this.view3 = !this.view3;
+      this.ui.toast(this.thirdView() ? '👁 Vue de derrière' : '👁 Vue à la 1re personne', 'info', 'view');
+    }
+    // État de notre personnage pour le dessiner comme un autre joueur.
+    selfModel() {
+      const p = this.player, s = this.net.stateOf(p), now = this.clock;
+      const o = this.selfRp || (this.selfRp = { walk: 0, swingT: 0, t: now });
+      const dt = Math.min(0.1, Math.max(0, now - o.t));
+      o.t = now;
+      const c = p.riding !== null && p.riding !== undefined ? this.entities.cartByUid(p.riding) : null;
+      o.rx = p.x;
+      o.ry = p.y;
+      o.rz = p.z;
+      o.ryaw = c && CM.VEH[c.type] ? c.yaw : p.yaw;
+      o.pitch = p.pitch;
+      o.flags = s[5];
+      o.held = s[6];
+      o.armor = s[7];
+      o.offhand = s[9];
+      o.bob = null;
+      o.blocking = !!p.blocking;
+      o.alive = p.alive;
+      const sp = Math.hypot(p.vx, p.vz);
+      o.moving = sp > 0.3 && !c;
+      o.walk += Math.min(sp, 8) * dt * 2.6;
+      o.swingT = p.swing > 0.85 ? 0.3 : Math.max(0, o.swingT - dt);
+      o.look = CM.Comfort.myLook(this);
+      return o;
+    }
+
     // ---------------------------------------------------------- TNT -----
     primeTnt(x, y, z) {
       this.world.setBlock(x, y, z, 0);
@@ -1843,6 +1889,7 @@
         const k = hurt(m.x, m.y + 0.5, m.z);
         if (k > 0) this.entities.hurtMob(m, k * 30, [x, z]);
       }
+      if (CM.Vehicles) CM.Vehicles.explosion(this, x, y, z, power); // véhicules abîmés
       // invités pris dans l'explosion
       for (const rp of this.net.remotes.values()) {
         if (!rp.seen || !rp.alive || rp.dim !== this.dim) continue;
@@ -2059,6 +2106,7 @@
       if (!net.isClient) CM.Caves.tick(this, dt); // hurleurs de sculk, gardien aveugle
       if (!net.isClient) CM.End.tick(this, dt); // dragon de l'End et ses cristaux
       CM.Guns.tick(this, dt); // traçantes, marqueur de touche, munitions à l'écran
+      CM.Vehicles.hud(this); // compteur de vitesse, carburant
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -2066,7 +2114,14 @@
     render() {
       const p = this.player;
       const bobOn = this.options.viewBob ? 1 : 0;
-      const cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn, p.z];
+      let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn, p.z];
+      // vue de derrière (touche V ; par défaut dans un véhicule)
+      const third = this.thirdView();
+      if (third) {
+        const cp0 = Math.cos(p.pitch), f0 = [-Math.sin(p.yaw) * cp0, Math.sin(p.pitch), -Math.cos(p.yaw) * cp0];
+        const eye = third.c ? [third.c.x, third.c.y + CM.VEH[third.c.type].h + 0.5, third.c.z] : [p.x, p.y + 1.55, p.z];
+        cam = CM.Vehicles.thirdPerson(this, eye, f0, third.dist);
+      }
       const env = this.computeEnv(cam);
       const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
       const right = [cy, 0, -sy];
@@ -2120,7 +2175,8 @@
         const bx = m.box || CM.FULL_BOX;
         this.overlay.box(M, bx[0] - 0.003, bx[1] - 0.003, bx[2] - 0.003, bx[3] + 0.003, bx[4] + 0.003, bx[5] + 0.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
       }
-      if (p.alive) p.buildHand(this.hand, this.clock);
+      if (p.alive && !third) p.buildHand(this.hand, this.clock);
+      else if (p.alive && third && !CM.Effects.invisible(p)) this.net.drawPlayer(this.batch, this.selfModel()); // soi-même, vu de derrière
       const t = p.target;
       const dyn = this.options.dynFov;
       const targetFov = (this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0)) * CM.Guns.fovMul(p); // (visée)
