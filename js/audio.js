@@ -381,6 +381,65 @@
         // villageois qui progresse
         for (let i = 0; i < 3; i++) tone(t + i * 0.09, 0.18, 'triangle', [660, 830, 990][i], 0, 0.08);
         break;
+      // armes à feu : claquement (bruit filtré) + grave, selon l'arme
+      case 'gun': {
+        const v = opt.vol === undefined ? 1 : opt.vol;
+        switch (opt.g) {
+          case 'pistol':
+            noise(t, 0.12, 'bandpass', 1800, 0.8, 0.5 * v, 500);
+            tone(t, 0.08, 'square', 180, 60, 0.12 * v);
+            break;
+          case 'magnum':
+            noise(t, 0.3, 'lowpass', 2600, 0.7, 0.7 * v, 200);
+            tone(t, 0.18, 'sine', 120, 40, 0.35 * v);
+            break;
+          case 'smg':
+            noise(t, 0.07, 'bandpass', 2200, 1, 0.35 * v, 700);
+            tone(t, 0.05, 'square', 220, 90, 0.08 * v);
+            break;
+          case 'rifle':
+          case 'minigun':
+            noise(t, opt.g === 'minigun' ? 0.07 : 0.12, 'bandpass', 1400, 0.7, 0.5 * v, 300);
+            tone(t, 0.08, 'sawtooth', 140, 50, 0.12 * v);
+            break;
+          case 'shotgun':
+            noise(t, 0.45, 'lowpass', 1800, 0.6, 0.9 * v, 120);
+            tone(t, 0.25, 'sine', 90, 35, 0.45 * v);
+            break;
+          case 'hunting':
+          case 'sniper':
+            noise(t, 0.6, 'lowpass', 3200, 0.5, 0.9 * v, 150);
+            tone(t, 0.3, 'sine', 80, 30, 0.5 * v);
+            noise(t + 0.08, 0.9, 'lowpass', 500, 0.6, 0.18 * v, 80); // écho
+            break;
+          case 'rocket':
+            noise(t, 0.9, 'lowpass', 900, 0.6, 0.6 * v, 200);
+            noise(t, 0.4, 'highpass', 2500, 0.5, 0.3 * v);
+            break;
+          case 'thump':
+            tone(t, 0.18, 'sine', 160, 50, 0.5 * v);
+            noise(t, 0.12, 'lowpass', 600, 1, 0.3 * v);
+            break;
+        }
+        break;
+      }
+      case 'reload':
+        noise(t, 0.05, 'bandpass', 3000 * pitch, 4, 0.12 * (opt.vol || 1));
+        noise(t + 0.18, 0.06, 'bandpass', 2200 * pitch, 5, 0.14 * (opt.vol || 1));
+        tone(t + 0.3, 0.04, 'square', 900 * pitch, 500, 0.05 * (opt.vol || 1));
+        break;
+      case 'dry':
+        noise(t, 0.03, 'bandpass', 4000, 6, 0.12);
+        break;
+      case 'ricochet':
+        tone(t, 0.25, 'sine', 2600 + Math.random() * 1500, 900, 0.035 * (opt.vol || 1));
+        break;
+      case 'spin':
+        tone(t, 0.12, 'sawtooth', 110 * pitch, 140 * pitch, 0.04);
+        break;
+      case 'flame':
+        noise(t, 0.25, 'bandpass', 700, 0.6, 0.12 * (opt.vol || 1), 1400);
+        break;
       case 'thunder':
         // coup de tonnerre : craquement puis grondement qui roule
         noise(t, 0.25 * pitch, 'highpass', 1800, 0.6, 0.5);

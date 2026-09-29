@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -939,7 +939,7 @@
       });
       document.addEventListener('mousemove', (e) => {
         if (!this.locked) return;
-        const s = 0.0023 * this.options.sens;
+        const s = 0.0023 * this.options.sens * CM.Guns.sensMul(this.player); // (plus doux dans la lunette)
         this.player.yaw -= e.movementX * s;
         this.player.pitch -= e.movementY * s * (this.options.invertY ? -1 : 1);
         this.player.pitch = CM.clamp(this.player.pitch, -1.55, 1.55);
@@ -1327,7 +1327,7 @@
     // ------------------------------------------------ utilitaires jeu ----
     nearbyStations() {
       const p = this.player, w = this.world;
-      const out = { table: false, forge: false, smithing: false, atelier: false, oven: false };
+      const out = { table: false, forge: false, smithing: false, atelier: false, oven: false, armurerie: false, garage: false };
       const px = Math.floor(p.x), py = Math.floor(p.y), pz = Math.floor(p.z);
       for (let dy = -3; dy <= 4; dy++)
         for (let dz = -4; dz <= 4; dz++)
@@ -1335,7 +1335,7 @@
             const st = CM.blocks[w.get(px + dx, py + dy, pz + dz)].station;
             if (st) out[st] = true;
           }
-      if (this.mode === 'creative') out.table = out.forge = out.smithing = out.atelier = out.oven = true;
+      if (this.mode === 'creative') for (const k of Object.keys(out)) out[k] = true;
       return out;
     }
     dropNearPlayer(id, count, extra) {
@@ -1407,7 +1407,10 @@
       if (!this.chests.has(k)) {
         // 27 cases (coffre), 9 (distributeur, dropper), 5 (entonnoir)…
         const slots = new Array(CM.blocks[this.world.get(x, y, z)].slots || 27).fill(null);
-        if (this.world.isNaturalChest(x, y, z)) this.fillLoot(slots, x, y, z);
+        if (this.world.isNaturalChest(x, y, z)) {
+          this.fillLoot(slots, x, y, z);
+          CM.Guns.bonusLoot(this, slots, x, y, z); // (extension Armes à feu : munitions, parfois une arme)
+        }
         this.chests.set(k, slots);
       }
       return this.chests.get(k);
@@ -2055,6 +2058,7 @@
       if (!net.isClient) CM.Seasons.tick(this, dt); // neige de l'hiver, fonte au printemps
       if (!net.isClient) CM.Caves.tick(this, dt); // hurleurs de sculk, gardien aveugle
       if (!net.isClient) CM.End.tick(this, dt); // dragon de l'End et ses cristaux
+      CM.Guns.tick(this, dt); // traçantes, marqueur de touche, munitions à l'écran
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
@@ -2081,6 +2085,7 @@
       CM.Weather.render(this, this.translucent, cam); // pluie, neige, éclairs
       CM.Potions.render(this, this.translucent, cam); // rayons des balises
       CM.Deco.render(this, this.batch); // panneaux, tableaux, cadres, porte-armures
+      CM.Guns.render(this, this.batch, cam); // traçantes des balles, éclairs des autres tireurs
       this.lastRenderClock = this.clock;
       this.net.renderPlayers(this.batch);
       // ligne de la canne à pêche
@@ -2118,7 +2123,7 @@
       if (p.alive) p.buildHand(this.hand, this.clock);
       const t = p.target;
       const dyn = this.options.dynFov;
-      const targetFov = this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0);
+      const targetFov = (this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0)) * CM.Guns.fovMul(p); // (visée)
       this.fovCur += (targetFov - (this.fovCur || this.options.fov)) * 0.2;
       this.renderer.render({
         env,
@@ -2171,7 +2176,7 @@
         game.autostart = true;
         const v = params.get('autostart');
         const mode = params.get('mode') === 'creative' ? 'creative' : 'survival';
-        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal', ext: { tech: params.get('tech') !== '0', light: params.get('light') !== '0', gravity: params.get('gravity') === '1' } });
+        game.startWorld(v && /^\d+$/.test(v) ? +v : 12345, null, { mode, type: params.get('type') || 'normal', ext: { tech: params.get('tech') !== '0', light: params.get('light') !== '0', gravity: params.get('gravity') === '1', guns: params.get('guns') === '1', vehicles: params.get('vehicles') === '1' } });
       }
     } catch (err) {
       console.error(err);

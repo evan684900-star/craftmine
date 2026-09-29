@@ -90,8 +90,8 @@
       // la main (principale ou secondaire) qui éclaire le plus
       const a = g.inventory.held(), b = g.inventory.offhand;
       const s = g.player.lightOf(b) > g.player.lightOf(a) ? b : a;
-      if (s && s.id >= CM.ITEM_BASE && CM.itemInfo(s.id).type === 'flashlight') return [0.92, 0.97, 1.0];
-      if (!s || s.id >= CM.ITEM_BASE) return pal[0].c;
+      if (s && !CM.isBlockId(s.id) && CM.itemInfo(s.id).type === 'flashlight') return [0.92, 0.97, 1.0];
+      if (!s || !CM.isBlockId(s.id)) return pal[0].c;
       return CM.lightRGB(s.id);
     },
     // Halos (additifs) et fumée des torches autour du joueur. Renvoie les sommets des halos.

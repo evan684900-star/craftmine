@@ -374,7 +374,7 @@
     C.achT = 1.2;
     g.ach = g.ach || {};
     for (const a of ACH) {
-      if (g.ach[a.k]) continue;
+      if (g.ach[a.k] || (a.ext && !CM.extOn(a.ext))) continue;
       let ok = false;
       try {
         ok = a.test(g);
@@ -398,10 +398,12 @@
     else if (g.net.isHost) g.net.sysAll('🏆 ' + g.net.name + ' a obtenu le succès « ' + a.name + ' »');
   };
   C.achHTML = function (g) {
-    const got = g.ach || {}, n = ACH.filter((a) => got[a.k]).length;
+    // (les succès d'une extension n'apparaissent que dans les mondes où elle est active)
+    const list = ACH.filter((a) => !a.ext || CM.extOn(a.ext));
+    const got = g.ach || {}, n = list.filter((a) => got[a.k]).length;
     return (
-      '<div class="ach-head">🏆 Succès : <b>' + n + '</b> / ' + ACH.length + '</div><div class="ach-grid">' +
-      ACH.map((a) => '<div class="ach ' + (got[a.k] ? 'got' : '') + '" title="' + a.desc.replace(/"/g, '') + '"><span class="ai">' + (got[a.k] ? a.icon : '🔒') + '</span><div><div class="an">' + a.name + '</div><div class="ad">' + a.desc + (got[a.k] ? ' · jour ' + got[a.k] : '') + '</div></div></div>').join('') +
+      '<div class="ach-head">🏆 Succès : <b>' + n + '</b> / ' + list.length + '</div><div class="ach-grid">' +
+      list.map((a) => '<div class="ach ' + (got[a.k] ? 'got' : '') + '" title="' + a.desc.replace(/"/g, '') + '"><span class="ai">' + (got[a.k] ? a.icon : '🔒') + '</span><div><div class="an">' + a.name + '</div><div class="ad">' + a.desc + (got[a.k] ? ' · jour ' + got[a.k] : '') + '</div></div></div>').join('') +
       '</div>'
     );
   };

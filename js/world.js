@@ -196,8 +196,8 @@
     ['ANCIENT_DEBRIS', 0.12, -62, -36, 2],
   ];
   // Roches qu'un filon peut remplacer, et version « ardoise des abîmes » des minerais
-  const ROCK = new Uint8Array(1024);
-  const DEEP_ORE = new Uint16Array(1024);
+  const ROCK = new Uint8Array(65536);
+  const DEEP_ORE = new Uint16Array(65536);
   const BANDS = [];
   const RUIN_REGION = 112;
 

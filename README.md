@@ -180,6 +180,7 @@ Plus de 80 commandes, **en solo comme en multijoueur** : ouvre le tchat (**T**, 
 | 🌦 **Météo** | Elle **change toute seule** : beau temps 10 à 25 minutes, puis pluie (3 à 8 min) ou orage (2 à 6 min), annoncés à l'écran (`/regle meteo_auto off` pour la figer). Aussi `/météo pluie`, `/météo orage` ou `/météo clair` (durée en minutes en option). Pluie qui s'arrête sous les toits et les feuilles, **neige** dans les biomes froids, ciel gris et nuages sombres, brume plus proche ; l'orage lance des **éclairs** (zigzag lumineux, flash, tonnerre) qui blessent et mettent le feu. La pluie éteint un joueur en feu. Sauvegardée, et synchronisée en multijoueur. |
 | 🔥 **Flammes animées** | Le feu et les flammes des torches (normales, des âmes, de redstone) sont animés sur 8 images. |
 | 💡 **Extension Lumière réaliste** | Lumière colorée (torches orangées, redstone rouge, néons, lanternes des âmes…), flammes qui vacillent, halos la nuit, fumée des torches, lumière des torches qui s'ajoute à celle du jour, lumière tenue en main colorée. Cochée par défaut à la création du monde, désactivable dans les Options. |
+| 🔫 **Extension Armes à feu** | À cocher en créant le monde. Établi d’armurier (4 fers, 4 planches, 2 poudres à canon) : pièces d’arme, munitions (balles de pistolet, balles de fusil, cartouches de chasse, roquettes, cartouches de gaz, grenades) et **12 armes** en 3D : pistolet, revolver, pistolet-mitrailleur, fusil d’assaut, fusil à pompe (8 plombs, rechargé cartouche par cartouche), fusil à double canon, carabine de chasse (lunette ×2), fusil de précision (lunette ×5, traverse deux créatures), mitrailleuse (6 canons qui tournent), lance-roquettes et lance-grenades (explosions), lance-flammes (met le feu). Clic gauche : tirer ; clic droit : viser ; **R** : recharger (touche réglable). Les balles restent dans l’arme (barre jaune), recul, dispersion (moindre en visant, plus forte en courant ou en sautant), dégâts ×1,6 à la tête, le verre vole en éclats, traçantes, éclair au bout du canon, marqueur de touche, sons propres à chaque arme. Grenade à main (rebondit, explose en 3 s). La nuit, des **bandits** cagoulés tirent au pistolet. Munitions et parfois une arme dans les coffres. Multijoueur (tirs, dégâts, combats entre joueurs), boutons 🔫 🎯 ↻ sur téléphone, 4 succès. |
 | ☀ **Objectif final** | Forger le **Cœur d'aube** (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et le poser : il chasse définitivement les Ombres alentour. |
 
 Un **journal de quêtes** guide la progression ; on le masque (et on le remet) avec le bouton « Masquer le guide » du menu Pause, la croix du panneau ou les Options :
@@ -228,7 +229,7 @@ index.html        page, interface (HUD, inventaire, menus)
 style.css         styles de l'interface
 js/util.js        maths, bruit simplex, matrices
 js/zip.js         lecture/écriture de fichiers .zip (export/import des sauvegardes)
-js/blocks.js      blocs, objets, outils, recettes (identifiants 16 bits)
+js/blocks.js      blocs (0-999 puis 4000 et plus), objets (1000-3999), outils, recettes (identifiants 16 bits)
 js/textures.js    textures pixel-art générées + icônes
 js/world.js       monde infini par tronçons : génération (monde normal et Nether), biomes, lumière, lancer de rayon
 js/blockticks.js  blocs qui évoluent seuls : eau et lave qui coulent, feu, portails cassés
@@ -254,6 +255,8 @@ js/caves.js       grottes luxuriantes, profondeurs sombres, récifs (génératio
 js/seasons.js     saisons (teinte du feuillage, neige, cultures), aurores boréales, étoiles filantes
 js/end_defs.js    cadre et portail de l'End, œuf, chorus, perle, œil, Arpenteur, dragon, cristaux
 js/end.js         forts souterrains, œil de l'End, dimension de l'End (îles, piliers, tours), combat du dragon
+js/gun_defs.js    armes à feu (extension) : caractéristiques, objets, munitions, recettes, textures, bandit
+js/guns.js        tir, visée et lunette, recul, rechargement, roquettes et grenades, lance-flammes, modèles 3D, HUD, réseau
 js/player.js      joueur : déplacements, faim, minage, combat, grappin, mode créatif…
 js/touch.js       contrôles tactiles : joystick, caméra au doigt, boutons
 js/net.js         multijoueur pair à pair : hôte, invités, synchronisation, tchat

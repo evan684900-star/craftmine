@@ -19,6 +19,7 @@
     ['⛵ Bateaux et vie aquatique', "Bateau : 5 planches à l'Établi. Clic droit sur l'eau pour le poser, clic droit dessus pour monter : il va là où tu te diriges (joystick ou touches), jusqu'à 8 blocs/s sur l'eau et bien plus vite sur la glace ; accroupis-toi pour descendre, frappe-le pour le reprendre. Dans les rivières, lacs et océans nagent des morues, des saumons, des poissons tropicaux (océans chauds, 8 couleurs), des poissons-globes (ils se gonflent et piquent), des calmars (encre : teinture noire) et des dauphins, qui bondissent hors de l'eau, suivent les nageurs et les bateaux et donnent la grâce du dauphin (nage bien plus rapide). Hors de l'eau, les poissons frétillent puis s'étouffent."],
     ['🍰 Cuisine', "Four à pain (6 briques + 1 fourneau + 2 galets) : gâteau (3 seaux de lait, 2 sucres, 1 œuf, 3 blés ; tu récupères les seaux), biscuits (2 blés + teinture marron), tarte aux pommes, pain aux œufs. Le gâteau se pose et se mange en 4 parts (clic droit). À la forge : morue et saumon cuits. Sans station : ragoût (viande grillée, pomme de terre cuite, carotte, champignon brun), soupe de poisson, soupe de légumes, sushis (poisson cru + algues séchées)."],
     ['🏹 Arbalète et trident', "Arbalète (3 bâtons, 2 ficelles, 1 lingot de fer, 1 crochet) : maintiens le clic droit pour la charger d'une flèche, puis clic droit pour tirer — plus fort et plus droit qu'un arc. Enchantements : Charge rapide, Tir multiple (3 flèches), Perforation (traverse les créatures). L'arc s'enchante aussi : Puissance, Frappe, Flamme, Infinité. Trident (laissé par les Noyés, parfois pêché) : 9 dégâts en mêlée ; maintiens le clic droit puis relâche pour le lancer, puis va le ramasser. Loyauté : il revient seul. Impulsion : dans l'eau ou sous la pluie, il te propulse. Canalisation : pendant un orage, la foudre frappe ta cible. Empalement : plus fort contre les créatures aquatiques. Les Noyés sortent des eaux la nuit ; certains lancent leur trident."],
+    ['🔫 Armes à feu (extension)', "Monde créé avec l’extension « Armes à feu » : fabrique un établi d’armurier (4 fers, 4 planches, 2 poudres à canon), puis des pièces d’arme (2 fers + 1 redstone), des munitions et 12 armes : pistolet, revolver, pistolet-mitrailleur, fusil d’assaut, fusil à pompe, double canon, carabine de chasse, fusil de précision, mitrailleuse, lance-roquettes, lance-grenades, lance-flammes. Clic gauche : tirer (maintenu pour les armes automatiques) ; clic droit : viser (la lunette zoome) ; R : recharger. Les balles restent dans l’arme (barre jaune de la case), traversent le verre et font plus mal à la tête. Grenade : maintiens le clic droit puis relâche, elle explose 3 s plus tard. La nuit, des bandits cagoulés tirent au pistolet : ils laissent des balles, des pièces, parfois leur arme. Sur téléphone : touche l’écran pour tirer là où tu touches, ou utilise les boutons 🔫 🎯 ↻."],
     ['🪽 Élytres et fusées', "Élytres (8 plumes, 4 éclats célestes, 2 cuirs, 1 diamant, à la table de forgeron) : porte-les à la place du plastron. Saute dans le vide puis appuie encore sur saut : tu planes ! Vise vers le bas pour accélérer, vers le haut pour remonter (en perdant de la vitesse). Fusée (papier + poudre à canon) : clic droit en vol pour une poussée ; au sol, c'est un feu d'artifice. Attention aux murs à pleine vitesse. Les élytres s'usent en vol : répare-les avec du cuir à l'enclume (Solidité aide)."],
     ['🪧 Panneaux', "Panneau : 6 planches + 1 bâton (3 panneaux). Pose-le au sol (il fait face à toi) ou contre un mur ; une fenêtre s'ouvre pour écrire 4 lignes (Entrée : ligne suivante). Clic droit dessus pour le modifier, avec une teinture pour colorer le texte. Le texte se lit de près, peint sur la planche."],
     ['🖼 Tableaux, cadres, porte-armures', "Tableau (8 bâtons + 1 laine) : clic droit sur un mur, le jeu choisit une de ses 14 œuvres (du 1 × 1 au 4 × 2), la plus grande qui tient. Cadre (8 bâtons + 1 cuir) : sur un mur, le sol ou le plafond ; clic droit avec un objet pour l'exposer, encore pour le tourner. Porte-armure (6 bâtons + 1 dalle de pierre lisse) : clic droit avec une pièce d'armure (ou des élytres) pour l'habiller, avec une arme ou un outil pour la lui donner, main vide pour reprendre. Frappe-les pour les récupérer ; s'ils perdent leur mur, ils tombent."],
@@ -195,19 +196,21 @@
   const BIND_LABELS = {
     forward: 'Avancer', back: 'Reculer', left: 'Aller à gauche', right: 'Aller à droite', jump: 'Sauter / nager / monter (vol)',
     sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet", swap: 'Échanger les deux mains',
-    map: 'Mini-carte (masquée / petite / grande)',
+    map: 'Mini-carte (masquée / petite / grande)', reload: 'Recharger (arme à feu)',
   };
   const MODE_NAMES = { survival: 'Survie', creative: 'Créatif' };
   const DIFF_NAMES = { peaceful: 'Paisible', easy: 'Facile', normal: 'Normale', hard: 'Difficile' };
-  const TYPE_NAMES = { normal: 'Normal', amplified: 'Amplifié', flat: 'Plat', islands: 'Archipel' };
+  const TYPE_NAMES = { normal: 'Normal', amplified: 'Amplifié', flat: 'Plat', islands: 'Archipel', city: 'Ville' };
+  // Extensions dont les objets ont leur propre catégorie (inventaire créatif, fabrication).
+  const EXT_CATS = ['tech', 'guns', 'vehicles'];
 
   // Catégorie d'un bloc/objet pour l'inventaire créatif.
   function creativeCat(id) {
     const info = CM.itemInfo(id);
-    if (info && info.ext === 'tech') return 'tech';
-    if (id >= CM.ITEM_BASE) return info && (info.type === 'cart' || info.id === CM.I.STRING) ? 'redstone' : 'items';
+    if (info && EXT_CATS.includes(info.ext)) return info.ext;
+    if (!CM.isBlockId(id)) return info && (info.type === 'cart' || info.id === CM.I.STRING) ? 'redstone' : 'items';
     const b = CM.blocks[id];
-    if (b.ext === 'tech') return 'tech';
+    if (EXT_CATS.includes(b.ext)) return b.ext;
     if (b.rs && b.rs.k !== 'door' && b.rs.k !== 'note' && b.rs.k !== 'tnt') return 'redstone';
     for (const f of Object.keys(CM.COLOR)) if (Object.values(CM.COLOR[f]).includes(id)) return 'color';
     if (b.plant || b.wood && b.id === CM.woodOf(id).leaves || b.soil || b.farmland || /CORAL|SNOW|ICE|MUSHROOM|CACTUS|MELON|PUMPKIN|SAND|GRAVEL|CLAY|MUD|MOSS|DIRT/.test(b.key) && !/SANDSTONE|BRICK/.test(b.key)) return 'nature';
@@ -304,8 +307,13 @@
       let h = '<div class="icon" style="background-image:url(' + icon + ')"></div>';
       if (s.ench) h += '<div class="glint" style="-webkit-mask-image:url(' + icon + ');mask-image:url(' + icon + ')"></div>';
       if (s.count > 1) h += '<span class="count">' + s.count + '</span>';
-      const wi = s.xp !== undefined && CM.itemInfo(s.id);
-      if (wi && wi.charge) {
+      const gi = CM.itemInfo(s.id);
+      const wi = s.xp !== undefined && gi;
+      if (gi && gi.gun) {
+        // arme à feu : balles dans le chargeur (barre jaune)
+        const k = Math.min(1, (s.xp | 0) / CM.GUNS[gi.gun].mag);
+        h += '<div class="dur"><div style="width:' + Math.round(k * 100) + '%;background:' + (k > 0 ? '#ffd24f' : '#ff5a4f') + '"></div></div>';
+      } else if (wi && wi.charge) {
         // objet électrique : barre de charge bleue
         const k = CM.chargeLeft(s) / wi.charge;
         h += '<div class="dur"><div style="width:' + Math.round(k * 100) + '%;background:' + (k > 0.25 ? '#4fc3ff' : '#ff8a4f') + '"></div></div>';
@@ -353,8 +361,9 @@
       const creative = this.game.mode === 'creative';
       $('tab-btn-creative').classList.toggle('hidden', !creative);
       // extensions du monde : catégories visibles seulement si elles sont actives
-      for (const el of document.querySelectorAll('.ext-tech')) el.classList.toggle('hidden', !CM.extOn('tech'));
-      if (!CM.extOn('tech') && this.filter === 'tech') this.filter = 'tout';
+      for (const x of EXT_CATS) for (const el of document.querySelectorAll('.ext-' + x)) el.classList.toggle('hidden', !CM.extOn(x));
+      const FILTER_EXT = { tech: 'tech', armes: 'guns', vehicules: 'vehicles' };
+      if (FILTER_EXT[this.filter] && !CM.extOn(FILTER_EXT[this.filter])) this.filter = 'tout';
       if (!creative && this.tab === 'creative') this.setTab('craft');
       if (creative && this.tab === 'craft') this.setTab('creative');
     }
@@ -963,10 +972,10 @@
 
     refreshStations() {
       const st = this.game.nearbyStations();
-      const changed = st.table !== this.stations.table || st.forge !== this.stations.forge || st.smithing !== this.stations.smithing || st.atelier !== this.stations.atelier || st.oven !== this.stations.oven;
+      const changed = JSON.stringify(st) !== JSON.stringify(this.stations);
       this.stations = st;
       const one = (k, n) => '<span class="station ' + (st[k] ? 'on' : '') + '">' + (st[k] ? '✔' : '✖') + ' ' + n + '</span>';
-      $('stations').innerHTML = one('table', 'Établi') + one('forge', 'Forge / fourneau') + one('smithing', 'Table de forgeron') + one('oven', 'Four à pain') + (CM.extOn('tech') ? one('atelier', "Établi d'ingénieur") : '');
+      $('stations').innerHTML = one('table', 'Établi') + one('forge', 'Forge / fourneau') + one('smithing', 'Table de forgeron') + one('oven', 'Four à pain') + (CM.extOn('tech') ? one('atelier', "Établi d'ingénieur") : '') + (CM.extOn('guns') ? one('armurerie', 'Établi d’armurier') : '') + (CM.extOn('vehicles') ? one('garage', 'Garage') : '');
       if (changed && this.invOpen) this.renderRecipes();
     }
 
@@ -1394,6 +1403,12 @@
         if (fans.length) h += '<div class="tt-sub">Plaît à : ' + fans.join(', ') + ' (élevage).</div>';
       } else if (info.type === 'charm') {
         h += '<div class="tt-gold">' + info.desc + '</div>';
+      } else if (info.gun) {
+        const gd = CM.GUNS[info.gun], ammo = CM.itemName(CM.I[gd.ammo]);
+        h += '<div class="tt-gold">' + esc(info.desc) + '</div>';
+        h += '<div class="tt-sub">' + (gd.proj === 'missile' || gd.proj === 'grenade' ? 'Explosion (puissance ' + gd.power + ')' : 'Dégâts ' + gd.dmg + (gd.pellets ? ' × ' + gd.pellets + ' plombs' : '') + (gd.proj === 'flame' ? ' + feu' : '')) +
+          ' · chargeur ' + ((s && s.xp) | 0) + '/' + gd.mag + ' · portée ' + gd.range + ' blocs · ' + (gd.auto ? 'automatique' : Math.round(60 / gd.rate) + ' coups/min') + '</div>';
+        h += '<div class="tt-sub">Munitions : ' + esc(ammo) + ' · ' + esc(this.game.keyName(this.game.binds.reload)) + ' : recharger</div>';
       } else if (info.charge) {
         h += '<div class="tt-gold">' + info.desc + '</div>';
         h += '<div class="tt-sub">⚡ Charge ' + Math.round(CM.chargeLeft(s || { id, xp: 0 })) + '/' + info.charge + '</div>';
@@ -1575,7 +1590,7 @@
         biomeSize: $('nw-biome').value,
         bonusChest: $('nw-bonus').checked,
         dayCycle: $('nw-daycycle').checked,
-        ext: { tech: $('nw-ext-tech').checked, light: $('nw-ext-light').checked, gravity: $('nw-ext-gravity').checked },
+        ext: { tech: $('nw-ext-tech').checked, light: $('nw-ext-light').checked, gravity: $('nw-ext-gravity').checked, guns: !!($('nw-ext-guns') || {}).checked, vehicles: !!($('nw-ext-vehicles') || {}).checked },
       };
     }
     refreshPause() {

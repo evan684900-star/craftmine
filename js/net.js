@@ -1016,7 +1016,7 @@
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
           if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > (m.k === 'rocket' ? 7 : 4)) break;
           const it = m.k === 'potion' && CM.itemInfo(m.it | 0) && CM.itemInfo(m.it | 0).potion ? m.it | 0 : 0;
-          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : m.k === 'trident' ? 'trident' : m.k === 'rocket' ? 'rocket' : m.k === 'pearl' ? 'pearl' : m.k === 'eye' ? 'eye' : undefined;
+          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : ['trident', 'rocket', 'pearl', 'eye', 'missile', 'grenade', 'hgrenade'].includes(m.k) ? m.k : undefined;
           const xo = m.x && typeof m.x === 'object' ? m.x : {};
           const extra = { pi: Math.min(4, xo.pi | 0), np: xo.np ? 1 : 0, pw: Math.min(5, xo.pw | 0), pu: Math.min(2, xo.pu | 0), fl: xo.fl ? 1 : 0, ench: CM.cleanEnch(xo.ench) };
           g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, kind, kind === 'trident' ? CM.I.TRIDENT : kind === 'rocket' ? CM.I.FIREWORK : kind === 'pearl' ? CM.I.ENDER_PEARL : kind === 'eye' ? CM.I.EYE_OF_ENDER : it, extra);
@@ -1071,6 +1071,37 @@
           if (mob && !mob.dead && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 40) g.entities.hurtMob(mob, Math.min(8, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
           break;
         }
+        case 'ghit': {
+          // balle (ou flamme) d'un invité : l'hôte applique les dégâts
+          const mob = g.entities.mobs.find((o) => o.uid === m.id);
+          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 250) break;
+          rp.lastTarget = mob;
+          rp.lastTargetT = g.clock;
+          g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp, { kb: Math.min(2, Math.max(0, m.kb | 0)), fire: m.fi ? 1 : 0 });
+          break;
+        }
+        case 'gpvp': {
+          if (!this.rules.pvp) break;
+          const d = Math.min(45, Math.max(0, num(m.d)));
+          if (m.to === 0) {
+            if (g.playerDim === rp.dim && Math.hypot(g.player.x - rp.x, g.player.z - rp.z) < 250) g.player.damage(d, rp.x, rp.z, e.name, true);
+          } else {
+            const t = this.links.get(m.to);
+            if (t && t.rp.seen && t.rp.dim === rp.dim && Math.hypot(t.rp.x - rp.x, t.rp.z - rp.z) < 250) t.rp.damage(d, rp.x, rp.z, e.name, true, 0);
+          }
+          break;
+        }
+        case 'gfx': {
+          // tir d'un invité : les autres joueurs le voient et l'entendent
+          if (!CM.Guns || (m.k !== 'shot' && m.k !== 'rl')) break;
+          const at = m.k === 'rl' ? [num(m.x), num(m.y), num(m.z)] : Array.isArray(m.a) ? m.a.map(num) : null;
+          if (!at || Math.hypot(at[0] - rp.x, at[2] - rp.z) > 8) break;
+          const fx = { k: 'gun_' + m.k, x: at[0], y: at[1], z: at[2] };
+          if (m.k === 'shot') Object.assign(fx, { g: m.g | 0, a: at, b: Array.isArray(m.b) ? m.b.slice(0, 12) : [] });
+          this.fx(fx, e.pid);
+          if (g.playerDim === rp.dim) CM.Guns.onFx(g, fx);
+          break;
+        }
         case 'laserfx':
           if (Array.isArray(m.p) && Array.isArray(m.q)) this.fx({ k: 'laser', x: num(m.p[0]), y: num(m.p[1]), z: num(m.p[2]), t: m.q.map(num) }, e.pid);
           if (Array.isArray(m.p) && Array.isArray(m.q) && g.playerDim === rp.dim) g.player.laserFx(num(m.p[0]), num(m.p[1]), num(m.p[2]), num(m.q[0]), num(m.q[1]), num(m.q[2]));
@@ -1106,7 +1137,7 @@
       for (let i = 0; i + 3 < b.length; i += 4) {
         const x = b[i] | 0, y = b[i + 1] | 0, z = b[i + 2] | 0, id = b[i + 3] | 0;
         this.queueSet(pid, x, y, z, id);
-        if (id < 0 || id >= CM.ITEM_BASE || !CM.blocks[id] || y < CM.WORLD.MINY || y >= CM.WORLD.H) continue;
+        if (!CM.isBlockId(id) || !CM.blocks[id] || y < CM.WORLD.MINY || y >= CM.WORLD.H) continue;
         const old = w.get(x, y, z);
         this.muted = true;
         w.applyRemote(x, y, z, id);
@@ -1412,6 +1443,8 @@
       const d = Math.hypot(p.x - m.x, p.y - m.y, p.z - m.z);
       if (m.k === 'boom') {
         if (d < 64) g.explodeFx(m.x, m.y, m.z);
+      } else if (typeof m.k === 'string' && m.k.startsWith('gun_')) {
+        if (d < 160 && CM.Guns) CM.Guns.onFx(g, m);
       } else if (m.k === 'fuse') {
         if (d < 24) CM.Audio.play('fuse');
       } else if (m.k === 'kill') {
@@ -1785,7 +1818,12 @@
         // bras (le droit frappe, et avance un peu quand il tient quelque chose)
         const swing = rp.swingT > 0 ? 1.3 * Math.sin((1 - rp.swingT / 0.3) * Math.PI) : 0;
         const sy = ny - 0.02, sz = nz * 0.9;
-        const arms = [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0)], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
+        const hinfo = rp.held ? CM.itemInfo(rp.held) : null;
+        // arme à feu : les deux bras tendus vers là où il vise
+        const gunAim = hinfo && hinfo.gun ? Math.PI / 2 + CM.clamp(rp.pitch, -1.2, 1.2) * 0.9 : null;
+        const arms = gunAim !== null
+          ? [[-0.36, gunAim - 0.15], [0.36, gunAim]]
+          : [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0)], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
         for (const [ax, rot] of arms) {
           ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl);
           ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl);
@@ -1824,8 +1862,14 @@
           batch.box(this.Q, -0.22, -0.12, 0, 0.22, 0.5, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], oinfo.isBlock && oinfo.block.light ? 1 : 0);
         }
         // objet tenu, dans la main droite
-        const info = rp.held ? CM.itemInfo(rp.held) : null;
-        if (info) {
+        const info = hinfo;
+        if (info && info.gun && CM.Guns) {
+          mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], 0, 1);
+          mat4.multiply(this.R, M, this.P);
+          mat4.compose(this.P, 0, -0.62, 0, 0, -Math.PI / 2, 0, 1);
+          mat4.multiply(this.Q, this.R, this.P);
+          CM.Guns.drawModel(batch, this.Q, info.gun, l, 0, false);
+        } else if (info) {
           mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], 0, 1);
           mat4.multiply(this.R, M, this.P);
           const r = info.isBlock ? info.block.render : '';

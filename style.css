@@ -350,6 +350,9 @@ body.touch #debug { bottom: auto; top: 110px; }
 #t-sprint { right: calc(160px * var(--t)); bottom: calc(8px * var(--t)); }
 #t-use { right: calc(8px * var(--t)); bottom: calc(92px * var(--t)); }
 #t-dash { right: calc(100px * var(--t)); bottom: calc(84px * var(--t)); }
+#t-fire { right: calc(4px * var(--t)); bottom: calc(168px * var(--t)); background: rgba(160, 40, 30, 0.5); }
+#t-aim { right: calc(96px * var(--t)); bottom: calc(160px * var(--t)); }
+#t-reload { right: calc(160px * var(--t)); bottom: calc(110px * var(--t)); }
 /* disposition personnalisée (Options > Contrôles > Disposer les boutons) */
 #touch .t-custom { position: fixed !important; right: auto !important; bottom: auto !important; translate: -50% -50%; margin: 0; }
 #touch .t-hidden { display: none !important; }
@@ -357,6 +360,7 @@ body.touch-edit #touch { display: block; position: fixed; inset: 0; z-index: 70;
 body.touch-edit #touch button { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 body.touch-edit #touch .t-hidden { display: block !important; outline: 2px dashed rgba(255, 255, 255, 0.6); }
 body.touch-edit #touch .net-only { display: block; }
+body.touch-edit #touch #t-fire, body.touch-edit #touch #t-aim, body.touch-edit #touch #t-reload { display: block !important; }
 body.touch-edit #touch .te-sel { outline: 3px solid var(--gold); outline-offset: 3px; }
 body.touch-edit #t-stick, body.touch-edit #t-hint { display: none !important; }
 #touch-editor .te-bg { position: fixed; inset: 0; z-index: 60; background: rgba(5, 6, 12, 0.6); }
@@ -602,3 +606,27 @@ body.touch #effects { top: 150px; }
 .trade.locked .lock { margin-right: 6px; }
 .totem-pop { position: absolute; left: 50%; top: 45%; width: 160px; height: 160px; margin: -80px 0 0 -80px; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; pointer-events: none; animation: totempop 1.6s ease-out forwards; filter: drop-shadow(0 0 18px rgba(255, 220, 90, 0.8)); }
 @keyframes totempop { 0% { transform: scale(0.2) rotate(-20deg); opacity: 0; } 15% { transform: scale(1.25) rotate(8deg); opacity: 1; } 35% { transform: scale(1) rotate(0); } 75% { opacity: 1; } 100% { transform: scale(1.6) translateY(-40px); opacity: 0; } }
+
+/* ------------------------------------------------------- armes à feu */
+#gun-hud {
+  position: absolute; right: 18px; bottom: 96px; min-width: 150px; padding: 8px 12px; border-radius: 10px; text-align: right;
+  background: rgba(10, 12, 20, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; text-shadow: 0 1px 2px #000;
+  transform: scale(var(--gui, 1)); transform-origin: bottom right;
+}
+#gun-hud .gh-name { font-size: 12px; font-weight: 700; color: #ffd98a; letter-spacing: 0.5px; }
+#gun-hud .gh-ammo { font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#gun-hud .gh-ammo.empty { color: #ff6a5a; }
+#gun-hud .gh-hint { font-size: 11px; color: #ffb0a8; min-height: 12px; }
+#gun-hud .gh-reload { height: 5px; margin-top: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+#gun-hud .gh-reload div { height: 100%; background: #ffd24f; }
+#hitmarker { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); }
+#hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+#hitmarker::before { left: 10px; top: 0; width: 2px; height: 22px; }
+#hitmarker::after { top: 10px; left: 0; height: 2px; width: 22px; }
+#hitmarker.head::before, #hitmarker.head::after { background: #ff4a3a; }
+#scope { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(34vh, 34vw), #000 calc(min(34vh, 34vw) + 2px)); }
+#scope .scope-ring { position: absolute; left: 50%; top: 50%; width: min(68vh, 68vw); height: min(68vh, 68vw); transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid #111; }
+#scope .scope-ring::before, #scope .scope-ring::after { content: ''; position: absolute; background: rgba(0, 0, 0, 0.85); }
+#scope .scope-ring::before { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
+#scope .scope-ring::after { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
+@media (max-width: 700px) { #gun-hud { bottom: auto; top: 64px; right: 10px; min-width: 110px; } #gun-hud .gh-ammo { font-size: 18px; } }

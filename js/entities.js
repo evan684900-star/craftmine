@@ -328,9 +328,9 @@
           x: x + (r() - 0.5) * (o.spread || 0.6),
           y: y + (r() - 0.5) * (o.spread || 0.6),
           z: z + (r() - 0.5) * (o.spread || 0.6),
-          vx: (r() - 0.5) * sp,
-          vy: r() * sp * (o.up === undefined ? 1 : o.up) + (o.lift || 0),
-          vz: (r() - 0.5) * sp,
+          vx: (r() - 0.5) * sp + (o.vx || 0),
+          vy: r() * sp * (o.up === undefined ? 1 : o.up) + (o.lift || 0) + (o.vy || 0),
+          vz: (r() - 0.5) * sp + (o.vz || 0),
           life: (o.life || 0.8) * (0.6 + r() * 0.6),
           layer,
           u0: Math.floor(r() * 12) / 16,
@@ -1621,7 +1621,7 @@
     // Dessine un objet (cube pour un bloc, plaque pour un objet) centré en bas.
     drawItem(batch, m, id, l, size) {
       const h = size / 2;
-      if (id < CM.ITEM_BASE) {
+      if (CM.isBlockId(id)) {
         const b = CM.blocks[id];
         if (b.render === 'cube' || b.render === 'glass' || b.render === 'tglass' || b.render === 'slab' || b.render === 'carpet') {
           batch.box(m, -h, 0, -h, h, size, h, CM.blockLayers[id], l[0], l[1], b.light ? 1 : 0);

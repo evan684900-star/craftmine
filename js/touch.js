@@ -21,6 +21,7 @@
   const LAYOUT = {
     't-jump': 'Sauter', 't-sneak': 'S’accroupir', 't-sprint': 'Courir', 't-dash': 'Ruée', 't-use': 'Poser au centre',
     't-inv': 'Inventaire', 't-drop': 'Jeter', 't-chat': 'Tchat', 't-pause': 'Pause',
+    't-fire': 'Tirer (arme à feu)', 't-aim': 'Viser (arme à feu)', 't-reload': 'Recharger (arme à feu)',
   };
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -102,6 +103,21 @@
         if (g.state === 'playing' && !g.paused) g.pause();
       });
       hold('t-drop', () => g.dropHeld(false));
+      hold('t-fire', () => {
+        this.fireHeld = true;
+        if (g.player) g.player.aimDir = null; // (au centre de l'écran)
+        this.tapAim = null;
+        inp.mouse[0] = true;
+        inp.pressed.mouse0 = true;
+      }, () => {
+        this.fireHeld = false;
+        inp.mouse[0] = false;
+      });
+      hold('t-aim', () => {
+        this.aimOn = !this.aimOn;
+        $('t-aim').classList.toggle('on', this.aimOn);
+      });
+      hold('t-reload', () => (inp.pressed[K().reload] = true));
       this.buildEditor();
       // barre rapide : toucher une case la sélectionne
       $('hotbar').addEventListener('pointerdown', (e) => {
@@ -315,6 +331,13 @@
       this.aimAt(x, y);
       this.tapAim = p.aimDir ? { x, y, n: 4 } : null;
       p.updateTarget();
+      // arme à feu en main : un toucher tire là où l'on touche
+      if (CM.Guns.def(g.inventory.held())) {
+        inp.mouse[0] = true;
+        inp.pressed.mouse0 = true;
+        this.releaseFire = 2;
+        return;
+      }
       const e = p.eye(), d = p.aim();
       const mob = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
       if (mob && (!p.target || mob.t < p.target.t) && mob.mob.type !== 'villager') {
@@ -374,7 +397,7 @@
       L.y = e.clientY;
       if (Math.hypot(e.clientX - L.sx, e.clientY - L.sy) > MOVE_TOL) L.moved = true;
       if (!p || g.paused) return;
-      const s = 0.0062 * (g.options.touchSens || 1);
+      const s = 0.0062 * (g.options.touchSens || 1) * CM.Guns.sensMul(p);
       p.yaw -= dx * s;
       p.pitch -= dy * s * (g.options.invertY ? -1 : 1);
       p.pitch = CM.clamp(p.pitch, -1.55, 1.55);
@@ -448,7 +471,21 @@
       else if (this.tapAim && this.tapAim.n-- > 0) this.aimAt(this.tapAim.x, this.tapAim.y);
       else if (g.player && g.player.aimDir) g.player.aimDir = null;
       if (this.releaseUse > 0 && --this.releaseUse === 0) inp.mouse[2] = false;
+      if (this.releaseFire > 0 && --this.releaseFire === 0 && !this.fireHeld && !aim) inp.mouse[0] = false;
       const p = g.player;
+      // armes à feu : boutons tirer (maintenu), viser (bascule), recharger
+      const gun = !!(p && p.alive && CM.Guns.def(g.inventory.held()));
+      if (gun !== this.gunShown) {
+        this.gunShown = gun;
+        for (const id of ['t-fire', 't-aim', 't-reload']) $(id).classList.toggle('hidden', !gun);
+        if (!gun) {
+          this.aimOn = false;
+          $('t-aim').classList.remove('on');
+        }
+      }
+      if (this.fireHeld && active && gun) inp.mouse[0] = true;
+      if (this.aimOn || this.aimSet) inp.mouse[2] = active && gun && this.aimOn;
+      this.aimSet = this.aimOn;
       if (p) {
         $('t-dash').classList.toggle('cool', p.dashCd > 0 || !p.canSprint());
         $('t-jump').textContent = p.flying ? '▲' : '⤒';

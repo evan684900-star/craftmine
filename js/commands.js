@@ -123,7 +123,7 @@
   }
   function findBlock(s) {
     const id = findItem(s);
-    if (id >= CM.ITEM_BASE) bad('« ' + CM.itemName(id) + ' » n’est pas un bloc');
+    if (!CM.isBlockId(id)) bad('« ' + CM.itemName(id) + ' » n’est pas un bloc');
     return id;
   }
   const idOf = (key) => (CM.I[key] !== undefined ? CM.I[key] : CM.B[key]);
@@ -596,7 +596,7 @@
     cat: 'Infos', local: true, usage: '', desc: 'version du jeu et extensions actives',
     run(ctx, a, o) {
       const g = G(), ext = g.settings.ext || {};
-      const on = [ext.tech && 'Électricité', ext.light && 'Lumière réaliste', ext.gravity && 'Gravité réaliste'].filter(Boolean);
+      const on = [ext.tech && 'Électricité', ext.light && 'Lumière réaliste', ext.gravity && 'Gravité réaliste', ext.guns && 'Armes à feu', ext.vehicles && 'Véhicules'].filter(Boolean);
       o.info('CraftMine — L’Aube des Éclats · ' + CM.blocks.filter(Boolean).length + ' blocs · ' + CM.items.filter(Boolean).length + ' objets · ' + CMDS.length + ' commandes · extensions : ' + (on.length ? on.join(', ') : 'aucune'));
     },
   });

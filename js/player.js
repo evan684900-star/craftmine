@@ -296,6 +296,7 @@
       if (mag < 1) speed *= Math.max(0.3, mag);
       if (this.cmdSpeed) speed *= this.cmdSpeed; // /vitesse
       speed *= CM.Effects.speedMul(this); // potions de vitesse / lenteur
+      speed *= CM.Guns.speedMul(this); // on vise, arme lourde
       // cheval dressé et sellé : on galope ; pas encore dressé : il n'obéit pas
       if (mounted) {
         speed = this.mountTame ? (wantSprint && f > 0 ? 13 : 9) * Math.max(0.3, mag) : 0;
@@ -931,6 +932,11 @@
       if (this.eating) this.updateEating(dt, input);
       // tableaux, cadres, porte-armures (clic gauche : les reprendre ; clic droit : les garnir)
       if (CM.Deco.playerActions(this, input, e, d)) return;
+      // arme à feu ou grenade en main (clic gauche : tirer, clic droit : viser, R : recharger)
+      if (CM.Guns.update(this, dt, input)) {
+        this.mining = null;
+        return;
+      }
       // attaque
       if (input.pressed.mouse0 && this.attackCd <= 0) {
         const mh = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 3.6);
@@ -1390,7 +1396,7 @@
       if (CM.enchLevel(tool, 'silk') && !b.plant && !b.hidden && !b.door && !b.container && !b.bed && b.crop === undefined && !b.farmland) return [[id, 1]];
       const drops = CM.blockDrops(id, Math.random);
       const f = CM.enchLevel(tool, 'fortune');
-      if (f && b.ore) for (const d of drops) if (d[0] >= CM.ITEM_BASE) d[1] *= 1 + Math.max(0, Math.floor(Math.random() * (f + 2)) - 1);
+      if (f && b.ore) for (const d of drops) if (!CM.isBlockId(d[0])) d[1] *= 1 + Math.max(0, Math.floor(Math.random() * (f + 2)) - 1);
       return drops;
     }
 
@@ -2037,6 +2043,7 @@
         this.drawShield(batch, 1, off && CM.itemInfo(off.id).type === 'shield' ? 0 : raise, l, bx, by);
         return;
       }
+      if (info.gun && CM.Guns.drawHand(this, batch, stack, l, bx, by)) return;
       this.drawHeld(batch, stack, 1, swingOn, l, bx, by);
     }
     // Objet tenu : side = 1 (main droite) ou -1 (main gauche).
@@ -2075,8 +2082,8 @@
       return Math.max(this.lightOf(inv.held()), this.lightOf(inv.offhand));
     }
     lightOf(s) {
-      if (s && s.id >= CM.ITEM_BASE && CM.itemInfo(s.id).type === 'flashlight') return CM.chargeLeft(s) > 0 ? 1 : 0;
-      if (!s || s.id >= CM.ITEM_BASE) return 0;
+      if (s && !CM.isBlockId(s.id) && CM.itemInfo(s.id).type === 'flashlight') return CM.chargeLeft(s) > 0 ? 1 : 0;
+      if (!s || !CM.isBlockId(s.id)) return 0;
       const b = CM.blocks[s.id];
       if (!b) return 0;
       if (b.light >= 12) return 1;

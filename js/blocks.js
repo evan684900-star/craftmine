@@ -2,11 +2,13 @@
 (function () {
 // Définitions des blocs, des objets et des recettes.
 //
-// Identifiants : les blocs occupent 0..999 (stockés sur 16 bits dans les tronçons),
-// les objets commencent à 1000. Les identifiants ne doivent JAMAIS changer d'une
-// version à l'autre (ils sont enregistrés dans les sauvegardes) : on ajoute toujours
-// les nouveaux blocs à la fin.
+// Identifiants : les blocs occupent 0..999 puis, une fois cette plage pleine, 4000 et
+// au-delà (stockés sur 16 bits dans les tronçons) ; les objets occupent 1000..3999.
+// Les identifiants ne doivent JAMAIS changer d'une version à l'autre (ils sont
+// enregistrés dans les sauvegardes) : on ajoute toujours les nouveaux blocs à la fin.
 CM.ITEM_BASE = 1000;
+CM.BLOCK_BASE2 = 4000;
+CM.isBlockId = (id) => id >= 0 && (id < CM.ITEM_BASE || id >= CM.BLOCK_BASE2);
 
 // ---------------------------------------------------------------- Blocs ----
 // render: 'cube' | 'cross' | 'torch' | 'water' | 'glass' (découpé, opaque)
@@ -58,8 +60,12 @@ function defBlock(id, key, d) {
   return def;
 }
 let NEXT = 107;
-// Nouveau bloc à la suite des précédents (l'ordre d'appel fixe l'identifiant).
-const nb = (key, d) => defBlock(NEXT++, key, d);
+// Nouveau bloc à la suite des précédents (l'ordre d'appel fixe l'identifiant) ;
+// après 999, la numérotation reprend à 4000.
+const nb = (key, d) => {
+  if (NEXT === CM.ITEM_BASE) NEXT = CM.BLOCK_BASE2;
+  return defBlock(NEXT++, key, d);
+};
 
 defBlock(0, 'AIR', { name: 'Air', render: 'none', solid: false, opaque: false, hardness: 0, drop: 0 });
 defBlock(1, 'STONE', { name: 'Pierre', tex: 'stone', hardness: 1.5, tool: 'pickaxe', tier: 1, drop: 9 });
@@ -636,7 +642,7 @@ CM.isFluid = (id) => CM.WATERY[id] > 0;
 for (const b of CM.blocks) if (b) b.lightPass = !b.lightOpaque;
 
 // -------------------------------------------------------------- Objets ----
-// Objets (id >= 1000). Les blocs sont aussi des objets (id < 1000).
+// Objets (1000 <= id < 4000). Les blocs sont aussi des objets (voir CM.isBlockId).
 CM.items = [];
 CM.I = {};
 function defItem(id, key, d) {
@@ -965,7 +971,7 @@ CM.cleanEnch = (o) => {
 for (const f of (CM.MORE && CM.MORE.items) || []) f({ defItem });
 
 CM.itemInfo = function (id) {
-  if (id < CM.ITEM_BASE) {
+  if (CM.isBlockId(id)) {
     const b = CM.blocks[id];
     if (!b) return null;
     return { id, name: b.name, stack: 64, type: 'block', block: b, isBlock: true, fireproof: !!b.fireproof };
