@@ -215,6 +215,7 @@
       this.playerDim = this.dim;
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
       this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
+      this.cityLots = new Set(save && Array.isArray(save.cityLots) ? save.cityLots.filter((k) => typeof k === 'string') : []);
       this.animals = (!this.net.isClient && save && Array.isArray(save.animals) && save.animals.filter((a) => Array.isArray(a) && a.length >= 4)) || []; // élevage hors de portée
       this.stats = this.freshStats();
       this.time = 0.03;
@@ -802,6 +803,7 @@
         guardians: this.guardians,
         giantDay: this.giantDay,
         golems: this.golemHomes,
+        cityLots: this.cityLots && this.cityLots.size ? [...this.cityLots] : undefined, // îlots déjà garnis de voitures
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(CM.DIMS.map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
         guests: this.net.guests,
@@ -1420,6 +1422,7 @@
     }
     // Butin (déterministe) des coffres trouvés dans les ruines.
     fillLoot(slots, x, y, z) {
+      if (CM.City && CM.City.fillLoot(this, slots, x, y, z)) return; // ville : selon le bâtiment
       if (CM.Structures && CM.Structures.fillLoot(this, slots, x, y, z)) return; // donjon, puits de mine, temple
       if (CM.End && CM.End.fillLoot(this, slots, x, y, z)) return; // fort souterrain, tours de l'End
       const r = CM.rng((CM.hash3(x, y, z, this.world.seed + 999) * 4294967296) >>> 0);
@@ -2106,6 +2109,7 @@
       if (!net.isClient) CM.Caves.tick(this, dt); // hurleurs de sculk, gardien aveugle
       if (!net.isClient) CM.End.tick(this, dt); // dragon de l'End et ses cristaux
       CM.Guns.tick(this, dt); // traçantes, marqueur de touche, munitions à l'écran
+      if (!net.isClient) CM.City.tick(this, dt); // voitures garées dans les parkings de la ville
       CM.Vehicles.hud(this); // compteur de vitesse, carburant
       this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);

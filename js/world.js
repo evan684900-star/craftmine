@@ -291,6 +291,13 @@
       this.nether = this.type === 'nether';
       this.end = this.type === 'end'; // l'End : îles flottantes dans le vide (voir end.js)
       if (this.nether || this.end) this.hasVillages = false;
+      // Ville (city.js) : rues et immeubles, ni villages, ni structures, ni grottes
+      if (this.type === 'city') {
+        this.hasVillages = false;
+        this.structures = false;
+        this.caveBiomes = false;
+        this.city = CM.City;
+      }
       if (this.legacy) this.ox = this.oz = 0;
       this.trees = this.legacy ? LEGACY_TREES : TREES;
       this.plants = this.legacy ? LEGACY_PLANTS : PLANTS;
@@ -450,6 +457,7 @@
       const Bk = CM.B;
       if (this.nether) return this.netherColumn(x, z);
       if (this.end) return this.endColumn(x, z);
+      if (this.type === 'city' && this.cityColumn) return this.cityColumn(x, z);
       if (this.legacy) return this.columnV3(x, z);
       if (this.type === 'flat') return { h: SEA + 8, bi: BIO.PLAINS, topB: Bk.GRASS, subB: Bk.DIRT, subDepth: 3, deepSub: 0, frozen: false, flat: true };
       const { nA, nB, nC, nD, nE, nF } = this;
@@ -801,6 +809,7 @@
     findSpawn() {
       if (this.nether) return { x: 0.5, y: 64, z: 0.5 }; // on y arrive par un portail
       if (this.end) return { x: 60.5, y: 52, z: 0.5 }; // (plateforme d'arrivée)
+      if (this.type === 'city' && CM.City) return { x: -4.5, y: CM.City.G + 1, z: 24.5 }; // sur un trottoir, près de la place
       for (let rad = 0; rad < 4000; rad += 3) {
         const n = rad === 0 ? 1 : 24;
         for (let k = 0; k < n; k++) {
@@ -850,6 +859,13 @@
       const blocks = c.blocks, seed = this.seed;
       const x0 = c.x0, z0 = c.z0;
       const infos = new Array(256);
+      // Ville : chaque colonne est calculée par city.js
+      if (this.type === 'city' && this.fillCity) {
+        this.fillCity(c);
+        const e = this.edits.get(ckey(cx, cz));
+        if (e) for (const [i, id] of e) blocks[i] = id;
+        return c;
+      }
 
       if (this.type === 'flat') {
         // monde plat : socle en y = 0 comme avant (rien en dessous)

@@ -395,6 +395,12 @@
         this.vy -= 2 * dt;
         // s'extraire de l'eau en nageant contre un rebord
         if (k[K.jump] && (this.hitX || this.hitZ) && !this.headInWater) this.vy = 9.5;
+      } else if (!mounted && this.onLadder()) {
+        // échelle : avancer ou sauter pour monter, s'accroupir pour rester, sinon on glisse doucement
+        if (k[K.forward] || k[K.jump] || (input.analog && input.analog.y > 0.3)) this.vy = 3.2;
+        else if (this.sneaking) this.vy = 0;
+        else this.vy = Math.max(this.vy - 20 * dt, -2.6);
+        this.fallStart = this.y;
       } else {
         const grav = this.hook ? GRAVITY * 0.45 : this.dashTime > 0 ? GRAVITY * 0.3 : GRAVITY;
         this.vy -= grav * dt;
@@ -1782,6 +1788,24 @@
         g.ui.toast('Le cactus se plante sur du sable', 'warn', 'cactus');
         return;
       }
+      // échelle : contre le mur visé (ou un mur voisin)
+      if (b.ladderSet) {
+        if (CM.isFluid(cur)) return;
+        const full = (x, y, z) => w.colBox(x, y, z) === CM.FULL_BOX;
+        let lid = 0;
+        const pickL = (dx, dz) => b.ladderSet[dx === 1 ? 0 : dx === -1 ? 1 : dz === 1 ? 2 : 3];
+        if (t.ny === 0 && !tb.replaceable && full(t.x, t.y, t.z)) lid = pickL(t.nx, t.nz);
+        else
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+            if (full(px - dx, py, pz - dz)) {
+              lid = pickL(dx, dz);
+              break;
+            }
+        if (!lid) return;
+        w.setBlock(px, py, pz, lid);
+        this.afterPlace(b, stack.id, px, py, pz);
+        return;
+      }
       // torche : posée sur le dessus d'un bloc plein, ou accrochée au mur visé
       if (b.render === 'torch') {
         if (CM.isFluid(cur)) return;
@@ -2102,6 +2126,11 @@
     }
 
     // Lumière dynamique : tenir une torche ou une lanterne éclaire autour.
+    // Une échelle à hauteur des pieds ou du corps ?
+    onLadder() {
+      const w = this.game.world, x = Math.floor(this.x), z = Math.floor(this.z);
+      return !!(CM.blocks[w.get(x, Math.floor(this.y + 0.1), z)].climb || CM.blocks[w.get(x, Math.floor(this.y + 1), z)].climb);
+    }
     heldLight() {
       const inv = this.game.inventory;
       if (this.vehLight && this.riding !== null && this.riding !== undefined) return 1; // phares du véhicule
