@@ -457,6 +457,28 @@ body.touch .inv-panel > .hint, body.touch #chest-panel .hint, body.touch #tab-cr
 .tp-msg.ok { color: #8fe39a; }
 .tp-msg.err { color: #ff8f8f; }
 .tp-hint { font-size: 12px; color: var(--muted); }
+/* panneau d'administration */
+.adm-panel { width: min(560px, calc(100vw - 32px)); }
+.adm-info { font-size: 14px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+.adm-row { flex-wrap: wrap; }
+.adm-acts { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.adm-tag { font-style: normal; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: rgba(127, 214, 255, 0.18); color: #7fd6ff; }
+.adm-tag.host { background: rgba(255, 200, 80, 0.18); color: var(--gold); }
+.adm-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; align-items: center; }
+.adm-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.adm-form label.adm-chk { flex-direction: row; align-items: center; gap: 6px; color: inherit; grid-column: 1 / -1; }
+.adm-form input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gold); }
+.adm-form select, .adm-form input[type='number'] { padding: 6px; border-radius: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: inherit; }
+.adm-ext { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.adm-ext > span { width: 100%; color: var(--muted); }
+.adm-ext label { flex-direction: row; align-items: center; gap: 6px; color: inherit; }
+.adm-ext #adm-next { width: 100%; font-style: normal; font-size: 12px; color: var(--gold); }
+.adm-form .tp-combat, .adm-form > button { grid-column: 1 / -1; }
+.adm-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.adm-btns > span { min-width: 52px; font-size: 13px; color: var(--muted); }
+.adm-btns button { padding: 5px 10px; font-size: 13px; }
+button.adm-danger { background: rgba(200, 60, 60, 0.35); }
+@media (max-width: 520px) { .adm-form { grid-template-columns: 1fr; } }
 #tp-pop { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 8px 14px; border-radius: 10px; background: rgba(10, 12, 20, 0.85); border: 1px solid rgba(255, 200, 80, 0.5); font-size: 14px; z-index: 21; cursor: pointer; pointer-events: auto; }
 .sign-panel h3 { margin: 0; }
 .sign-lines { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 6px; background: #b0845a; border: 3px solid #7a5530; }

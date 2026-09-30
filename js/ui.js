@@ -1667,6 +1667,7 @@
       $('btn-guide').textContent = g.options.showQuests ? 'Masquer le guide' : 'Afficher le guide';
       $('btn-lan').textContent = net.isHost ? 'Inviter des amis (code ' + net.code + ')' : 'Ouvrir aux amis (multijoueur)';
       $('btn-lan').classList.toggle('hidden', net.isClient);
+      $('btn-admin').classList.toggle('hidden', !CM.Admin.allowed(g));
       $('btn-export2').classList.toggle('hidden', net.isClient);
       $('btn-save').classList.toggle('hidden', net.isClient);
       $('btn-quit').textContent = net.isClient ? 'Quitter la partie' : net.isHost ? 'Sauvegarder et fermer la partie' : 'Sauvegarder et quitter';

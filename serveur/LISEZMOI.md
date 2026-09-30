@@ -58,7 +58,7 @@ la fin de chaque ligne sauf la dernière.
 | `type` | `normal`, `ville`, `plat`, `archipel`, `amplifie`. Seulement pour un nouveau monde |
 | `mode` | `survie` ou `creatif` |
 | `difficulte` | `paisible`, `facile`, `normal`, `difficile` |
-| `extensions` | Liste parmi `lumiere`, `electricite`, `armes`, `vehicules`, `gravite`, par exemple `["lumiere", "vehicules", "armes"]`. S'applique aussi au monde déjà créé (les minerais de l'Électricité n'apparaissent que dans les zones jamais visitées) |
+| `extensions` | Liste parmi `lumiere`, `electricite`, `armes`, `vehicules`, `gravite`, par exemple `["lumiere", "vehicules", "armes"]`. S'applique aussi au monde déjà créé, au redémarrage (les minerais de l'Électricité apparaissent partout, sauf là où des blocs ont été modifiés) |
 | `triches` | `true` : tout le monde peut utiliser les commandes de triche |
 | `pvp` | `true` : combats entre joueurs |
 | `garderInventaire` | `true` : on garde son inventaire à la mort |
@@ -67,14 +67,32 @@ la fin de chaque ligne sauf la dernière.
 
 `graine` et `type` servent seulement à la création du monde (`craftmine nouveau-monde`). Tous les
 autres s'appliquent au redémarrage, même sur le monde déjà créé (le journal affiche les extensions
-actives, et prévient si un nom est mal écrit) :
-un `/mode` ou `/difficulte` tapé dans le jeu dure donc jusqu'au prochain redémarrage.
+actives, et prévient si un nom est mal écrit).
+
+Ces réglages (sauf le mot de passe, la graine et le type) se changent aussi **depuis le jeu**, dans le
+panneau d'administration : ils sont alors écrits dans `config.json`. En revanche, un `/mode` ou
+`/difficulte` tapé dans le tchat ne dure que jusqu'au prochain redémarrage.
 
 ## Administrateurs
 
-Dans le jeu, tape **`/admin MOT_DE_PASSE`** : tu as alors les triches et les commandes de l'hôte
-(`/expulser`, `/bannir`, `/debannir`, `/triche`, `/regle`…). Personne d'autre ne voit le mot de passe.
-Après 3 essais faux, il faut attendre une minute.
+Dans le jeu, ouvre **Pause → 🛡 Administration** et tape le mot de passe (ou tape
+**`/admin MOT_DE_PASSE`** dans le tchat). Personne d'autre ne voit le mot de passe. Après 3 essais
+faux, il faut attendre une minute.
+
+Le panneau d'administration permet ensuite, sans passer par la machine :
+
+- **Joueurs connectés** : aller vers eux, les faire venir, les nommer administrateurs (jusqu'à leur
+  déconnexion), les expulser ou les bannir ; **débannir** ;
+- **Réglages** : nom du serveur, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire,
+  triches pour tous, extensions (au prochain redémarrage). Ils sont enregistrés dans `config.json` ;
+- **Monde** : heure, météo, annonce à tous, sauvegarde, **redémarrage du serveur**.
+
+Les commandes de l'hôte marchent aussi dans le tchat : `/serveur` (réglages), `/nommeradmin`,
+`/retireradmin`, `/expulser`, `/bannir`, `/debannir`, `/triche`, `/regle`…
+
+Le programme du serveur (`serveur.js`) se met à jour tout seul avec le jeu. S'il date d'avant le
+panneau d'administration, lance une fois `craftmine mettre-a-jour` pour que les réglages changés
+depuis le jeu soient enregistrés.
 
 ## Fichiers (dans `/opt/craftmine`)
 

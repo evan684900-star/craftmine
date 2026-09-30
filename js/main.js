@@ -1061,7 +1061,8 @@
         const c = e.code;
         const K = this.binds;
         if (['Space', 'Tab', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
-        // menu Téléportation (G) ; ouvert, il garde les touches
+        // panneau d'administration et menu Téléportation (G) : ouverts, ils gardent les touches
+        if (CM.Admin.keydown(this, e)) return;
         if (CM.Teleport.keydown(this, e)) return;
         // touches F1 à F11, et F3 + touche
         if (CM.FKeys.keydown(this, e)) return;
@@ -1192,6 +1193,11 @@
         this.paused = false;
         this.ui.hide('pause');
         CM.Teleport.show(this);
+      });
+      on('btn-admin', () => {
+        this.paused = false;
+        this.ui.hide('pause');
+        CM.Admin.show(this);
       });
       on('btn-opt-back', () => {
         this.ui.hide('options');
@@ -2227,7 +2233,10 @@
         if (!this.paused || this.net.active) this.update(dt);
         this.render();
         this.ui.update(dt);
-        if (this.state === 'playing' && !this.dedicated) CM.Teleport.update(this, dt); // (demandes reçues, compte à rebours)
+        if (this.state === 'playing' && !this.dedicated) {
+          CM.Teleport.update(this, dt); // (demandes reçues, compte à rebours)
+          CM.Admin.update(this, dt); // (panneau d'administration ouvert : état de la partie)
+        }
       } catch (err) {
         console.error(err);
         if (!this.errorShown) {

@@ -385,6 +385,7 @@
         <button id="btn-resume" class="big">Reprendre</button>
         <button id="btn-lan">Ouvrir aux amis (multijoueur)</button>
         <button id="btn-tp">🌀 Téléportation (maisons, joueurs)</button>
+        <button id="btn-admin" class="hidden">🛡 Administration</button>
         <button id="btn-options2">Options</button>
         <button id="btn-fs2" title="Plein écran (touche P)">⛶ Plein écran</button>
         <button id="btn-guide">Masquer le guide</button>
@@ -441,6 +442,42 @@
     </div>
   </div>
   <div id="tp-pop" class="hidden"></div>
+  <div id="adminp" class="screen hidden">
+    <div class="panel tp-panel adm-panel">
+      <div class="tp-head"><h3>🛡 Administration</h3><button data-a="close" title="Fermer">✕</button></div>
+      <div id="adm-login" class="hidden">
+        <p class="tp-empty">Tape le mot de passe administrateur du serveur. Il a été affiché à la fin de l’installation ; sur la machine, « craftmine motdepasse » le redonne.</p>
+        <div class="tp-add"><input id="adm-pw" type="password" maxlength="64" placeholder="Mot de passe administrateur" autocomplete="off" /><button data-a="login" class="tp-go">Se connecter</button></div>
+      </div>
+      <div id="adm-wait" class="tp-empty hidden">Chargement…</div>
+      <div id="adm-main" class="hidden">
+        <div id="adm-info" class="adm-info"></div>
+        <h4>👥 Joueurs connectés</h4>
+        <div id="adm-players"></div>
+        <h4>⛔ Bannis</h4>
+        <div id="adm-bans"></div>
+        <h4>⚙ Réglages</h4>
+        <div class="adm-form">
+          <label class="adm-srv">Nom du serveur <input id="adm-name" type="text" maxlength="32" autocomplete="off" /></label>
+          <label>Mode <select id="adm-mode"><option value="survie">Survie</option><option value="creatif">Créatif</option></select></label>
+          <label>Difficulté <select id="adm-diff"><option value="paisible">Paisible</option><option value="facile">Facile</option><option value="normal">Normale</option><option value="difficile">Difficile</option></select></label>
+          <label class="adm-srv">Joueurs au plus <input id="adm-max" type="number" min="2" max="20" /></label>
+          <label class="adm-chk"><input id="adm-pvp" type="checkbox" /> Combats entre joueurs (PvP)</label>
+          <label class="adm-chk"><input id="adm-keep" type="checkbox" /> Garder l’inventaire à la mort</label>
+          <label class="adm-chk"><input id="adm-cheats" type="checkbox" /> Triches pour tout le monde</label>
+          <div class="adm-srv adm-ext"><span>Extensions <i>(changent au prochain redémarrage)</i></span><label><input id="adm-ext-lumiere" type="checkbox" /> Lumière réaliste</label><label><input id="adm-ext-electricite" type="checkbox" /> Électricité</label><label><input id="adm-ext-armes" type="checkbox" /> Armes à feu</label><label><input id="adm-ext-vehicules" type="checkbox" /> Véhicules</label><label><input id="adm-ext-gravite" type="checkbox" /> Gravité réaliste</label><i id="adm-next"></i></div>
+          <div id="adm-persist" class="tp-combat hidden">⚠ Le programme du serveur est trop ancien pour enregistrer ces réglages sur la machine : ils sont appliqués, mais perdus au redémarrage. Mets-le à jour une seule fois avec « craftmine mettre-a-jour » (ensuite il se met à jour tout seul).</div>
+          <button data-a="saveCfg" class="tp-go">Enregistrer les réglages</button>
+        </div>
+        <h4>🌍 Monde</h4>
+        <div class="adm-btns"><span>Heure</span><button data-a="time" data-v="matin">Matin</button><button data-a="time" data-v="midi">Midi</button><button data-a="time" data-v="soir">Soir</button><button data-a="time" data-v="nuit">Nuit</button></div>
+        <div class="adm-btns"><span>Météo</span><button data-a="wx" data-v="clair">☀ Clair</button><button data-a="wx" data-v="pluie">🌧 Pluie</button><button data-a="wx" data-v="orage">⛈ Orage</button></div>
+        <div class="tp-add"><input id="adm-ann" type="text" maxlength="200" placeholder="Annonce à tous les joueurs" autocomplete="off" /><button data-a="ann">📣 Envoyer</button></div>
+        <div class="adm-btns"><button data-a="save">💾 Sauvegarder le monde</button><button id="adm-restart" data-a="restart" class="adm-srv adm-danger">🔄 Redémarrer le serveur</button></div>
+      </div>
+      <div id="adm-msg" class="tp-msg"></div>
+    </div>
+  </div>
   <div id="sign-edit" class="screen hidden">
     <div class="panel sign-panel">
       <h3>🪧 Écrire sur le panneau</h3>
@@ -519,6 +556,7 @@
   <script src="js/net.js"></script>
   <script src="js/commands.js"></script>
   <script src="js/teleport.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>

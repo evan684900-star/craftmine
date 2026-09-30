@@ -1005,6 +1005,10 @@
         case 'save':
           if (m.d && typeof m.d === 'object') this.guests[e.name] = m.d;
           break;
+        case 'admq':
+          // panneau d'administration : état de la partie, pour les administrateurs seulement
+          e.link.send({ t: 'adms', s: e.admin ? CM.Admin.state(g) : null });
+          break;
         case 'dead':
           this.sysAll('💀 ' + e.name + ' a perdu la vie' + (m.c ? ' (' + cleanText(m.c) + ')' : ''));
           break;
@@ -1442,6 +1446,9 @@
         case 'raid':
           // barre du raid en cours (null : fini)
           if (CM.Raids) CM.Raids.remote = Array.isArray(m.r) ? m.r : null;
+          break;
+        case 'adms':
+          CM.Admin.gotState(m.s && typeof m.s === 'object' ? m.s : null);
           break;
         case 'cr':
           // réponse d'une commande, ou ligne pour tous (/moi, /dé…)

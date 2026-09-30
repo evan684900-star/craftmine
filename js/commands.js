@@ -34,6 +34,7 @@
   // ------------------------------------------------ sortie dans le tchat --
   function print(s, kind) {
     const net = G().net;
+    if (CM.Admin && CM.Admin.open) CM.Admin.onOut(s, kind); // (réponse affichée aussi dans le panneau)
     const d = document.createElement('div');
     d.className = 'cl cmd ' + (kind || 'info');
     d.textContent = String(s).slice(0, 600);
@@ -1493,6 +1494,7 @@
       if (r[1] === 'option') {
         g.options[r[0]] = v;
         g.applyOptions();
+        net.sendCfg(); // (garder l'inventaire : les invités le savent)
       } else if (r[1] === 'net') {
         net.rules[r[0]] = v;
         if (r[0] === 'cmds') g.settings.guestCheats = v;
@@ -1579,6 +1581,115 @@
       if (!net.bans[k]) bad('« ' + (a[0] || '') + ' » n’est pas banni' + (Object.keys(net.bans).length ? ' (bannis : ' + Object.keys(net.bans).join(', ') + ')' : ''));
       delete net.bans[k];
       o.ok('✅ ' + a[0] + ' peut revenir');
+    },
+  });
+  // Donner ou retirer les droits d'administrateur à un joueur connecté (jusqu'à sa déconnexion).
+  function setAdmin(ctx, s, on) {
+    const g = G(), net = g.net, D = CM.Dedicated;
+    if (!net.isHost) bad('Seulement quand la partie est ouverte');
+    const q = findPlayer(ctx, s);
+    const e = net.links.get(q.pid);
+    if (!e) bad(q.pid === 0 ? 'L’hôte a déjà tous les droits' : 'Joueur introuvable');
+    if (!!e.admin === on) bad(q.name + (on ? ' est déjà administrateur' : ' n’est pas administrateur'));
+    e.admin = on;
+    net.sendCfgTo(e);
+    net.sendTo(e.pid, { t: 'cr', s: on ? '🛡 ' + ctx.name + ' t’a nommé administrateur (jusqu’à ta déconnexion) : Pause → Administration' : '🛡 ' + ctx.name + ' t’a retiré les droits d’administrateur', k: 'ok' });
+    if (D.on) D.log('🛡 ' + q.name + (on ? ' nommé administrateur par ' : ' n’est plus administrateur (') + ctx.name + (on ? '' : ')'));
+    return q.name;
+  }
+  def('nommeradmin addadmin', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'donne les droits d’administrateur à un joueur connecté (jusqu’à sa déconnexion)',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      o.ok('🛡 ' + setAdmin(ctx, a[0], true) + ' est administrateur');
+    },
+  });
+  def('retireradmin deop removeadmin', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'retire les droits d’administrateur à un joueur',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      o.ok('🛡 ' + setAdmin(ctx, a[0], false) + ' n’est plus administrateur');
+    },
+  });
+  // Réglages de la partie depuis le jeu (panneau d'administration). Sur le serveur dédié, ils
+  // sont aussi écrits dans config.json (restent après un redémarrage).
+  const SRV_KEYS = {
+    nom: ['nom', 'name'],
+    mode: ['mode'],
+    difficulte: ['difficulte', 'diff', 'difficulty'],
+    pvp: ['pvp'],
+    garder_inventaire: ['garder_inventaire', 'garderinventaire', 'keep', 'keepinventory'],
+    triches: ['triches', 'cheats', 'triches_invites'],
+    max: ['max', 'maxjoueurs', 'max_joueurs'],
+    extensions: ['extensions', 'ext'],
+    redemarrer: ['redemarrer', 'restart', 'reboot'],
+  };
+  def('serveur server srv', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '[réglage valeur] | redemarrer', desc: 'hôte ou administrateur : réglages de la partie (sur le serveur, enregistrés sur la machine)',
+    more: 'Réglages : nom, mode (survie/creatif), difficulte, pvp (on/off), garder_inventaire, triches, max (2 à 20), extensions (lumiere, electricite, armes, vehicules, gravite, ou aucune). /serveur redemarrer relance le serveur.',
+    args: [() => Object.keys(SRV_KEYS)],
+    run(ctx, a, o) {
+      const g = G(), net = g.net, D = CM.Dedicated;
+      if (!net.isHost) bad('Seulement quand la partie est ouverte');
+      if (!a[0]) {
+        const ext = g.settings.ext || {};
+        o.info('⚙ ' + (D.on ? '« ' + net.name + ' » · ' + net.links.size + '/' + D.max + ' joueurs · ' : '') + (g.mode === 'creative' ? 'créatif' : 'survie') + ' · ' + DIFF_FR[g.difficulty] + ' · PvP ' + (net.rules.pvp ? 'on' : 'off') + ' · garder l’inventaire ' + (g.options.keepInventory ? 'on' : 'off') + ' · triches pour tous ' + (net.rules.cmds ? 'on' : 'off') + ' · extensions : ' + (Object.keys(ext).filter((k) => ext[k]).join(', ') || 'aucune'));
+        return;
+      }
+      const n = norm(a[0]);
+      const key = Object.keys(SRV_KEYS).find((k) => SRV_KEYS[k].includes(n));
+      if (!key) bad('Réglage inconnu : « ' + a[0] + ' » (' + Object.keys(SRV_KEYS).join(', ') + ')');
+      const v = a.slice(1).join(' ').trim();
+      const sub = (line) => exec(Object.assign({}, ctx, { line }));
+      const needSrv = () => D.on || bad('Seulement sur le serveur CraftMine');
+      let cfg = null; // (ce qui part dans config.json)
+      if (key === 'mode') {
+        const m = /^crea/.test(norm(v)) ? 'creatif' : /^surv/.test(norm(v)) ? 'survie' : bad('Mode : survie ou creatif');
+        sub('/mode ' + m);
+        cfg = { mode: m };
+      } else if (key === 'difficulte') {
+        const d = DIFFS[norm(v)] || bad('Difficulté : paisible, facile, normal ou difficile');
+        sub('/difficulte ' + d);
+        cfg = { difficulte: { peaceful: 'paisible', easy: 'facile', normal: 'normal', hard: 'difficile' }[d] };
+      } else if (key === 'pvp' || key === 'garder_inventaire' || key === 'triches') {
+        const on = onOff(v || undefined, key === 'pvp' ? net.rules.pvp : key === 'triches' ? net.rules.cmds : g.options.keepInventory);
+        sub('/regle ' + (key === 'triches' ? 'triches_invites' : key) + ' ' + (on ? 'on' : 'off'));
+        cfg = key === 'pvp' ? { pvp: on } : key === 'triches' ? { triches: on } : { garderInventaire: on };
+      } else if (key === 'nom') {
+        needSrv();
+        const s = v.replace(/[\u0000-\u001f"]/g, '').slice(0, 32).trim() || bad('Nom attendu');
+        net.name = s;
+        cfg = { nom: s };
+        broadcastLine('🖥 Le serveur s’appelle maintenant « ' + s + ' »' + by(ctx), 'ok');
+      } else if (key === 'max') {
+        needSrv();
+        D.max = int(v, 2, 20, 'Nombre de joueurs');
+        cfg = { maxJoueurs: D.max };
+        o.ok('👥 ' + D.max + ' joueurs au plus');
+      } else if (key === 'extensions') {
+        needSrv();
+        const list = /^(aucune|none|rien)$/.test(norm(v)) ? [] : v.split(/[\s,;]+/).filter(Boolean);
+        const bad2 = list.filter((x) => !D.extName(x));
+        if (bad2.length) bad('Extension inconnue : ' + bad2.join(', ') + ' (' + D.EXTS.join(', ') + ')');
+        cfg = { extensions: [...new Set(list.map(D.extName))] };
+        D.extNext = cfg.extensions;
+        o.ok('🧩 Extensions au prochain redémarrage : ' + (cfg.extensions.join(', ') || 'aucune'));
+      } else if (key === 'redemarrer') {
+        needSrv();
+        D.restart(ctx.name);
+        o.ok('🔄 Redémarrage dans 10 secondes');
+        return;
+      }
+      if (D.on && cfg)
+        D.persist(cfg).then((ok) => {
+          if (!ok) ctx.out('⚠ Appliqué, mais pas enregistré sur la machine (perdu au redémarrage) : le programme du serveur est trop ancien. Mets-le à jour une fois avec « craftmine mettre-a-jour ».', 'err');
+        });
+    },
+  });
+  def('panel admin_panel administration', {
+    cat: 'Partie', local: true, usage: '', desc: 'ouvre le panneau d’administration (hôte, administrateurs du serveur)',
+    run(ctx, a, o) {
+      CM.Admin.show(G());
     },
   });
   def('defspawn setspawn setworldspawn', {

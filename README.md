@@ -103,6 +103,7 @@ Un monde ouvert **24 h/24** sur une machine louée : bouton **🖥️ Serveur** 
 
 - Le jeu tourne sur la machine sans image ni son (navigateur invisible) et sert d'hôte permanent. Son joueur à lui est invisible et ne compte pas. Le monde est enregistré sur le disque chaque minute et à l'arrêt, avec une copie par heure.
 - **`/admin <mot de passe>`** : triches et commandes de l'hôte. **`/expulser`**, **`/bannir`**, **`/debannir`** pour la modération (aussi dans une partie entre amis, pour l'hôte).
+- **Pause → 🛡 Administration** (ou `/panel`) : le panneau d'administration, pour l'hôte et les administrateurs (sur le serveur, on s'y connecte avec le mot de passe). Joueurs connectés (aller vers eux, les faire venir, les nommer administrateurs, les expulser, les bannir), bannis, réglages (nom, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire, triches, extensions : sur le serveur, ils sont écrits dans `config.json` de la machine), heure, météo, annonce, sauvegarde et redémarrage du serveur, sans passer par la machine. En commande : `/serveur`, `/nommeradmin`, `/retireradmin`.
 - Installation en une commande et commandes de la machine (`craftmine journal`, `craftmine config`…) : voir [serveur/LISEZMOI.md](serveur/LISEZMOI.md).
 
 ### Multijoueur (gratuit, sans serveur)
@@ -291,7 +292,9 @@ js/end.js         forts souterrains, œil de l'End, dimension de l'End (îles, p
 js/gun_defs.js    armes à feu (extension) : caractéristiques, objets, munitions, recettes, textures, bandit
 js/guns.js        tir, visée et lunette, recul, rechargement, roquettes et grenades, lance-flammes, modèles 3D, HUD, réseau
 js/vehicle_defs.js véhicules (extension) : caractéristiques, objets, recettes, textures, établi de mécanicien
-js/dedicated.js   serveur dédié : jeu sans image, hôte permanent, sauvegarde sur disque, /admin
+js/dedicated.js   serveur dédié : jeu sans image, hôte permanent, sauvegarde sur disque, /admin, réglages écrits sur la machine
+js/admin.js       panneau d'administration (Pause → Administration)
+js/teleport.js    menu Téléportation (maisons, demandes aux joueurs)
 serveur/          programme de la machine (serveur.js), installation (installer.sh), guide (LISEZMOI.md)
 js/fkeys.js       touches F : capture d’écran, vidéo, vues, bordures des tronçons, boîtes, zones des monstres, zoom…
 js/vehicles.js    conduite, vol, bateau, carburant, dégâts, passagers, klaxon et sirène, caméra de derrière, modèles 3D, réseau

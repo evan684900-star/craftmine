@@ -25,6 +25,8 @@
     const n = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     return EXTS.find((k) => k === n || k === n + 's' || k.replace(/s$/, '') === n) || null;
   };
+  D.EXTS = EXTS;
+  D.extName = extName;
   // Réglages du monde (config.json de la machine).
   function worldSettings(c) {
     const ext = [].concat(c.extensions || []).map(extName);
@@ -180,12 +182,38 @@
     CM.Commands.run(line.startsWith('/') ? line : '/annonce ' + line);
   };
   D.status = function () {
+    // (ancien programme serveur.js, sans cmServerRestart : trois réponses en erreur le font redémarrer)
+    if (D.restartReq) throw new Error('Redémarrage demandé depuis le jeu (' + D.restartReq + ')');
     const g = CM.game, net = g && g.net;
     return {
       ok: !!(g && g.state === 'playing' && net && net.isHost && net.peer && !net.peer.destroyed),
       joueurs: net ? [...net.links.values()].map((e) => e.name) : [],
       jour: g ? g.dayCount + 1 : 0,
     };
+  };
+  // Réglages changés depuis le jeu (panneau d'administration, /serveur) : écrits dans config.json.
+  // Faux si le programme de la machine est trop ancien pour ça (craftmine mettre-a-jour).
+  D.canPersist = () => !!window.cmServerSetConfig;
+  D.persist = async function (patch) {
+    Object.assign(D.cfg, patch);
+    if (!window.cmServerSetConfig) return false;
+    try {
+      return (await window.cmServerSetConfig(patch)) !== false;
+    } catch (e) {
+      log('⚠ Réglages non enregistrés : ' + e.message);
+      return false;
+    }
+  };
+  // Redémarrage demandé depuis le jeu : on prévient, puis le monde est sauvegardé et le serveur relancé.
+  D.restart = function (by) {
+    if (D.restarting) return;
+    D.restarting = true;
+    log('🔄 Redémarrage demandé par ' + by);
+    CM.game.net.sysAll('🔄 Le serveur redémarre dans 10 secondes (demandé par ' + by + '). Recharge la page puis reviens dans une minute !');
+    setTimeout(() => {
+      if (window.cmServerRestart) window.cmServerRestart();
+      else D.restartReq = by;
+    }, 10000);
   };
   D.checkAdmin = function (pid, pw) {
     const want = String(D.cfg.motDePasseAdmin || '');

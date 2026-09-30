@@ -32,7 +32,14 @@ if (process.argv[2] === 'cmd') {
   process.exit(0);
 }
 
-const cfg = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
+let cfg;
+try {
+  cfg = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
+} catch (e) {
+  log('💥 config.json est mal écrit (' + e.message + ') : corrige-le avec « craftmine config »');
+  setTimeout(() => process.exit(1), 30000);
+  return;
+}
 const SITE = String(cfg.site || 'https://craftmine16.vercel.app').replace(/\/+$/, '');
 const { chromium } = require('playwright');
 
@@ -54,10 +61,39 @@ function writeSave(json) {
   }
 }
 
+// Réglages changés depuis le jeu (panneau d'administration) : vérifiés puis écrits dans config.json.
+const SETTABLE = {
+  nom: (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= 32,
+  mode: (v) => v === 'survie' || v === 'creatif',
+  difficulte: (v) => ['paisible', 'facile', 'normal', 'difficile'].includes(v),
+  pvp: (v) => typeof v === 'boolean',
+  garderInventaire: (v) => typeof v === 'boolean',
+  triches: (v) => typeof v === 'boolean',
+  maxJoueurs: (v) => Number.isInteger(v) && v >= 2 && v <= 20,
+  extensions: (v) => Array.isArray(v) && v.every((x) => ['lumiere', 'electricite', 'armes', 'vehicules', 'gravite'].includes(x)),
+};
+function setConfig(patch) {
+  if (!patch || typeof patch !== 'object') return false;
+  const cur = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
+  const done = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (!SETTABLE[k] || !SETTABLE[k](v)) continue;
+    cur[k] = v;
+    cfg[k] = v;
+    done.push(k + ' = ' + JSON.stringify(v));
+  }
+  if (!done.length) return false;
+  const tmp = CFG_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(cur, null, 2) + '\n');
+  fs.renameSync(tmp, CFG_FILE);
+  log('⚙ Réglage enregistré depuis le jeu : ' + done.join(', '));
+  return true;
+}
+
 // Empreinte du jeu en ligne : quand elle change (mise à jour de CraftMine), le serveur redémarre.
 async function onlineVersion() {
   const h = crypto.createHash('sha1');
-  for (const f of ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js']) {
+  for (const f of ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js', 'js/commands.js', 'js/admin.js']) {
     const r = await fetch(SITE + '/' + f + '?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error(f + ' : ' + r.status);
     h.update(await r.text());
@@ -98,6 +134,18 @@ async function start() {
     }
   });
   await page.exposeFunction('cmServerLog', (s) => log(s));
+  await page.exposeFunction('cmServerSetConfig', (patch) => {
+    try {
+      return setConfig(patch);
+    } catch (e) {
+      log('⚠ Réglage non enregistré : ' + e.message);
+      return false;
+    }
+  });
+  await page.exposeFunction('cmServerRestart', () => {
+    setTimeout(() => stop(0), 100); // (le service le relance aussitôt)
+    return true;
+  });
   page.on('pageerror', (e) => log('⚠ ' + e.message));
   page.on('crash', () => {
     log('💥 Le jeu a planté : redémarrage');
@@ -143,7 +191,21 @@ async function tick() {
   tickBusy = false;
 }
 
-// Nouvelle version de CraftMine en ligne : on prévient, on sauvegarde et on redémarre.
+// Nouveau programme du serveur en ligne (ce fichier) ? Renvoie son texte, sinon null.
+async function newProgram() {
+  try {
+    const r = await fetch(SITE + '/serveur/serveur.js?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const t = await r.text();
+    if (!t.includes('cmServerSave') || !t.includes('checkUpdate') || t === fs.readFileSync(__filename, 'utf8')) return null;
+    return t;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Nouvelle version de CraftMine en ligne : on prévient, on sauvegarde et on redémarre
+// (le programme du serveur se remplace lui-même s'il a changé).
 async function checkUpdate() {
   if (stopping) return;
   let v;
@@ -152,7 +214,17 @@ async function checkUpdate() {
   } catch (e) {
     return;
   }
-  if (v === version) return;
+  const prog = await newProgram();
+  if (v === version && !prog) return;
+  if (prog) {
+    try {
+      fs.writeFileSync(__filename + '.tmp', prog);
+      fs.renameSync(__filename + '.tmp', __filename);
+      log('🔄 Programme du serveur mis à jour');
+    } catch (e) {
+      log('⚠ Programme du serveur non mis à jour : ' + e.message);
+    }
+  }
   log('🔄 Nouvelle version de CraftMine : redémarrage dans 30 s');
   await page.evaluate(() => CM.game.net.sysAll('🔄 Mise à jour de CraftMine : le serveur redémarre dans 30 secondes. Recharge la page puis reviens !')).catch(() => {});
   await sleep(30000);
