@@ -173,6 +173,13 @@
     if (!par || !eff) return;
     const top = par.getBoundingClientRect().top, cr = clock.getBoundingClientRect();
     let y = Math.round((cr.height ? cr.bottom - top : 12) + 8);
+    // (multijoueur : code de la partie et nombre de joueurs)
+    const ni = $('netinfo');
+    if (ni && !ni.classList.contains('hidden')) {
+      const t = y + 'px';
+      if (ni.style.top !== t) ni.style.top = t;
+      y += Math.round(ni.getBoundingClientRect().height) + 6;
+    }
     if (mini && !mini.classList.contains('hidden')) {
       const t = y + 'px';
       if (mini.style.top !== t) mini.style.top = t;

@@ -1,0 +1,13 @@
+{
+  "nom": "Serveur",
+  "graine": "",
+  "type": "normal",
+  "mode": "survie",
+  "difficulte": "normal",
+  "extensions": ["lumiere"],
+  "triches": false,
+  "pvp": false,
+  "garderInventaire": false,
+  "maxJoueurs": 10,
+  "motDePasseAdmin": "a-changer"
+}

@@ -463,6 +463,7 @@
   }
   function guestCtx(e, m) {
     const g = G(), rp = e.rp, net = g.net;
+    const admin = !!e.admin; // (serveur dédié : /admin)
     const pos = Array.isArray(m.pos) ? m.pos.map((v) => (Number.isFinite(+v) ? +v : 0)) : [rp.x, rp.y, rp.z, rp.yaw, rp.pitch];
     const lk = Array.isArray(m.lk) && m.lk.length === 6 && m.lk.every((v) => Number.isFinite(+v)) ? { x: m.lk[0] | 0, y: m.lk[1] | 0, z: m.lk[2] | 0, nx: m.lk[3] | 0, ny: m.lk[4] | 0, nz: m.lk[5] | 0 } : null;
     return {
@@ -472,7 +473,8 @@
       pid: e.pid,
       x: pos[0], y: pos[1], z: pos[2], yaw: pos[3], pitch: pos[4], dim: rp.dim,
       look: lk,
-      cheats: !!net.rules.cmds,
+      cheats: !!net.rules.cmds || admin,
+      admin,
       out: (s, k) => net.sendTo(e.pid, { t: 'cr', s: String(s).slice(0, 600), k: k || 'info' }),
     };
   }
@@ -496,7 +498,7 @@
       return o.err('Commande inconnue : /' + name + (near.length ? ' — peut-être ' + near.join(', ') : '') + ' · /aide');
     }
     if (c.cheat && !ctx.cheats) return o.err('/' + c.name + ' : les triches sont désactivées par l’hôte (il peut taper /triche on)');
-    if (c.hostOnly && ctx.self && net.isClient) return o.err('/' + c.name + ' : réservé à l’hôte');
+    if (c.hostOnly && ((ctx.self && net.isClient && !net.admin) || (!ctx.self && !ctx.admin))) return o.err('/' + c.name + ' : réservé à l’hôte' + (CM.Dedicated.on || net.code === CM.SERVER_CODE ? ' (et aux administrateurs : /admin)' : ''));
     // invité : ce qui touche au monde part chez l'hôte
     if (!c.local && forward(ctx)) return;
     try {
@@ -1367,6 +1369,76 @@
     args: [() => ['on', 'off']],
     run(ctx, a, o) {
       exec(Object.assign({}, ctx, { line: '/regle triches_invites ' + (onOff(a[0], !!G().net.rules.cmds) ? 'on' : 'off') }));
+    },
+  });
+  // serveur dédié : devenir administrateur (triches, commandes de l'hôte) avec le mot de passe de la machine
+  def('admin op', {
+    cat: 'Partie', usage: '<mot de passe>', desc: 'serveur : devenir administrateur (triches permises)',
+    run(ctx, a, o) {
+      const net = G().net, D = CM.Dedicated;
+      if (!D.on) bad('Seulement sur le serveur CraftMine (bouton « Serveur » du menu)');
+      const e = net.links.get(ctx.pid);
+      if (!e) bad('Joueur introuvable');
+      if (e.admin) return o.info('Tu es déjà administrateur');
+      const r = D.checkAdmin(ctx.pid, a[0]);
+      if (r === 'wait') bad('Trop d’essais : attends une minute');
+      if (r !== 'ok') {
+        D.log('⚠ Mauvais mot de passe /admin pour ' + ctx.name);
+        bad('Mot de passe incorrect');
+      }
+      e.admin = true;
+      net.sendCfgTo(e);
+      D.log('🛡 ' + ctx.name + ' est administrateur');
+      o.ok('🛡 Tu es administrateur : triches et commandes de l’hôte permises (/aide)');
+    },
+  });
+  // modération (hôte, ou administrateur du serveur)
+  function kickName(ctx, s, why) {
+    const net = G().net;
+    const q = findPlayer(ctx, s);
+    if (q.pid === ctx.pid || q.pid === 0) bad('Pas toi-même');
+    const e = net.links.get(q.pid);
+    if (!e) bad('Joueur introuvable');
+    e.link.send({ t: 'bye', r: why });
+    setTimeout(() => net.dropClient(e, 'left'), 300);
+    return q.name;
+  }
+  def('expulser kick', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'fait sortir un joueur de la partie (il peut revenir)',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      if (G().net.isClient || !G().net.isHost) bad('Seulement quand la partie est ouverte');
+      const n = kickName(ctx, a[0], 'Tu as été expulsé de la partie par ' + ctx.name + '.');
+      broadcastLine('👢 ' + n + ' a été expulsé' + by(ctx), 'ok');
+    },
+  });
+  def('bannir ban', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'expulse un joueur et l’empêche de revenir avec ce pseudo',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      const net = G().net;
+      if (!net.isHost) bad('Seulement quand la partie est ouverte');
+      if (a[0] === undefined) bad('Usage : /bannir <joueur>');
+      let n = String(a[0]);
+      if (norm(n) === norm(ctx.name) || isMe(n)) bad('Pas toi-même');
+      try {
+        n = kickName(ctx, a[0], 'Tu as été banni de la partie.');
+      } catch (e) {
+        /* (pas en ligne : banni quand même) */
+      }
+      net.bans[n.toLowerCase()] = 1;
+      broadcastLine('⛔ ' + n + ' est banni' + by(ctx), 'ok');
+    },
+  });
+  def('debannir unban pardon', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '<pseudo>', desc: 'retire un joueur de la liste des bannis',
+    args: [() => Object.keys(G().net.bans || {})],
+    run(ctx, a, o) {
+      const net = G().net;
+      const k = String(a[0] || '').toLowerCase();
+      if (!net.bans[k]) bad('« ' + (a[0] || '') + ' » n’est pas banni' + (Object.keys(net.bans).length ? ' (bannis : ' + Object.keys(net.bans).join(', ') + ')' : ''));
+      delete net.bans[k];
+      o.ok('✅ ' + a[0] + ' peut revenir');
     },
   });
   def('defspawn setspawn setworldspawn', {

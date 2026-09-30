@@ -850,7 +850,9 @@
         m.vz *= 0.25;
         m.vy = Math.max(-1.2, Math.min(m.vy, 1.2));
       }
+      const my0 = m.y;
       CM.Physics.move(w, m, m.vx * dt, m.vy * dt, m.vz * dt);
+      if (CM.Vehicles && this.carts && this.carts.length) CM.Vehicles.collide(this.game, m, null, my0); // (véhicules solides)
       if (m.hitY) m.vy = 0;
       const sp = Math.hypot(m.vx, m.vz);
       m.walk += sp * dt * 3.2;

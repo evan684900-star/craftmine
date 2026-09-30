@@ -440,6 +440,7 @@
       // ----- déplacement + collisions (accroupi : on ne tombe pas du bord)
       const prevVy = this.vy;
       const wasGround = this.onGround;
+      const py0 = this.y;
       if (this.inWeb) {
         // toile d'araignée : on s'y englue (et la chute est freinée)
         this.vy = Math.max(-1.2, Math.min(this.vy, 1.2));
@@ -454,6 +455,8 @@
         this.onGround = true;
         CM.Physics.move(w, this, 0, this.vy * dt, 0);
       } else CM.Physics.move(w, this, this.vx * dt, this.vy * dt, this.vz * dt);
+      // véhicules solides : on ne les traverse pas, on peut monter sur leur toit
+      if (CM.Vehicles && !mounted) CM.Vehicles.collide(g, this, this.riding, py0);
       if (this.hitY) this.vy = 0;
       if (this.hitX && this.hook) this.vx *= 0.5;
       if (this.hitZ && this.hook) this.vz *= 0.5;
@@ -1884,6 +1887,7 @@
 
     // attacker : créature qui frappe (pour les Épines).
     damage(n, sx, sz, cause, bypass, attacker) {
+      if (CM.Dedicated.on) return; // (joueur invisible du serveur dédié)
       const g = this.game;
       if (!this.alive || n <= 0) return;
       if (attacker && attacker.type) {

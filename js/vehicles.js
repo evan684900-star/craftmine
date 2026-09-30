@@ -15,6 +15,13 @@
     return a;
   };
   const isVeh = (c) => !!(c && CM.VEH[c.type]);
+  // Boîte solide de chaque véhicule, vue dans son repère (x : largeur, z : longueur, l'avant vers −z) :
+  // [demi-largeur, centre en z, demi-longueur, hauteur du toit]
+  const SOLID = {
+    car: [0.92, 0, 1.2, 1.78], police: [0.92, 0, 1.2, 1.78], sport: [0.92, 0, 1.2, 1.02], jeep: [0.95, 0, 1.3, 1.75],
+    truck: [1.05, 0.1, 2.0, 2.3], moto: [0.3, 0, 0.8, 1.1], quad: [0.55, 0, 0.75, 1.15], heli: [0.8, -0.25, 1.25, 1.9],
+    plane: [0.5, 0.2, 2.2, 1.4], tank: [1.45, 0, 2.05, 2.0], speedboat: [0.95, -0.25, 1.7, 0.7],
+  };
   const FUEL_USE = 0.16; // % par seconde à plein régime
 
   const V = (CM.Vehicles = {
@@ -284,7 +291,7 @@
         for (const m of ents.mobs) {
           if (m.dead || now(g) - (m.vHit || -9) < 0.6) continue;
           const dx = m.x - c.x, dz = m.z - c.z;
-          if (Math.abs(m.y - c.y) > 1.6 || Math.hypot(dx, dz) > d.hw + m.hw + 0.5) continue;
+          if (Math.abs(m.y - c.y) > 1.6 || !this.near(c, m.x, m.z, m.hw + 0.5)) continue;
           if ((dx * fx + dz * fz) * Math.sign(c.spd) < 0) continue; // (seulement devant)
           m.vHit = now(g);
           ents.hurtMob(m, d.tracked ? 12 + sp * 3 : sp * 1.1, [c.x, c.z], false, c.rider === 'local' ? g.player : null);
@@ -301,6 +308,76 @@
         if (c.burn <= 0) this.explode(g, c);
       }
     },
+    // ------------------------------------------------ collisions --
+    // Le point (x, z) est-il contre la boîte du véhicule (à « marge » près) ?
+    near(c, x, z, margin) {
+      const s = SOLID[c.type];
+      if (!s) return false;
+      const cy = Math.cos(c.yaw), sy = Math.sin(c.yaw), dx = x - c.x, dz = z - c.z;
+      const lx = cy * dx - sy * dz, lz = sy * dx + cy * dz - s[1];
+      return Math.abs(lx) < s[0] + margin && Math.abs(lz) < s[2] + margin;
+    },
+    // Les véhicules sont solides : un joueur ou une créature (x, y, z au pied, hw, h) est poussé hors
+    // de leur boîte, ou se tient sur leur toit (et suit le véhicule qui roule). Renvoie ce véhicule-là.
+    // (y0 : hauteur avant le déplacement de cette image, pour ne pas rater un toit en tombant vite)
+    collide(g, e, skipUid, y0) {
+      const ents = g.entities, list = ents.carts;
+      if (!list || !list.length) return null;
+      let on = null;
+      for (const c of list) {
+        if (c.dead || !isVeh(c) || c.uid === skipUid) continue;
+        const s = SOLID[c.type];
+        if (!s) continue;
+        const dx = e.x - c.x, dz = e.z - c.z;
+        if (dx * dx + dz * dz > 40) continue;
+        // déplacement du véhicule depuis l'image précédente (pour emporter qui est dessus)
+        if (c.solidT !== g.clock) {
+          c.solidT = g.clock;
+          c.mdx = c.px0 === undefined ? 0 : c.x - c.px0;
+          c.mdz = c.pz0 === undefined ? 0 : c.z - c.pz0;
+          c.mdy = c.pyaw0 === undefined ? 0 : c.yaw - c.pyaw0;
+          if (Math.abs(c.mdx) > 3 || Math.abs(c.mdz) > 3) c.mdx = c.mdz = c.mdy = 0; // (téléporté)
+          c.px0 = c.x;
+          c.pz0 = c.z;
+          c.pyaw0 = c.yaw;
+        }
+        const top = c.y + s[3];
+        if (e.y > top + 0.05 || e.y + e.h <= c.y + 0.05) continue;
+        const cy = Math.cos(c.yaw), sy = Math.sin(c.yaw);
+        let lx = cy * dx - sy * dz, lz = sy * dx + cy * dz - s[1];
+        const ex = s[0] + e.hw, ez = s[2] + e.hw;
+        if (Math.abs(lx) >= ex || Math.abs(lz) >= ez) continue;
+        const w = g.world;
+        // dessus : on atterrit sur le toit (ou on y monte d'un pas s'il est bas)
+        const from = y0 === undefined ? e.y : y0;
+        if (((e.y > top - 0.55 || from >= top - 0.05) && e.vy <= 0.5) || (e.onGround && top - e.y <= 0.6 && !CM.Physics.overlaps(w, e.x, top + 0.01, e.z, e.hw, e.h))) {
+          if (!e.onGround && e.vy < -1) e.landed = true;
+          e.y = top;
+          if (e.vy < 0) e.vy = 0;
+          e.onGround = true;
+          on = c;
+          // le véhicule roule ou tourne : on est emporté
+          if (c.mdx || c.mdz || c.mdy) {
+            const rx = e.x - c.x + c.mdx, rz = e.z - c.z + c.mdz, co = Math.cos(c.mdy), si = Math.sin(c.mdy);
+            const nx = c.x + co * rx + si * rz, nz = c.z - si * rx + co * rz;
+            if (!CM.Physics.overlaps(w, nx, e.y + 0.01, nz, e.hw, e.h)) {
+              e.x = nx;
+              e.z = nz;
+            }
+          }
+          continue;
+        }
+        // sur le côté : poussé dehors par le côté le plus proche
+        if (ex - Math.abs(lx) < ez - Math.abs(lz)) lx = (lx < 0 ? -1 : 1) * (ex + 0.001);
+        else lz = (lz < 0 ? -1 : 1) * (ez + 0.001);
+        const nx = c.x + cy * lx + sy * (lz + s[1]), nz = c.z - sy * lx + cy * (lz + s[1]);
+        if (CM.Physics.overlaps(w, nx, e.y, nz, e.hw, e.h)) continue; // (coincé contre un mur : tant pis)
+        e.x = nx;
+        e.z = nz;
+      }
+      return on;
+    },
+
     // Dégâts (hôte) ; à 0, le véhicule prend feu puis explose.
     damage(g, c, n, why) {
       if (g.mode === 'creative' && why !== 'explosion') return;

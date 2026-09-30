@@ -27,6 +27,7 @@
     // apparence (multijoueur)
     lookSkin: 0, lookHair: 0, lookShirt: 'blue', lookPants: 'jeans', lookCape: 'none',
     // écran tactile
+    kbLayout: 'auto', kbSeen: '',
     touchControls: 'auto', touchSens: 1, touchSize: 100, touchAim: 'finger', touchOpacity: 100, touchLayout: null,
     // multijoueur
     netName: '',
@@ -67,6 +68,12 @@
     Space: 'Espace', ShiftLeft: 'Maj gauche', ShiftRight: 'Maj droite', ControlLeft: 'Ctrl gauche', ControlRight: 'Ctrl droit',
     AltLeft: 'Alt', AltRight: 'Alt Gr', Tab: 'Tab', CapsLock: 'Verr. maj', Enter: 'Entrée', Backspace: 'Retour',
     ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+  };
+  // Les touches sont repérées par leur place sur le clavier (comme dans Minecraft) : ZQSD en AZERTY,
+  // WASD en QWERTY. Leur nom affiché suit le clavier du joueur.
+  const AZERTY_NAMES = {
+    KeyQ: 'A', KeyA: 'Q', KeyW: 'Z', KeyZ: 'W', Semicolon: 'M', KeyM: ',', Comma: ';', Period: ':', Slash: '!',
+    Quote: 'Ù', BracketLeft: '^', BracketRight: '$', Backquote: '²', Minus: ')', Backslash: '*',
   };
 
   class Game {
@@ -125,10 +132,50 @@
     keyName(code) {
       if (!code) return '—';
       if (KEY_NAMES[code]) return KEY_NAMES[code];
-      if (code.startsWith('Key')) return code.slice(3);
       if (code.startsWith('Digit')) return code.slice(5);
+      const forced = this.options.kbLayout === 'azerty' || this.options.kbLayout === 'qwerty';
+      // (carte du navigateur, si elle correspond au clavier vraiment utilisé)
+      const m = !forced && this.layoutMap && this.layoutKind === this.kbLayout() && this.layoutMap.get(code);
+      if (m && m.length === 1 && m.trim()) return m.toUpperCase();
+      if (this.kbLayout() === 'azerty' && AZERTY_NAMES[code]) return AZERTY_NAMES[code];
+      if (code.startsWith('Key')) return code.slice(3);
       if (code.startsWith('Numpad')) return 'Pavé ' + code.slice(6);
       return code;
+    }
+
+    // ------------------------------------------------------- clavier -----
+    // AZERTY ou QWERTY : choisi dans les options, sinon détecté (navigateur, puis touches appuyées).
+    kbLayout() {
+      const o = this.options.kbLayout;
+      return o === 'azerty' || o === 'qwerty' ? o : this.options.kbSeen || 'qwerty';
+    }
+    detectLayout() {
+      try {
+        if (navigator.keyboard && navigator.keyboard.getLayoutMap)
+          navigator.keyboard
+            .getLayoutMap()
+            .then((m) => {
+              this.layoutMap = m;
+              const q = m.get('KeyQ');
+              this.layoutKind = q === 'a' ? 'azerty' : q === 'q' ? 'qwerty' : 'autre';
+              this.setLayout(this.layoutKind === 'autre' ? null : this.layoutKind, true);
+            })
+            .catch(() => {});
+      } catch (e) {
+        /* navigateur sans cette fonction */
+      }
+    }
+    learnKey(e) {
+      const c = e.code, k = (e.key || '').toLowerCase();
+      if (!['KeyQ', 'KeyA', 'KeyW', 'KeyZ'].includes(c) || k.length !== 1) return;
+      const az = { KeyQ: 'a', KeyA: 'q', KeyW: 'z', KeyZ: 'w' }[c] === k;
+      this.setLayout(az ? 'azerty' : k === c.slice(3).toLowerCase() ? 'qwerty' : null);
+    }
+    setLayout(l, force) {
+      if (!l || (l === this.options.kbSeen && !force)) return;
+      const was = this.options.kbSeen;
+      this.options.kbSeen = l;
+      if (was !== l || force) this.applyOptions();
     }
 
     // ------------------------------------------------------- options -----
@@ -162,6 +209,18 @@
         this.touch.setEnabled(touchOn);
         if (touchOn && this.state === 'playing') this.forceInput = true;
         if (!touchOn && !this.autostart) this.forceInput = false;
+      }
+      // AZERTY : la touche M (carte) est à la place du « ; » d'un clavier QWERTY
+      if (this.kbLayout() === 'azerty' && this.binds.map === 'KeyM' && !Object.values(this.binds).includes('Semicolon')) {
+        this.binds.map = 'Semicolon';
+        o.kbMapAuto = true;
+      } else if (this.kbLayout() === 'qwerty' && o.kbMapAuto && this.binds.map === 'Semicolon' && !Object.values(this.binds).includes('KeyM')) {
+        this.binds.map = 'KeyM';
+        o.kbMapAuto = false;
+      }
+      if (this.ui && this.kbShown !== this.kbLayout()) {
+        this.kbShown = this.kbLayout();
+        this.ui.buildGuide(); // (aide : noms des touches)
       }
       o.binds = Object.assign({}, this.binds);
       storageSet(OPT_KEY, JSON.stringify(o));
@@ -219,6 +278,7 @@
       this.useCtx(this.openCtx(this.dim));
       this.playerDim = this.dim;
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
+      if (!this.net.isClient) this.net.bans = (save && save.bans && typeof save.bans === 'object' && save.bans) || {};
       this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
       this.cityLots = new Set(save && Array.isArray(save.cityLots) ? save.cityLots.filter((k) => typeof k === 'string') : []);
       this.animals = (!this.net.isClient && save && Array.isArray(save.animals) && save.animals.filter((a) => Array.isArray(a) && a.length >= 4)) || []; // élevage hors de portée
@@ -812,11 +872,13 @@
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(CM.DIMS.map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
         guests: this.net.guests,
+        bans: this.net.bans,
         savedAt: new Date().toISOString(),
       };
     }
     save(silent) {
       if (!this.world || this.state !== 'playing') return;
+      if (this.dedicated) return CM.Dedicated.save(this); // (sur le disque de la machine)
       // invité : sa progression est gardée par l'hôte (sa propre partie solo reste intacte)
       if (this.net.isClient) {
         this.net.sendGuestSave();
@@ -982,8 +1044,10 @@
         },
         { passive: true },
       );
+      this.detectLayout();
       window.addEventListener('keydown', (e) => {
         CM.Audio.init();
+        this.learnKey(e); // (AZERTY ou QWERTY ?)
         if (this.ui.captureKey(e)) return;
         if (this.state !== 'playing') return;
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
@@ -999,6 +1063,11 @@
         if (['Space', 'Tab', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
         // touches F1 à F11, et F3 + touche
         if (CM.FKeys.keydown(this, e)) return;
+        // Tab maintenue : joueurs connectés
+        if (c === 'Tab') {
+          if (!e.repeat) this.ui.showTabList(true);
+          return;
+        }
         // mini-carte : masquée / petite / grande
         if (c === K.map && !this.ui.invOpen) {
           CM.Comfort.cycleMap(this);
@@ -1038,10 +1107,12 @@
       window.addEventListener('keyup', (e) => {
         inp.keys[e.code] = false;
         CM.FKeys.keyup(this, e);
+        if (e.code === 'Tab' && this.ui.tabOn) this.ui.showTabList(false);
       });
       window.addEventListener('blur', () => {
         this.clearInput();
         CM.FKeys.blur();
+        if (this.ui.tabOn) this.ui.showTabList(false);
       });
       // application mise en arrière-plan (téléphone) : pause et sauvegarde
       document.addEventListener('visibilitychange', () => {
@@ -1136,7 +1207,7 @@
       on('btn-wake', () => this.wake('button'));
       // multijoueur
       on('btn-multi', () => this.openMulti());
-      on('btn-server', () => this.menuMsg('🖥️ Le serveur CraftMine (un monde ouvert 24 h/24, sans code à taper) arrive prochainement !', 'good'));
+      on('btn-server', () => this.openMulti(null, true));
       on('btn-mp-back', () => {
         this.ui.hide('multi');
         this.ui.show('menu');
@@ -1193,8 +1264,12 @@
       this.options.netName = name;
       storageSet(OPT_KEY, JSON.stringify(this.options));
     }
-    openMulti(code) {
+    // (server : rejoindre le serveur CraftMine, sans code à taper)
+    openMulti(code, server) {
       this.ui.hide('menu');
+      this.mpServer = !!server;
+      $('multi').classList.toggle('server', !!server);
+      $('mp-title').textContent = server ? '🖥️ Serveur CraftMine' : 'Multijoueur';
       $('mp-name').value = this.options.netName || '';
       if (code) $('mp-code').value = String(code).toUpperCase().slice(0, 5);
       this.mpStatus('');
@@ -1219,13 +1294,13 @@
       $('btn-mp-join').disabled = true;
       let joined = false;
       try {
-        const w = await this.net.join($('mp-code').value, name, (t) => this.mpStatus(t));
+        const w = await this.net.join(this.mpServer ? CM.SERVER_CODE : $('mp-code').value, name, (t) => this.mpStatus(t));
         joined = true;
         await this.startWorld(w.seed, this.net.guestSave(w));
       } catch (e) {
         console.warn(e);
         if (joined) this.exitToMenu('La partie n’a pas pu démarrer : ' + (e.message || e));
-        else this.mpStatus(CM.netErrorText(e), 'warn');
+        else this.mpStatus(CM.netErrorText(Object.assign({}, e, { type: e && e.type, message: e && e.message, server: this.mpServer })), 'warn');
       }
       this.joining = false;
       $('btn-mp-join').disabled = false;
@@ -2111,9 +2186,15 @@
 
     // ---------------------------------------------------------- boucle ---
     frame(now) {
-      requestAnimationFrame((t) => this.frame(t));
+      // serveur dédié : une simple minuterie (20 fois par seconde) au lieu des images de l'écran
+      if (this.dedicated) {
+        if (!this.srvLoop) {
+          this.srvLoop = setInterval(() => this.frame(performance.now()), 50);
+          this.last = performance.now();
+        }
+      } else requestAnimationFrame((t) => this.frame(t));
       // limite d'images par seconde (option)
-      const cap = this.options.maxFps;
+      const cap = this.dedicated ? 0 : this.options.maxFps;
       if (cap > 0 && now - this.last < 1000 / cap - 1.5) return;
       let dt = (now - this.last) / 1000;
       this.last = now;
@@ -2121,6 +2202,16 @@
       this.fps = this.fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
       dt = Math.min(dt, 0.05);
       if (this.state !== 'playing') return;
+      // serveur dédié : seulement la simulation et le réseau, rien à dessiner
+      if (this.dedicated) {
+        try {
+          this.update(dt);
+        } catch (err) {
+          console.error(err);
+          CM.Dedicated.log('⚠ Erreur : ' + err.message);
+        }
+        return;
+      }
       try {
         this.touch.frame();
         CM.FKeys.frame(this, dt); // caméra cinématique, durée de la vidéo
@@ -2164,7 +2255,8 @@
       }
       // l'hôte garde aussi chargés les alentours de ses invités (créatures, objets)
       this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5, net.isHost ? net.simCenters() : null);
-      this.player.update(dt, active ? this.input : this.noInput);
+      if (this.dedicated) CM.Dedicated.tick(this, dt); // (le joueur du serveur ne bouge pas)
+      else this.player.update(dt, active ? this.input : this.noInput);
       this.entities.update(dt);
       if (!net.isClient) {
         this.ticks.update(dt);
@@ -2191,7 +2283,7 @@
       CM.Guns.tick(this, dt); // traçantes, marqueur de touche, munitions à l'écran
       if (!net.isClient) CM.City.tick(this, dt); // voitures garées dans les parkings de la ville
       CM.Vehicles.hud(this); // compteur de vitesse, carburant
-      this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
+      if (!this.dedicated) this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
     }
 
@@ -2327,6 +2419,11 @@
       const game = new Game();
       CM.game = game;
       const params = new URLSearchParams(location.search);
+      // serveur dédié (serveur/serveur.js) : le jeu tourne sans image, comme hôte permanent
+      if (params.has('server') && window.cmServerConfig) {
+        CM.Dedicated.start(game).catch((e) => CM.Dedicated.log('⚠ Démarrage impossible : ' + (e.message || e)));
+        return;
+      }
       // lien d'invitation : ?join=CODE
       if (params.has('join')) game.openMulti(params.get('join'));
       if (params.has('autostart')) {

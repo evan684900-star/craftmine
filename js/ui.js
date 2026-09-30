@@ -151,6 +151,7 @@
       { k: 'showHand', t: 'check', label: 'Afficher la main et l’objet tenu' },
     ]],
     ['ctrl', 'Contrôles', [
+      { k: 'kbLayout', t: 'select', label: 'Clavier', opts: [['auto', 'Détecté tout seul'], ['azerty', 'AZERTY (France, Belgique)'], ['qwerty', 'QWERTY']] },
       { k: 'sens', t: 'range', label: 'Sensibilité de la souris', min: 0.2, max: 3, step: 0.1, fmt: (v) => (+v).toFixed(1) },
       { k: 'invertY', t: 'check', label: "Inverser l'axe vertical" },
       { k: 'toggleSprint', t: 'check', label: 'Course : un appui suffit (au lieu de maintenir la touche)' },
@@ -195,7 +196,7 @@
       { k: 'autoFs', t: 'select', label: 'Plein écran automatique en lançant une partie', opts: [['touch', 'Sur téléphone et tablette'], ['always', 'Toujours'], ['never', 'Jamais']] },
       { k: 'showBiome', t: 'check', label: 'Afficher le nom du biome' },
       { k: 'itemNames', t: 'check', label: "Afficher le nom de l'objet en main" },
-      { k: 'minimap', t: 'select', label: 'Mini-carte (touche M)', opts: [[0, 'Masquée'], [1, 'Petite'], [2, 'Grande']] },
+      { k: 'minimap', t: 'select', label: 'Mini-carte (touche de la carte, voir Contrôles)', opts: [[0, 'Masquée'], [1, 'Petite'], [2, 'Grande']] },
     ]],
     ['look', 'Apparence', []],
   ];
@@ -253,6 +254,12 @@
       this.buildHUD();
       this.buildInventory();
       this.buildGuide();
+      // téléphone : toucher l'info réseau (en haut à droite) montre les joueurs connectés
+      $('netinfo').addEventListener('click', () => {
+        this.showTabList(!this.tabOn);
+        clearTimeout(this.tabHideT);
+        if (this.tabOn) this.tabHideT = setTimeout(() => this.showTabList(false), 6000);
+      });
       this.buildNewWorld();
       $('inv-close').addEventListener('click', () => this.closeInventory());
       // tri de l'inventaire et du coffre ouvert ; recherche dans les coffres proches
@@ -500,6 +507,13 @@
         }
       }
       if (this.debug) this.updateDebug();
+      if (this.tabOn) {
+        this.tabT = (this.tabT || 0) - dt;
+        if (this.tabT <= 0) {
+          this.tabT = 0.5;
+          this.renderTabList();
+        }
+      }
       // effets en cours (potions, balises) : icône et temps restant
       this.effT = (this.effT || 0) - dt;
       if (this.effT <= 0 || this.effDirty) {
@@ -540,6 +554,34 @@
         $('obj-title').textContent = OBJECTIVES[idx].t;
         $('obj-desc').textContent = OBJECTIVES[idx].d;
       }
+    }
+
+    // ----------------------------------------- joueurs connectés (Tab) --
+    showTabList(on) {
+      this.tabOn = !!on;
+      $('tablist').classList.toggle('hidden', !on);
+      if (on) this.renderTabList();
+    }
+    renderTabList() {
+      const g = this.game, net = g.net, p = g.player;
+      const DIM = { overworld: ['🌍', 'monde normal'], nether: ['🔥', 'Nether'], end: ['🌌', 'End'] };
+      const rows = [{ name: net.active ? net.name : g.options.netName || 'Toi', dim: g.playerDim, self: true, host: net.isHost && !CM.Dedicated.on, admin: net.admin }];
+      const others = [];
+      for (const [pid, rp] of net.remotes) {
+        const d = rp.seen && rp.dim === g.playerDim && p ? Math.round(Math.hypot(rp.x - p.x, rp.z - p.z)) : null;
+        others.push({ name: rp.name, dim: rp.dim, host: pid === 0, dist: d });
+      }
+      others.sort((a, b) => (b.host ? 1 : 0) - (a.host ? 1 : 0) || a.name.localeCompare(b.name));
+      rows.push(...others);
+      const title = !net.active ? 'Solo' : net.code === CM.SERVER_CODE ? '🖥️ Serveur CraftMine' : (net.isHost ? 'Ta partie' : 'Partie de ' + esc(net.hostName)) + ' · code <b>' + esc(net.code) + '</b>';
+      let h = '<div class="tl-head">' + title + '<span>' + rows.length + ' joueur' + (rows.length > 1 ? 's' : '') + '</span></div>';
+      for (const r of rows) {
+        const dm = DIM[r.dim] || DIM.overworld;
+        const tags = (r.host ? '<i class="tl-host">👑 hôte</i>' : '') + (r.admin ? '<i class="tl-adm">🛡 admin</i>' : '') + (r.self ? '<i>toi</i>' : r.dist !== null && r.dist !== undefined ? '<i>' + r.dist + ' m</i>' : '');
+        h += '<div class="tl-row' + (r.self ? ' me' : '') + '"><span title="' + dm[1] + '">' + dm[0] + '</span><b>' + esc(r.name) + '</b>' + tags + '</div>';
+      }
+      if (!net.active) h += '<div class="tl-foot">Joue avec tes amis : Pause › Ouvrir aux amis, ou le bouton « Serveur » du menu.</div>';
+      $('tablist').innerHTML = h;
     }
 
     toggleDebug() {
@@ -797,14 +839,15 @@
     }
 
     buildGuide() {
-      const html = GUIDE.map(([t, d]) => '<h3>' + t + '</h3><p>' + d + '</p>').join('');
+      const g = this.game, K = g.binds, kn = (a) => esc(g.keyName(K[a]));
+      const html = GUIDE.map(([t, d]) => '<h3>' + t + '</h3><p>' + d.replace('touche M :', 'touche ' + kn('map') + ' :') + '</p>').join('');
       $('tab-guide').innerHTML = html;
       $('help').innerHTML =
         '<h3>Commandes (modifiables dans Options &gt; Contrôles)</h3><ul>' +
-        '<li><b>ZQSD / WASD</b> : se déplacer · <b>Espace</b> : sauter / nager · <b>Maj</b> : courir · <b>C</b> : s’accroupir</li>' +
-        '<li><b>F</b> : ruée · <b>E</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>V</b> : vue de derrière · <b>P</b> : plein écran</li>' +
+        '<li><b>' + kn('forward') + kn('left') + kn('back') + kn('right') + '</b> : se déplacer · <b>' + kn('jump') + '</b> : sauter / nager · <b>' + kn('sprint') + '</b> : courir · <b>' + kn('sneak') + '</b> : s’accroupir</li>' +
+        '<li><b>' + kn('dash') + '</b> : ruée · <b>' + kn('inventory') + '</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>' + kn('view') + '</b> : vue de derrière · <b>' + kn('fullscreen') + '</b> : plein écran · <b>' + kn('map') + '</b> : carte · <b>Tab</b> (maintenue) : joueurs connectés</li>' +
         '<li><b>Clic gauche</b> (maintenu) : miner / frapper · <b>Clic droit</b> : poser, manger, utiliser · <b>Clic molette</b> : choisir le bloc visé</li>' +
-        '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>Q</b> : jeter</li></ul>' +
+        '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>' + kn('drop') + '</b> : jeter</li></ul>' +
         '<h3>Touches F</h3><ul>' + CM.FKeys.HELP.map(([k, d]) => '<li><b>' + k + '</b> : ' + d + '</li>').join('') +
         '<li>En maintenant <b>F3</b> : ' + CM.FKeys.COMBOS.filter(([k]) => k !== 'F3 + Q').map(([k, d]) => '<b>' + k.slice(5) + '</b> ' + d).join(' · ') + '</li></ul>' +
         '<h3>Sur téléphone ou tablette</h3><ul>' +

@@ -52,7 +52,9 @@
     const c = e.code;
     // combinaisons F3 + touche (la touche ne fait alors rien d'autre : F3+Q ne jette rien)
     if (F.f3 && c !== 'F3') {
-      const fn = COMBO_FN[c];
+      // (la lettre imprimée sur la touche : F3 + A est bien la touche A, en AZERTY comme en QWERTY)
+      const k = e.key && e.key.length === 1 && /[a-z]/i.test(e.key) ? 'Key' + e.key.toUpperCase() : c;
+      const fn = COMBO_FN[k];
       if (fn) {
         e.preventDefault();
         if (!e.repeat) fn(g);

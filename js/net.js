@@ -57,6 +57,7 @@
   CM.netErrorText = function (e) {
     const t = e && e.type;
     if (t === 'deny' || t === 'input') return e.message;
+    if (t === 'peer-unavailable' && e.server) return 'Le serveur CraftMine est éteint pour l’instant (maintenance ou redémarrage). Réessaie dans quelques minutes.';
     if (t === 'peer-unavailable') return 'Aucune partie ouverte avec ce code. Vérifie le code, et que l’hôte a bien le jeu ouvert.';
     if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed' || t === 'server') return 'Impossible de joindre le serveur de mise en relation. Vérifie ta connexion Internet, puis réessaie.';
     if (t === 'browser-incompatible') return 'Ce navigateur ne permet pas le multijoueur (WebRTC). Essaie Chrome, Firefox, Edge ou Safari à jour.';
@@ -214,6 +215,7 @@
       this.muted = false;
       this.locks = new Map(); // hôte : coffre ouvert -> pid (0 = l'hôte)
       this.guests = {}; // hôte : progression de chaque invité (par pseudo)
+      this.bans = {}; // hôte : pseudos bannis (/bannir), en minuscules
       this.rules = { pvp: false, keep: false, cmds: false };
       this.dayLen = 0;
       this.chestKey = null;
@@ -299,14 +301,15 @@
     }
 
     // Ouvre la partie en cours aux autres joueurs. Renvoie le code.
-    async host(name, pvp) {
+    // (fixed : identifiant fixe du serveur dédié)
+    async host(name, pvp, fixed) {
       if (this.active) return this.code;
       await this.ensureLib();
       let peer = null, last = null;
-      for (let k = 0; k < 4 && !peer; k++) {
-        const code = randomCode();
+      for (let k = 0; k < (fixed ? 1 : 4) && !peer; k++) {
+        const code = fixed ? CM.SERVER_CODE : randomCode();
         try {
-          peer = await this.openPeer(PREFIX + code);
+          peer = await this.openPeer(fixed || PREFIX + code);
           this.code = code;
         } catch (e) {
           last = e;
@@ -332,12 +335,13 @@
     // Rejoint une partie. Renvoie le message d'accueil de l'hôte (monde, règles…).
     async join(code, name, status) {
       code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (code.length !== 5) throw { type: 'input', message: 'Tape le code de la partie (5 caractères, donné par l’hôte).' };
+      const srv = code === CM.SERVER_CODE; // serveur dédié (bouton « Serveur »)
+      if (!srv && code.length !== 5) throw { type: 'input', message: 'Tape le code de la partie (5 caractères, donné par l’hôte).' };
       await this.ensureLib();
       status('Connexion au serveur de mise en relation…');
       const peer = await this.openPeer(null);
       this.peer = peer;
-      status('Recherche de la partie ' + code + '…');
+      status(srv ? 'Connexion au serveur CraftMine…' : 'Recherche de la partie ' + code + '…');
       try {
         const welcome = await new Promise((resolve, reject) => {
           let done = false;
@@ -349,7 +353,7 @@
           };
           const to = setTimeout(() => fail({ type: 'timeout' }), 25000);
           this.onPeerErr = fail;
-          const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'raw' });
+          const conn = peer.connect(srv ? CM.SERVER_PEER : PREFIX + code, { reliable: true, serialization: 'raw' });
           conn.on('open', () => {
             if (this.hostLink) return;
             status('Connecté ! Réception du monde…');
@@ -433,7 +437,9 @@
         this.queue = null;
         for (const m of q) this.fromHost(m);
         this.sendMyState(true);
-        this.sys('Connecté à la partie de ' + this.hostName + ' (code ' + this.code + '). Touche ' + (this.game.touch.enabled ? '💬' : 'T') + ' pour discuter.');
+        const tk = this.game.touch.enabled ? '💬' : 'T';
+        if (this.code === CM.SERVER_CODE) this.sys('Bienvenue sur le serveur CraftMine ! Touche ' + tk + ' pour discuter.');
+        else this.sys('Connecté à la partie de ' + this.hostName + ' (code ' + this.code + '). Touche ' + tk + ' pour discuter.');
       }
     }
 
@@ -487,6 +493,7 @@
       this.code = '';
       this.dayLen = 0;
       this.rules = { pvp: false, keep: false, cmds: false };
+      this.admin = false;
       if (this.chatOpen) this.closeChat(false, true);
       document.body.classList.remove('net');
       this.tagsEl.innerHTML = '';
@@ -574,7 +581,13 @@
     sendCfg() {
       if (!this.isHost) return;
       this.rules.keep = !!this.game.options.keepInventory;
-      this.broadcast({ t: 'cfg', mode: this.game.mode, diff: this.game.difficulty, rules: this.rulesMsg(), l: this.game.dayLen });
+      for (const e of this.links.values()) this.sendCfgTo(e);
+    }
+    // (administrateurs du serveur dédié : triches permises pour eux seuls)
+    sendCfgTo(e) {
+      const rules = this.rulesMsg();
+      if (e.admin) rules.cmds = true;
+      e.link.send({ t: 'cfg', mode: this.game.mode, diff: this.game.difficulty, rules, l: this.game.dayLen, adm: e.admin ? 1 : 0 });
     }
     stateOf(p) {
       const g = this.game;
@@ -694,7 +707,7 @@
     // Hôte : positions de tous les joueurs, envoyées à chacun.
     sendStates() {
       const g = this.game;
-      const all = [[0, ...this.stateOf(g.player)]];
+      const all = CM.Dedicated.on ? [] : [[0, ...this.stateOf(g.player)]]; // (serveur dédié : pas de joueur à montrer)
       for (const e of this.links.values()) {
         const rp = e.rp;
         if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, CM.dimId(rp.dim), rp.offhand || 0, rp.bob || 0]);
@@ -735,7 +748,7 @@
     // (seulement ceux de la dimension simulée en ce moment)
     simPlayers() {
       const g = this.game;
-      const out = g.dim === g.playerDim ? [g.player] : [];
+      const out = g.dim === g.playerDim && !CM.Dedicated.on ? [g.player] : [];
       if (this.isHost) for (const rp of this.remotes.values()) if (rp.seen && rp.dim === g.dim) out.push(rp);
       return out;
     }
@@ -771,8 +784,10 @@
       // téléphone verrouillé) : c'est sûrement lui qui revient, on remplace l'ancienne session
       const same = (n) => n.toLowerCase() === name.toLowerCase();
       for (const o of [...this.links.values()]) if (same(o.name) && performance.now() - o.link.last > 6000) this.dropClient(o, 'lost');
+      if (this.bans[name.toLowerCase()]) return deny('Tu es banni de cette partie.');
       if (same(this.name) || [...this.links.values()].some((x) => same(x.name))) return deny('Le pseudo « ' + name + ' » est déjà pris dans cette partie : choisis-en un autre.');
-      if (this.links.size >= MAX_PLAYERS - 1) return deny('La partie est pleine (' + MAX_PLAYERS + ' joueurs au maximum).');
+      const max = CM.Dedicated.on ? CM.Dedicated.max : MAX_PLAYERS;
+      if (this.links.size >= (CM.Dedicated.on ? max : max - 1)) return deny((CM.Dedicated.on ? 'Le serveur est plein (' : 'La partie est pleine (') + max + ' joueurs au maximum). Réessaie un peu plus tard.');
       e.pid = this.nextPid++;
       e.name = name;
       e.rp = new RemotePlayer(this, e.pid, name);
@@ -788,7 +803,7 @@
         dim: e.rp.dim, ne: nw ? nw.editsObject() : g.netherEdits,
         en: e.rp.dim === 'end' ? (ew ? ew.editsObject() : g.endEdits) : undefined, es: g.endState,
         time: g.time, day: g.dayCount, dayLen: g.dayLen, rules: this.rulesMsg(), wx: g.weather || null, bfx: g.beaconFx || {}, deco: CM.Deco.save(g),
-        players: [[0, this.name, CM.Comfort.myLook(g)], ...[...this.links.values()].map((x) => [x.pid, x.name, x.rp.look])],
+        players: [...(CM.Dedicated.on ? [] : [[0, this.name, CM.Comfort.myLook(g)]]), ...[...this.links.values()].map((x) => [x.pid, x.name, x.rp.look])],
         you,
       });
       this.links.set(e.pid, e);
@@ -1355,6 +1370,7 @@
         }
         case 'cfg':
           this.applyRules(m.rules);
+          this.admin = !!m.adm;
           this.dayLen = num(m.l) || this.dayLen;
           if (m.diff && m.diff !== g.difficulty) {
             g.difficulty = m.diff;
@@ -1463,6 +1479,9 @@
         }
         case 'bye':
           this.lost(m.r || 'L’hôte a fermé la partie.');
+          break;
+        case 'rsave': // (le serveur va s'arrêter : il veut notre progression tout de suite)
+          this.sendGuestSave();
           break;
       }
     }

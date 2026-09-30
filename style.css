@@ -652,3 +652,21 @@ body.touch #effects { top: 150px; }
 #veh-hud .vh-bars { font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; color: #dfe6f3; }
 #veh-hud .vh-bars .low { color: #ff7a6a; font-weight: 800; }
 @media (max-width: 700px) { #veh-hud { bottom: auto; top: 64px; left: 10px; width: 150px; } #veh-hud .vh-speed { font-size: 20px; } }
+
+/* serveur CraftMine (bouton « Serveur ») : pas de code à taper */
+.mp-srv-note { display: none; margin: 0 0 12px; }
+#multi.server .mp-srv-note { display: block; }
+#multi.server .mp-code-row, #multi.server #mp-code, #multi.server .mp-host-note { display: none; }
+
+/* joueurs connectés (Tab maintenue, ou toucher l'info réseau sur téléphone) */
+#netinfo { pointer-events: auto; cursor: pointer; }
+#tablist { position: absolute; left: 50%; top: 12px; transform: translateX(-50%) scale(var(--gui, 1)); transform-origin: top center; min-width: 280px; max-width: min(92vw, 420px); max-height: 70vh; overflow: auto; padding: 8px 10px; border-radius: 10px; background: rgba(10, 12, 20, 0.82); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); pointer-events: none; z-index: 20; }
+#tablist .tl-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; font-size: 13px; padding: 2px 4px 7px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+#tablist .tl-head span { color: var(--muted); font-weight: 600; }
+#tablist .tl-row { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; font-size: 14px; }
+#tablist .tl-row.me { background: rgba(255, 255, 255, 0.07); }
+#tablist .tl-row b { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tablist .tl-row i { font-style: normal; font-size: 12px; color: var(--muted); }
+#tablist .tl-row i.tl-host { color: var(--gold); }
+#tablist .tl-row i.tl-adm { color: #7fd6ff; }
+#tablist .tl-foot { font-size: 12px; color: var(--muted); padding: 6px 4px 2px; }
