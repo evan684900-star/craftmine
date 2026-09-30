@@ -1932,7 +1932,7 @@
           mat4.multiply(this.R, M, this.P);
           const r = info.isBlock ? info.block.render : '';
           const emi = info.isBlock && info.block.light ? 1 : 0;
-          if (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet') {
+          if (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet' || r === 'stairs') {
             mat4.compose(this.P, 0, -0.78, -0.1, 0.4, 0, 0, 1);
             mat4.multiply(this.Q, this.R, this.P);
             ents.drawItem(batch, this.Q, rp.held, l, 0.26);

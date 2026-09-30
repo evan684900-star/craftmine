@@ -1011,7 +1011,7 @@
             }
           } else {
           if (!this.mining || this.mining.x !== t.x || this.mining.y !== t.y || this.mining.z !== t.z || this.mining.id !== t.id) {
-            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0, box: t.box };
+            this.mining = { x: t.x, y: t.y, z: t.z, id: t.id, progress: 0, snd: 0, box: t.box, parts: t.parts };
           }
           const bi = this.breakInfo(t.id);
           this.mining.progress += dt / bi.time;
@@ -2106,11 +2106,14 @@
       const M = this.M, L = CM.Textures.layer;
       const info = CM.itemInfo(stack.id);
       const r = info.isBlock ? info.block.render : '';
-      const cubeish = info.isBlock && (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet');
+      const cubeish = info.isBlock && (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet' || r === 'stairs');
       if (cubeish) {
         mat4.compose(M, side * (0.44 + bx - swingOn * 0.12), -0.38 + by + swingOn * 0.1, -0.7 - swingOn * 0.2, side * (0.75 + swingOn * 0.3), 0.12 - swingOn * 0.6, 0, 1);
         const hh = 0.32 * Math.max(info.block.height, 0.1);
-        batch.box(M, -0.16, -0.16, -0.16, 0.16, -0.16 + hh, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
+        if (r === 'stairs') {
+          batch.box(M, -0.16, -0.16, -0.16, 0.16, 0, 0.16, CM.blockLayers[stack.id], l[0], l[1], 0);
+          batch.box(M, -0.16, 0, -0.16, 0, 0.16, 0.16, CM.blockLayers[stack.id], l[0], l[1], 0);
+        } else batch.box(M, -0.16, -0.16, -0.16, 0.16, -0.16 + hh, 0.16, CM.blockLayers[stack.id], l[0], l[1], info.block.light ? 1 : 0);
       } else {
         const layer = info.isBlock ? CM.blockLayers[stack.id][0] : L[info.tex];
         if (this.eating && side === 1) {

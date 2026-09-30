@@ -20,6 +20,15 @@
           for (let xx = x0; xx <= x1; xx++) {
             const b = world.colBox(xx, yy, zz);
             if (!b) continue;
+            if (b.stair) {
+              // escalier : moitié pleine + marche (forme selon les escaliers voisins)
+              for (const q of CM.stairParts(world, xx, yy, zz)) {
+                if (yy + q[4] <= y || yy + q[1] >= y + h) continue;
+                if (xx + q[3] <= x - hw || xx + q[0] >= x + hw || zz + q[5] <= z - hw || zz + q[2] >= z + hw) continue;
+                if (fn(xx, yy, zz, q)) return true;
+              }
+              continue;
+            }
             if (b !== FULL) {
               if (yy + b[4] <= y || yy + b[1] >= y + h) continue;
               if (xx + b[3] <= x - hw || xx + b[0] >= x + hw || zz + b[5] <= z - hw || zz + b[2] >= z + hw) continue;
@@ -1627,6 +1636,12 @@
       const h = size / 2;
       if (CM.isBlockId(id)) {
         const b = CM.blocks[id];
+        if (b.stair) {
+          // escalier : moitié basse et marche
+          batch.box(m, -h, 0, -h, h, h, h, CM.blockLayers[id], l[0], l[1], 0);
+          batch.box(m, -h, h, -h, 0, size, h, CM.blockLayers[id], l[0], l[1], 0);
+          return;
+        }
         if (b.render === 'cube' || b.render === 'glass' || b.render === 'tglass' || b.render === 'slab' || b.render === 'carpet') {
           batch.box(m, -h, 0, -h, h, size, h, CM.blockLayers[id], l[0], l[1], b.light ? 1 : 0);
           return;

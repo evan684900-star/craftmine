@@ -1499,6 +1499,7 @@
         if (b.slow) bits.push('Ralentit la marche');
         if (b.hurts) bits.push('Blesse au contact !');
         if (b.render === 'slab') bits.push('Dalle : pose-en deux l’une sur l’autre pour un bloc plein');
+        if (b.stair) bits.push('Escalier : la marche monte dans le sens où tu regardes ; vise le haut d’une face ou le dessous d’un bloc pour le poser à l’envers');
         if (b.becomes) bits.push('Devient du béton au contact de l’eau');
         if (b.tnt) bits.push('S’allume avec un briquet ou une torche (clic droit)');
         if (b.note) bits.push('Clic droit : joue une note');

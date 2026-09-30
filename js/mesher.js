@@ -470,6 +470,8 @@
             solidBox(opaqueBuf, LAYERS[id], bx, by, bz, b.box, p);
           } else if (r === 'boxes') {
             for (const q of b.boxes) solidBox(opaqueBuf, LAYERS[id], bx, by, bz, q, p);
+          } else if (r === 'stairs') {
+            meshStairs(b, id, p, bx, by, bz);
           } else if (r === 'model') {
             const o = ORIENT[id];
             for (const q of b._parts) solidBox(opaqueBuf, q.L, bx, by, bz, q.b, p, o);
@@ -641,6 +643,103 @@
         if (k) for (let q = 0; q < 4; q++) rotUV(vs[q], k);
       }
       buf.quad(vs, layers[fi], sky4, blk4, sh4, 0);
+    }
+  }
+
+  // ---- escaliers ----
+  // La case est coupée en 8 huitièmes (moitié pleine + marche selon CM.stairMask). Pour chaque
+  // direction, deux plans : le bord de la case (caché par un voisin opaque, lumière du voisin
+  // lissée) et le milieu (face d'un huitième plein devant un vide, lumière de la case).
+  let stairP = 0;
+  const stairGet = (dx, dz) => {
+    const id = padId[stairP + dx + dz * P];
+    return id === BORDER ? 0 : id;
+  };
+  const cS = [0, 0, 0, 0], cB = [0, 0, 0, 0], cH = [0, 0, 0, 0], cC = [0, 0, 0, 0], cF = [0, 0, 0, 0];
+  const P3 = [0, 0, 0];
+  function meshStairs(b, id, p, bx, by, bz) {
+    stairP = p;
+    const st = b.stair, mask = CM.stairMask(st, stairGet), layers = LAYERS[id];
+    const occ = (ix, iy, iz) => (iy === st.h ? 1 : (mask >> (iz * 2 + ix)) & 1);
+    const o3 = [0, 0, 0];
+    for (let fi = 0; fi < 6; fi++) {
+      const f = FACES[fi];
+      const axis = f.n[0] ? 0 : f.n[1] ? 1 : 2;
+      const pos = f.n[axis] > 0;
+      const t1 = axis === 0 ? 1 : 0, t2 = axis === 2 ? 1 : 2;
+      const nid = padId[p + f.nOff];
+      for (let edge = 1; edge >= 0; edge--) {
+        // huitièmes du côté intérieur du plan
+        const inner = edge ? (pos ? 1 : 0) : pos ? 0 : 1;
+        if (edge && OPQ[nid]) continue;
+        let m2 = 0;
+        for (let j = 0; j < 2; j++)
+          for (let i = 0; i < 2; i++) {
+            o3[axis] = inner;
+            o3[t1] = i;
+            o3[t2] = j;
+            if (!occ(o3[0], o3[1], o3[2])) continue;
+            if (!edge) {
+              o3[axis] = 1 - inner;
+              if (occ(o3[0], o3[1], o3[2])) continue;
+            } else if (axis !== 1 && o3[1] === 0 && SHAPE_H[nid] >= 8) continue; // (dalle voisine)
+            else if (fi === 2 && SHAPE_H[nid]) continue; // (dalle posée dessus)
+            m2 |= 1 << (j * 2 + i);
+          }
+        if (!m2) continue;
+        if (edge) faceLighting(p, f, true, false);
+        else faceLighting(p, f, false, true);
+        for (let k = 0; k < 4; k++) {
+          cS[k] = sky4[k];
+          cB[k] = blk4[k];
+          cH[k] = Math.round(255 * FACE_SHADE[fi] * (edge ? AO_CURVE[ao4[k]] : 1));
+          cC[k] = col4[k];
+          cF[k] = fk4[k];
+        }
+        const c = edge ? (pos ? 16 : 0) : 8;
+        for (const [i0, j0, i1, j1] of CM.quadRects(m2)) {
+          for (let k = 0; k < 4; k++) {
+            const v = f.v[k];
+            P3[axis] = c;
+            P3[t1] = (v[t1] ? i1 : i0) * 8;
+            P3[t2] = (v[t2] ? j1 : j0) * 8;
+            const X = P3[0], Y = P3[1], Z = P3[2];
+            const t = vs[k];
+            t[0] = bx + X;
+            t[1] = by + Y;
+            t[2] = bz + Z;
+            if (f.n[0]) {
+              t[3] = f.n[0] > 0 ? 16 - Z : Z;
+              t[4] = 16 - Y;
+            } else if (f.n[2]) {
+              t[3] = f.n[2] > 0 ? X : 16 - X;
+              t[4] = 16 - Y;
+            } else {
+              t[3] = X;
+              t[4] = f.n[1] > 0 ? Z : 16 - Z;
+            }
+            // lumière : mélange des 4 coins de la face entière selon la position du sommet
+            const u = P3[t1] / 16, w = P3[t2] / 16;
+            let ls = 0, lb = 0, lh = 0, best = 0, bw = -1;
+            for (let q = 0; q < 4; q++) {
+              const wq = (f.v[q][t1] ? u : 1 - u) * (f.v[q][t2] ? w : 1 - w);
+              ls += cS[q] * wq;
+              lb += cB[q] * wq;
+              lh += cH[q] * wq;
+              if (wq > bw) {
+                bw = wq;
+                best = q;
+              }
+            }
+            sky4[k] = Math.round(ls);
+            blk4[k] = Math.round(lb);
+            sh4[k] = Math.round(lh);
+            col4[k] = cC[best];
+            fk4[k] = cF[best];
+          }
+          opaqueBuf.quad(vs, layers[fi], sky4, blk4, sh4, 0);
+        }
+      }
     }
   }
 

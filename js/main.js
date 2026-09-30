@@ -2363,8 +2363,7 @@
         const m = p.mining;
         const M = this.crackM || (this.crackM = CM.mat4.create());
         CM.mat4.compose(M, m.x, m.y, m.z, 0, 0, 0, 1);
-        const bx = m.box || CM.FULL_BOX;
-        this.overlay.box(M, bx[0] - 0.003, bx[1] - 0.003, bx[2] - 0.003, bx[3] + 0.003, bx[4] + 0.003, bx[5] + 0.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
+        for (const bx of m.parts || [m.box || CM.FULL_BOX]) this.overlay.box(M, bx[0] - 0.003, bx[1] - 0.003, bx[2] - 0.003, bx[3] + 0.003, bx[4] + 0.003, bx[5] + 0.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
       }
       if (p.alive && !third && !this.ui.hudHidden) p.buildHand(this.hand, this.clock); // (F1 : sans la main)
       else if (p.alive && third && !CM.Effects.invisible(p)) this.net.drawPlayer(this.batch, this.selfModel()); // soi-même, vu de derrière
@@ -2384,7 +2383,7 @@
         hand: this.hand,
         translucent: this.translucent,
         glow: env.real && this.options.halos !== false ? this.glowQuads(right, up, cam) : null,
-        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box } : null,
+        target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box, edges: t.parts ? CM.stairEdges(t.parts.h, t.parts.mask) : null } : null,
       });
       CM.FKeys.afterRender(this); // capture d'écran (F2)
       this.net.updateTags(cam);

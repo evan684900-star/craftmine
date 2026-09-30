@@ -2614,6 +2614,34 @@
     }
     return c.toDataURL();
   }
+  // Escalier : moitié basse puis marche du fond, face par face (peintre : de l'arrière vers l'avant).
+  // Point (x, y, z) du bloc à l'écran (sur 32) : coin arrière en haut à (16, 0,5).
+  function stairIcon(b) {
+    const c = document.createElement('canvas');
+    c.width = c.height = ICON;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const s = ICON / 32;
+    const scr = (x, y, z) => [16 + 15 * x - 15 * z, 0.5 + 7.5 * x + 7.5 * z + 16 * (1 - y)];
+    // face : texture, origine (texel 0,0), vecteurs par texel, rectangle source, assombrissement
+    const face = (tex, o, U, V, u0, v0, u1, v1, dark) => {
+      ctx.setTransform(U[0] * s, U[1] * s, V[0] * s, V[1] * s, o[0] * s, o[1] * s);
+      ctx.drawImage(T.canvases[tex], u0, v0, u1 - u0, v1 - v0, u0, v0, u1 - u0, v1 - v0);
+      if (dark > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,' + dark + ')';
+        ctx.fillRect(u0, v0, u1 - u0, v1 - v0);
+      }
+    };
+    const box = (x0, y0, z0, x1, y1, z1) => {
+      // dessus (u : z décroissant, v : x), côté avant gauche (+z), côté avant droit (+x)
+      face(b.tex.top, scr(0, y1, 1), [15 / 16, -7.5 / 16], [15 / 16, 7.5 / 16], 16 * (1 - z1), 16 * x0, 16 * (1 - z0), 16 * x1, 0);
+      face(b.tex.front, scr(0, 1, z1), [15 / 16, 7.5 / 16], [0, 1], 16 * x0, 16 * (1 - y1), 16 * x1, 16 * (1 - y0), 0.22);
+      face(b.tex.side, scr(x1, 1, 1), [15 / 16, -7.5 / 16], [0, 1], 16 * (1 - z1), 16 * (1 - y1), 16 * (1 - z0), 16 * (1 - y0), 0.42);
+    };
+    box(0, 0, 0, 1, 0.5, 1);
+    box(0, 0.5, 0, 0.5, 1, 1);
+    return c.toDataURL();
+  }
   function flatIcon(tex) {
     const c = document.createElement('canvas');
     c.width = c.height = ICON;
@@ -2626,7 +2654,7 @@
     for (const b of CM.blocks) {
       if (!b || !b.tex || b.id === 0) continue;
       const cubeLike = b.render === 'cube' || b.render === 'glass' || b.render === 'tglass' || b.render === 'slab' || b.render === 'carpet';
-      T.icons[b.id] = cubeLike ? blockIcon(b) : flatIcon(b.iconTex || b.tex.side);
+      T.icons[b.id] = b.stair ? stairIcon(b) : cubeLike ? blockIcon(b) : flatIcon(b.iconTex || b.tex.side);
     }
     for (const it of CM.items) if (it) T.icons[it.id] = flatIcon(it.tex);
   };

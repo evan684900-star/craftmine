@@ -919,21 +919,29 @@
     drawOutline(t, cam) {
       const gl = this.gl;
       const e = 0.003;
-      const b = t.box || CM.FULL_BOX;
-      const x0 = t.x + b[0] - cam[0] - e, y0 = t.y + b[1] - cam[1] - e, z0 = t.z + b[2] - cam[2] - e;
-      const x1 = t.x + b[3] - cam[0] + e, y1 = t.y + b[4] - cam[1] + e, z1 = t.z + b[5] - cam[2] + e;
-      const v = [
-        x0, y0, z0, x1, y0, z0, x1, y0, z0, x1, y0, z1, x1, y0, z1, x0, y0, z1, x0, y0, z1, x0, y0, z0,
-        x0, y1, z0, x1, y1, z0, x1, y1, z0, x1, y1, z1, x1, y1, z1, x0, y1, z1, x0, y1, z1, x0, y1, z0,
-        x0, y0, z0, x0, y1, z0, x1, y0, z0, x1, y1, z0, x1, y0, z1, x1, y1, z1, x0, y0, z1, x0, y1, z1,
-      ];
+      let v;
+      if (t.edges) {
+        // escalier : les arêtes de sa forme, un peu décalées vers l'extérieur
+        v = [];
+        const bx = t.x - cam[0], by = t.y - cam[1], bz = t.z - cam[2];
+        for (const g of t.edges) v.push(bx + g[0] + g[6] * e, by + g[1] + g[7] * e, bz + g[2] + g[8] * e, bx + g[3] + g[6] * e, by + g[4] + g[7] * e, bz + g[5] + g[8] * e);
+      } else {
+        const b = t.box || CM.FULL_BOX;
+        const x0 = t.x + b[0] - cam[0] - e, y0 = t.y + b[1] - cam[1] - e, z0 = t.z + b[2] - cam[2] - e;
+        const x1 = t.x + b[3] - cam[0] + e, y1 = t.y + b[4] - cam[1] + e, z1 = t.z + b[5] - cam[2] + e;
+        v = [
+          x0, y0, z0, x1, y0, z0, x1, y0, z0, x1, y0, z1, x1, y0, z1, x0, y0, z1, x0, y0, z1, x0, y0, z0,
+          x0, y1, z0, x1, y1, z0, x1, y1, z0, x1, y1, z1, x1, y1, z1, x0, y1, z1, x0, y1, z1, x0, y1, z0,
+          x0, y0, z0, x0, y1, z0, x1, y0, z0, x1, y1, z0, x1, y0, z1, x1, y1, z1, x0, y0, z1, x0, y1, z1,
+        ];
+      }
       gl.useProgram(this.line.p);
       gl.uniformMatrix4fv(this.line.u.uViewProj, false, this.viewProj);
       gl.uniform4f(this.line.u.uColor, 0, 0, 0, 0.65);
       gl.bindVertexArray(this.lineVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.lineVbo);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STREAM_DRAW);
-      gl.drawArrays(gl.LINES, 0, 24);
+      gl.drawArrays(gl.LINES, 0, v.length / 3);
       gl.bindVertexArray(null);
     }
   }

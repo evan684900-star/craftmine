@@ -2271,11 +2271,20 @@
           const id = this.get(x, y, z);
           const bd = id && filter(id) ? CM.blocks[id] : null;
           // forme qui dépend des voisins (câble électrique…)
-          const s = bd ? (bd.selAt ? bd.selAt(this, x, y, z) : bd.sel) : null;
+          let s = bd ? (bd.selAt ? bd.selAt(this, x, y, z) : bd.sel) : null;
           if (s === CM.FULL_BOX) return { x, y, z, nx, ny, nz, t, id, box: s };
           if (s) {
             // bloc partiel (dalle, torche, plante, porte…) : le rayon doit toucher sa boîte
-            const tb = CM.rayBox(ox, oy, oz, dx, dy, dz, x + s[0], y + s[1], z + s[2], x + s[3], y + s[4], z + s[5]);
+            // (escalier : la plus proche de ses boîtes)
+            const parts = s.stair ? CM.stairParts(this, x, y, z) : null;
+            let tb = -1;
+            for (const q of parts || [s]) {
+              const tq = CM.rayBox(ox, oy, oz, dx, dy, dz, x + q[0], y + q[1], z + q[2], x + q[3], y + q[4], z + q[5]);
+              if (tq >= 0 && (tb < 0 || tq < tb)) {
+                tb = tq;
+                s = q;
+              }
+            }
             if (tb >= 0 && tb <= maxDist) {
               // face touchée : celle sur laquelle se trouve le point d'impact
               const hx = ox + dx * tb - x, hy = oy + dy * tb - y, hz = oz + dz * tb - z;
@@ -2289,7 +2298,7 @@
                 else if (Math.abs(hz - s[5]) < e) (fx = 0), (fy = 0), (fz = 1);
                 else if (Math.abs(hz - s[2]) < e) (fx = 0), (fy = 0), (fz = -1);
               }
-              return { x, y, z, nx: fx, ny: fy, nz: fz, t: tb, id, box: s };
+              return { x, y, z, nx: fx, ny: fy, nz: fz, t: tb, id, box: s, parts };
             }
           }
         }

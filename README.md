@@ -225,6 +225,7 @@ bois → établi → pioche → pierre → torches → forge → fer → grappin
   - pierres : pierre lisse, taillée, fissurée, sculptée, granite/diorite/andésite polis, ardoise des abîmes (et ses briques, tuiles…), tuf, calcite, spéléothème, pierre noire, basalte, obsidienne ;
   - Nether et End : roche et briques du Nether, quartz, sable et terre des âmes, pierre lumineuse, magma, nylium, pierre de l'End, purpur, prismarine, lanterne aquatique ;
   - 55 dalles (deux dalles l'une sur l'autre redonnent le bloc plein) ;
+  - 55 escaliers, dans les mêmes matières que les dalles (6 blocs → 4 escaliers). Ils se posent tournés dans le sens du regard, ou à l'envers quand on vise le dessous d'un bloc ou le haut d'une face. Deux escaliers qui se rejoignent forment un coin intérieur ou extérieur, comme dans Minecraft, et on les monte en marchant, sans sauter ;
   - minerais de charbon, fer, cuivre, or, lapis-lazuli, redstone, diamant, émeraude, rubis, cristal, quartz, or du Nether, débris antiques et éclats célestes (et leurs versions dans l'ardoise des abîmes), blocs de métal et de minerai brut, cuivre oxydé ;
   - décoration : bibliothèque, TNT, fourneau, haut fourneau, fumoir, tonneau, ruche, juke-box, bloc musical (joue des notes), cible, tables de cartographie/d'archerie/de forgeron, métier à tisser, grenouillampes, champilampe, lampe à redstone, lanterne des âmes, éponge, blocs de slime et de miel, coraux, sculk, champignons géants ;
   - plantes : 19 fleurs, fougère, herbes, canne à sucre, bambou, azalées, racines du Nether, gorgones, blé.
@@ -264,7 +265,7 @@ js/blocks.js      blocs (0-999 puis 4000 et plus), objets (1000-3999), outils, r
 js/textures.js    textures pixel-art générées + icônes
 js/world.js       monde infini par tronçons : génération (monde normal et Nether), biomes, lumière, lancer de rayon
 js/blockticks.js  blocs qui évoluent seuls : eau et lave qui coulent, feu, portails cassés
-js/mesher.js      maillage des sections 16×16×16 (AO, lumière douce, dalles, translucides, faces reliées par l’air)
+js/mesher.js      maillage des sections 16×16×16 (AO, lumière douce, dalles, escaliers, translucides, faces reliées par l’air)
 js/renderer.js    rendu WebGL2 (monde, ciel, entités, eau, sections cachées de l’extension Optimisation)
 js/entities.js    physique, créatures, TNT, objets au sol, particules
 js/mob_defs.js    nouvelles créatures (poule, vache, lapin, cerf, chèvre, chauve-souris, loup, araignée, squelette, rampant, gluant, cube de magma)

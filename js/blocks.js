@@ -629,6 +629,33 @@ CM.PORTALS = [0, 1].map((ax) =>
 );
 // Blocs ajoutés par d'autres fichiers (redstone, extensions), toujours à la suite.
 for (const f of (CM.MORE && CM.MORE.blocks) || []) f({ nb, tx, defBlock });
+// ---- Escaliers (une matière par dalle) ----
+// 8 variantes : le haut de la marche vers +x, -x, +z ou -z (f = 0 à 3), à l'endroit ou à l'envers
+// (h = 0 ou 1). La première est l'objet. La forme (droite, coin intérieur ou extérieur) dépend
+// des escaliers voisins, comme dans Minecraft : voir CM.stairMask.
+CM.STAIRS = [];
+for (const s of CM.SLABS) {
+  const b = CM.blocks[CM.blocks[s].full];
+  const name = CM.blocks[s].name.replace(/^Dalle /, 'Escalier ').replace(/biscornue$/, 'biscornu');
+  const set = [];
+  for (let v = 0; v < 8; v++) {
+    set.push(nb(b.key + '_STAIRS' + (v ? '_' + v : ''), {
+      name, render: 'stairs', opaque: false, tex: Object.assign({}, b.tex), hardness: b.hardness, tool: b.tool, tier: b.tier, sound: b.sound,
+      hidden: v > 0, stair: { f: v & 3, h: v >> 2 }, full: b.id,
+    }).id);
+  }
+  // pose : le haut de la marche du côté où l'on regarde ; à l'envers sous un bloc ou en visant le haut d'une face
+  const place = (P) => {
+    const top = P.t && (P.t.ny === -1 || (P.t.ny === 0 && P.hitY - Math.floor(P.hitY) > 0.5));
+    return set[(top ? 4 : 0) + (P.lookH === 0 ? 0 : P.lookH === 1 ? 1 : P.lookH === 4 ? 2 : 3)];
+  };
+  for (const id of set) {
+    Object.assign(CM.blocks[id], { drop: set[0], place });
+    CM.blocks[id].stair.set = set;
+  }
+  b.stairs = set[0];
+  CM.STAIRS.push(set[0]);
+}
 CM.BLOCK_COUNT = NEXT;
 // Recherche rapide : est-ce de l'eau ? (source, courant ou chute)
 CM.WATERY = new Uint8Array(CM.BLOCK_COUNT);
@@ -1254,6 +1281,8 @@ CM.recipes.push(
 );
 // Dalles : 3 blocs -> 6 dalles
 for (const s of CM.SLABS) CM.recipes.push(r(s, 6, [[CM.blocks[s].full, 3]], 'table', 'blocs'));
+// Escaliers : 6 blocs -> 4 escaliers
+for (const s of CM.STAIRS) CM.recipes.push(r(s, 4, [[CM.blocks[s].full, 6]], 'table', 'blocs'));
 // Objets divers
 CM.recipes.push(
   r(I.GOLDEN_APPLE, 1, [[I.APPLE, 1], [I.GOLD_INGOT, 4]], 'table', 'nourriture'),
@@ -1416,10 +1445,105 @@ for (const b of CM.blocks) {
   else if (b.render === 'slab' || b.render === 'carpet') sel = [0, 0, 0, 1, b.height, 1];
   else if (b.render === 'torch') sel = b.wall ? CM.wallTorchBox(b.wall[0], b.wall[1]) : [6 / 16, 0, 6 / 16, 10 / 16, 10 / 16, 10 / 16];
   else if (b.render === 'cross') sel = [2 / 16, 0, 2 / 16, 14 / 16, 13 / 16, 14 / 16];
+  // escalier : forme selon les voisins (CM.stairParts) ; la boîte pleine marquée « stair » l'annonce
+  if (b.stair) sel = Object.assign([0, 0, 0, 1, 1, 1], { stair: true });
   b.sel = sel;
   // une porte ouverte garde son battant solide (on passe à côté, pas à travers)
   b.col = b.solid || b.door ? sel : null;
 }
+
+// ---- forme des escaliers ----
+// La case vue de dessus a 4 quarts, bit (qz * 2 + qx). SIDE[f] : les deux quarts du côté f.
+const SDX = [1, -1, 0, 0], SDZ = [0, 0, 1, -1], SIDE = [10, 5, 12, 3];
+// Quarts occupés par la marche (comme dans Minecraft). s : { f, h } ; get(dx, dz) : bloc voisin
+// à la même hauteur. Un escalier perpendiculaire devant le haut de la marche fait un coin
+// extérieur (un seul quart), derrière elle un coin intérieur (trois quarts).
+CM.stairMask = function (s, get) {
+  const F = s.f;
+  const same = (id) => {
+    const n = CM.blocks[id];
+    return n && n.stair && n.stair.h === s.h ? n.stair : null;
+  };
+  const free = (id) => {
+    const n = same(id);
+    return !n || n.f !== F;
+  };
+  const a = same(get(SDX[F], SDZ[F]));
+  if (a && a.f >> 1 !== F >> 1 && free(get(-SDX[a.f], -SDZ[a.f]))) return SIDE[F] & SIDE[a.f];
+  const c = same(get(-SDX[F], -SDZ[F]));
+  if (c && c.f >> 1 !== F >> 1 && free(get(SDX[c.f], SDZ[c.f]))) return SIDE[F] | SIDE[c.f];
+  return SIDE[F];
+};
+// Boîtes (en blocs) d'un escalier : la moitié pleine puis la marche. h : à l'envers ; mask : quarts.
+const STAIR_PARTS = new Map(), STAIR_EDGES = new Map();
+CM.stairShape = function (h, mask) {
+  const k = h * 16 + mask;
+  let out = STAIR_PARTS.get(k);
+  if (out) return out;
+  const y0 = h ? 0 : 0.5, y1 = y0 + 0.5;
+  out = [h ? [0, 0.5, 0, 1, 1, 1] : [0, 0, 0, 1, 0.5, 1]];
+  for (const [x0, z0, x1, z1] of CM.quadRects(mask)) out.push([x0 / 2, y0, z0 / 2, x1 / 2, y1, z1 / 2]);
+  out.h = h;
+  out.mask = mask;
+  STAIR_PARTS.set(k, out);
+  return out;
+};
+// Rectangles couvrant les quarts d'un masque 2x2 (bit (j * 2 + i)) : [i0, j0, i1, j1] en demi-cases.
+CM.quadRects = function (mask) {
+  if (mask === 15) return [[0, 0, 2, 2]];
+  const out = [];
+  let m = mask;
+  for (let j = 0; j < 2; j++) if ((m & (3 << (j * 2))) === 3 << (j * 2)) {
+    out.push([0, j, 2, j + 1]);
+    m &= ~(3 << (j * 2));
+  }
+  for (let i = 0; i < 2; i++) if ((m & (5 << i)) === 5 << i) {
+    out.push([i, 0, i + 1, 2]);
+    m &= ~(5 << i);
+  }
+  for (let q = 0; q < 4; q++) if (m & (1 << q)) out.push([q & 1, q >> 1, (q & 1) + 1, (q >> 1) + 1]);
+  return out;
+};
+CM.stairParts = function (world, x, y, z) {
+  const b = CM.blocks[world.get(x, y, z)];
+  if (!b || !b.stair) return [CM.FULL_BOX];
+  return CM.stairShape(b.stair.h, CM.stairMask(b.stair, (dx, dz) => world.get(x + dx, y, z + dz)));
+};
+// Arêtes du contour (visée) : [x0, y0, z0, x1, y1, z1, ox, oy, oz] ; o : vers l'extérieur.
+CM.stairEdges = function (h, mask) {
+  const k = h * 16 + mask;
+  let out = STAIR_EDGES.get(k);
+  if (out) return out;
+  out = [];
+  const occ = (c) => c[0] >= 0 && c[0] < 2 && c[1] >= 0 && c[1] < 2 && c[2] >= 0 && c[2] < 2 && (c[1] === h ? 1 : (mask >> (c[2] * 2 + c[0])) & 1);
+  for (let A = 0; A < 3; A++) {
+    const B = (A + 1) % 3, C = (A + 2) % 3;
+    for (let i = 0; i < 2; i++)
+      for (let u = 0; u < 3; u++)
+        for (let v = 0; v < 3; v++) {
+          const cell = (du, dv) => {
+            const c = [0, 0, 0];
+            c[A] = i;
+            c[B] = u + du;
+            c[C] = v + dv;
+            return occ(c);
+          };
+          const c00 = cell(-1, -1), c10 = cell(0, -1), c01 = cell(-1, 0), c11 = cell(0, 0);
+          if ((c00 === c10 && c01 === c11) || (c00 === c01 && c10 === c11)) continue;
+          const o = [0, 0, 0];
+          o[B] = Math.sign(!c10 + !c11 - !c00 - !c01);
+          o[C] = Math.sign(!c01 + !c11 - !c00 - !c10);
+          const p0 = [0, 0, 0], p1 = [0, 0, 0];
+          p0[A] = i / 2;
+          p1[A] = (i + 1) / 2;
+          p0[B] = p1[B] = u / 2;
+          p0[C] = p1[C] = v / 2;
+          out.push([...p0, ...p1, ...o]);
+        }
+  }
+  STAIR_EDGES.set(k, out);
+  return out;
+};
 // Conducteurs de redstone : les cubes pleins opaques (sauf composants : lampes, pistons, observateurs…)
 for (const b of CM.blocks) if (b) b.conductor = b.lightOpaque && !b.nc;
 // Inflammabilité (comme dans Minecraft) : [propagation vers ce bloc, chance qu'il brûle].
@@ -1433,7 +1557,7 @@ for (const b of CM.blocks) {
   else if (k === 'BOOKSHELF') f = [30, 20];
   else if (k === 'HAY_BLOCK') f = [60, 20];
   else if (b.tnt) f = [15, 100];
-  else if (b.sound === 'wood' && (b.render === 'cube' || b.render === 'slab') && !b.station && !b.container && !b.note && !b.enchanter && !/CRIMSON|WARPED|MELON|PUMPKIN|LANTERN|MUSHROOM/.test(k))
+  else if (b.sound === 'wood' && (b.render === 'cube' || b.render === 'slab' || b.render === 'stairs') && !b.station && !b.container && !b.note && !b.enchanter && !/CRIMSON|WARPED|MELON|PUMPKIN|LANTERN|MUSHROOM/.test(k))
     f = /LOG|WOOD|STEM/.test(k) ? [5, 5] : [5, 20];
   if (f) b.flam = f;
 }
