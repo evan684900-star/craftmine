@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR', horn: 'KeyH', view: 'KeyV', fullscreen: 'KeyP',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR', horn: 'KeyH', view: 'KeyV', fullscreen: 'KeyP', tpmenu: 'KeyG',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -1061,6 +1061,8 @@
         const c = e.code;
         const K = this.binds;
         if (['Space', 'Tab', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
+        // menu Téléportation (G) ; ouvert, il garde les touches
+        if (CM.Teleport.keydown(this, e)) return;
         // touches F1 à F11, et F3 + touche
         if (CM.FKeys.keydown(this, e)) return;
         // Tab maintenue : joueurs connectés
@@ -1186,6 +1188,11 @@
       });
       on('btn-options', () => this.openOptions('menu'));
       on('btn-options2', () => this.openOptions('pause'));
+      on('btn-tp', () => {
+        this.paused = false;
+        this.ui.hide('pause');
+        CM.Teleport.show(this);
+      });
       on('btn-opt-back', () => {
         this.ui.hide('options');
         this.ui.show(this.optionsFrom);
@@ -2220,6 +2227,7 @@
         if (!this.paused || this.net.active) this.update(dt);
         this.render();
         this.ui.update(dt);
+        if (this.state === 'playing' && !this.dedicated) CM.Teleport.update(this, dt); // (demandes reçues, compte à rebours)
       } catch (err) {
         console.error(err);
         if (!this.errorShown) {

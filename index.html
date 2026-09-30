@@ -384,6 +384,7 @@
       <div class="menu-col">
         <button id="btn-resume" class="big">Reprendre</button>
         <button id="btn-lan">Ouvrir aux amis (multijoueur)</button>
+        <button id="btn-tp">🌀 Téléportation (maisons, joueurs)</button>
         <button id="btn-options2">Options</button>
         <button id="btn-fs2" title="Plein écran (touche P)">⛶ Plein écran</button>
         <button id="btn-guide">Masquer le guide</button>
@@ -425,6 +426,21 @@
     </div>
   </div>
 
+  <div id="tpmenu" class="screen hidden">
+    <div class="panel tp-panel">
+      <div class="tp-head"><h3>🌀 Téléportation</h3><button data-tp="close" title="Fermer">✕</button></div>
+      <div id="tp-combat" class="tp-combat hidden"></div>
+      <div id="tp-req"></div>
+      <h4>🏡 Mes maisons</h4>
+      <div id="tp-homes"></div>
+      <div class="tp-add"><input id="tp-home-name" type="text" maxlength="16" placeholder="Nom (maison)" autocomplete="off" spellcheck="false" /><button id="tp-home-set" data-tp="set">Définir ici</button></div>
+      <h4>👥 Joueurs</h4>
+      <div id="tp-players"></div>
+      <div id="tp-msg" class="tp-msg"></div>
+      <div class="tp-hint"><span id="tp-key"></span>Impossible pendant un combat (10 s après le dernier coup) · une demande dure 60 s</div>
+    </div>
+  </div>
+  <div id="tp-pop" class="hidden"></div>
   <div id="sign-edit" class="screen hidden">
     <div class="panel sign-panel">
       <h3>🪧 Écrire sur le panneau</h3>
@@ -502,6 +518,7 @@
   <script src="js/touch.js"></script>
   <script src="js/net.js"></script>
   <script src="js/commands.js"></script>
+  <script src="js/teleport.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>

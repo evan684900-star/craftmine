@@ -203,7 +203,7 @@
   const BIND_LABELS = {
     forward: 'Avancer', back: 'Reculer', left: 'Aller à gauche', right: 'Aller à droite', jump: 'Sauter / nager / monter (vol)',
     sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet", swap: 'Échanger les deux mains',
-    map: 'Mini-carte (masquée / petite / grande)', reload: 'Recharger (arme à feu)', horn: 'Klaxon / sirène (véhicule)', view: 'Vue de derrière / 1re personne', fullscreen: 'Plein écran',
+    map: 'Mini-carte (masquée / petite / grande)', reload: 'Recharger (arme à feu)', horn: 'Klaxon / sirène (véhicule)', view: 'Vue de derrière / 1re personne', fullscreen: 'Plein écran', tpmenu: 'Téléportation (maisons, joueurs)',
   };
   const MODE_NAMES = { survival: 'Survie', creative: 'Créatif' };
   const DIFF_NAMES = { peaceful: 'Paisible', easy: 'Facile', normal: 'Normale', hard: 'Difficile' };
@@ -845,7 +845,7 @@
       $('help').innerHTML =
         '<h3>Commandes (modifiables dans Options &gt; Contrôles)</h3><ul>' +
         '<li><b>' + kn('forward') + kn('left') + kn('back') + kn('right') + '</b> : se déplacer · <b>' + kn('jump') + '</b> : sauter / nager · <b>' + kn('sprint') + '</b> : courir · <b>' + kn('sneak') + '</b> : s’accroupir</li>' +
-        '<li><b>' + kn('dash') + '</b> : ruée · <b>' + kn('inventory') + '</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>' + kn('view') + '</b> : vue de derrière · <b>' + kn('fullscreen') + '</b> : plein écran · <b>' + kn('map') + '</b> : carte · <b>Tab</b> (maintenue) : joueurs connectés</li>' +
+        '<li><b>' + kn('dash') + '</b> : ruée · <b>' + kn('inventory') + '</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>' + kn('view') + '</b> : vue de derrière · <b>' + kn('fullscreen') + '</b> : plein écran · <b>' + kn('map') + '</b> : carte · <b>Tab</b> (maintenue) : joueurs connectés · <b>' + kn('tpmenu') + '</b> : téléportation (maisons, demandes aux joueurs)</li>' +
         '<li><b>Clic gauche</b> (maintenu) : miner / frapper · <b>Clic droit</b> : poser, manger, utiliser · <b>Clic molette</b> : choisir le bloc visé</li>' +
         '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>' + kn('drop') + '</b> : jeter</li></ul>' +
         '<h3>Touches F</h3><ul>' + CM.FKeys.HELP.map(([k, d]) => '<li><b>' + k + '</b> : ' + d + '</li>').join('') +

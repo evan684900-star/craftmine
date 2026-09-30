@@ -336,6 +336,12 @@
         inv.changed();
         break;
       }
+      case 'tpreq':
+      case 'tpans':
+      case 'tpcall':
+      case 'tpgo':
+        tpApply(a);
+        break;
       case 'msg':
         print('✉ ' + String(a.from || '?').slice(0, 24) + ' te chuchote : ' + String(a.s || '').slice(0, 200), 'msg');
         CM.Audio.play('click');
@@ -1139,35 +1145,42 @@
       o.ok('🎲 Direction X ' + Math.floor(x) + ', Z ' + Math.floor(z));
     },
   });
-  // maisons : dans la sauvegarde (solo, hôte) ou sur cet appareil (invité)
+  // Maisons : dans la sauvegarde du monde (solo, hôte) ; pour un invité, dans sa fiche chez l'hôte
+  // (envoyée avec sa progression). Les anciennes maisons gardées sur l'appareil y sont reprises.
   function homes() {
     const g = G();
-    if (!g.net.isClient) return (g.homes = g.homes || {});
-    const k = 'cm-homes-' + g.worlds.overworld.seed + '-' + g.net.name;
-    try {
-      return JSON.parse(localStorage.getItem(k) || '{}');
-    } catch (e) {
-      return {};
-    }
-  }
-  function saveHomes(h) {
-    const g = G();
-    if (!g.net.isClient) g.homes = h;
-    else
+    g.homes = g.homes && typeof g.homes === 'object' ? g.homes : {};
+    if (g.net.isClient) {
+      const k = 'cm-homes-' + g.worlds.overworld.seed + '-' + g.net.name;
       try {
-        localStorage.setItem('cm-homes-' + g.worlds.overworld.seed + '-' + g.net.name, JSON.stringify(h));
+        const old = JSON.parse(localStorage.getItem(k) || 'null');
+        if (old && typeof old === 'object') for (const n of Object.keys(old)) if (!g.homes[n] && Object.keys(g.homes).length < 10) g.homes[n] = old[n];
+        if (old) localStorage.removeItem(k);
       } catch (e) {
         /* stockage indisponible */
       }
+    }
+    return g.homes;
+  }
+  function saveHomes(h) {
+    const g = G();
+    g.homes = h;
+    if (g.net.isClient) g.net.sendGuestSave();
+  }
+  // Pas de téléportation (maison, joueur) moins de 10 s après un coup donné ou reçu.
+  function combatCheck() {
+    const left = G().player.combatLeft();
+    if (left > 0) bad('⚔ Tu es en combat : téléportation possible dans ' + Math.ceil(left) + ' s');
   }
   def('maison home', {
-    cat: 'Déplacement', cheat: true, local: true, usage: '[nom]', desc: 'va à une maison enregistrée (/defmaison)',
+    cat: 'Déplacement', local: true, usage: '[nom]', desc: 'va à une maison enregistrée (/defmaison) ; pas pendant un combat',
     args: [() => Object.keys(homes())],
     run(ctx, a, o) {
       const h = homes(), n = norm(a[0] || 'maison');
       const v = h[n];
       if (!v) bad(Object.keys(h).length ? 'Pas de maison « ' + n + ' » (' + Object.keys(h).join(', ') + ')' : 'Aucune maison : tape /defmaison [nom] là où tu veux revenir');
-      act(findPlayer(ctx), { a: 'tp', x: v[0], y: v[1], z: v[2], dim: v[3] || 'overworld' });
+      combatCheck();
+      act(findPlayer(ctx), { a: 'tp', x: v[0], y: v[1], z: v[2], dim: v[3] || 'overworld', free: 1 });
       o.ok('🏡 ' + n);
     },
   });
@@ -1199,6 +1212,133 @@
       o.ok('Maison « ' + n + ' » supprimée');
     },
   });
+  // ---- demandes de téléportation entre joueurs (/tpa, /tpaici) ----
+  // R demande, T répond. Celui qui se déplace reçoit « tpgo » avec la position de l'autre, et
+  // seulement s'il attend cette réponse (on ne peut pas téléporter quelqu'un de force).
+  // inc : demandes reçues ; out : demandes envoyées ; go : /tpaici accepté, on attend sa position.
+  const TP = { inc: new Map(), out: new Map(), go: new Map() };
+  const TP_LIFE = 60;
+  CM.TP_ACTS = new Set(['tpreq', 'tpans', 'tpcall', 'tpgo']);
+  function tpClean() {
+    const now = G().clock;
+    for (const m of [TP.inc, TP.out, TP.go]) for (const [k, v] of m) if (now - v.t > TP_LIFE || !G().net.remotes.has(k)) m.delete(k);
+  }
+  function sendTp(pid, a) {
+    const net = G().net;
+    a.from = net.name;
+    a.fp = myPid();
+    if (net.isHost) hostAct(pid, a);
+    else net.send({ t: 'act', to: pid, a });
+  }
+  function otherPlayer(ctx, s) {
+    if (!G().net.active) bad('Personne d’autre ici : ouvre la partie aux amis ou rejoins un serveur');
+    if (s === undefined) bad('Quel joueur ? (' + players().filter((q) => !q.self).map((q) => q.name).join(', ') + ')');
+    const q = findPlayer(ctx, s);
+    if (q.self) bad('C’est toi !');
+    return q;
+  }
+  function tpAsk(ctx, a, o, here) {
+    const q = otherPlayer(ctx, a[0]);
+    tpClean();
+    if (!here) combatCheck();
+    const prev = TP.out.get(q.pid);
+    if (prev && G().clock - prev.t < 10) bad('Demande déjà envoyée à ' + q.name + ', attends sa réponse');
+    TP.out.set(q.pid, { name: q.name, here, t: G().clock });
+    sendTp(q.pid, { a: 'tpreq', here: here ? 1 : 0 });
+    o.ok('📨 Demande envoyée à ' + q.name + (here ? ' pour qu’il vienne ici' : ' pour aller chez lui') + ' (il a 60 s pour accepter)');
+  }
+  // Demande reçue choisie : celle du joueur nommé, sinon la dernière.
+  function tpPick(ctx, s) {
+    tpClean();
+    if (!TP.inc.size) bad('Aucune demande de téléportation en attente');
+    if (s === undefined) return [...TP.inc.entries()].pop();
+    const q = otherPlayer(ctx, s);
+    if (!TP.inc.has(q.pid)) bad(q.name + ' ne t’a rien demandé');
+    return [q.pid, TP.inc.get(q.pid)];
+  }
+  def('tpa tpdemande', {
+    cat: 'Déplacement', local: true, usage: '<joueur>', desc: 'demande à un joueur de te téléporter chez lui (il doit accepter)',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      tpAsk(ctx, a, o, false);
+    },
+  });
+  def('tpaici tpahere', {
+    cat: 'Déplacement', local: true, usage: '<joueur>', desc: 'demande à un joueur de venir à toi (il doit accepter)',
+    args: [() => players().filter((q) => !q.self).map((q) => q.name)],
+    run(ctx, a, o) {
+      tpAsk(ctx, a, o, true);
+    },
+  });
+  def('tpaccepter tpaccept tpyes tpoui', {
+    cat: 'Déplacement', local: true, usage: '[joueur]', desc: 'accepte une demande de téléportation',
+    args: [() => [...TP.inc.values()].map((v) => v.name)],
+    run(ctx, a, o) {
+      const [pid, r] = tpPick(ctx, a[0]);
+      if (r.here) {
+        // il nous appelle : c'est nous qui partons
+        combatCheck();
+        TP.go.set(pid, { name: r.name, t: G().clock });
+        TP.inc.delete(pid);
+        sendTp(pid, { a: 'tpcall' });
+        o.ok('✅ Téléportation vers ' + r.name + '…');
+      } else {
+        TP.inc.delete(pid);
+        const p = G().player;
+        sendTp(pid, { a: 'tpgo', x: r1(p.x), y: r1(p.y), z: r1(p.z), dim: G().playerDim });
+        o.ok('✅ ' + r.name + ' arrive');
+      }
+    },
+  });
+  def('tprefuser tpdeny tpno tpnon', {
+    cat: 'Déplacement', local: true, usage: '[joueur]', desc: 'refuse une demande de téléportation',
+    args: [() => [...TP.inc.values()].map((v) => v.name)],
+    run(ctx, a, o) {
+      const [pid, r] = tpPick(ctx, a[0]);
+      TP.inc.delete(pid);
+      sendTp(pid, { a: 'tpans', ok: 0 });
+      o.info('Demande de ' + r.name + ' refusée');
+    },
+  });
+  // Action de téléportation reçue d'un autre joueur (via l'hôte, qui a vérifié son nom).
+  function tpApply(a) {
+    const g = G(), pid = a.fp | 0, name = String(a.from || '?').slice(0, 24);
+    tpClean();
+    if (a.a === 'tpreq') {
+      TP.inc.set(pid, { name, here: !!a.here, t: g.clock });
+      print('📨 ' + name + (a.here ? ' te demande de venir à lui' : ' veut se téléporter chez toi') + ' — /tpaccepter ou /tprefuser, ou ' + (g.touch.enabled ? 'Pause → Téléportation' : 'le menu Téléportation (touche ' + g.keyName(g.binds.tpmenu) + ')'), 'msg');
+      CM.Audio.play('pop');
+    } else if (a.a === 'tpans') {
+      TP.out.delete(pid);
+      TP.go.delete(pid);
+      if (a.ok) print('✨ ' + name + ' t’a rejoint', 'ok');
+      else print(a.why === 'combat' ? '⚔ ' + name + ' est en combat : téléportation annulée' : '❌ ' + name + ' a refusé ta demande', 'err');
+    } else if (a.a === 'tpcall') {
+      // /tpaici accepté : on envoie notre position à celui qui vient
+      const r = TP.out.get(pid);
+      if (!r || !r.here) return;
+      TP.out.delete(pid);
+      const p = g.player;
+      sendTp(pid, { a: 'tpgo', x: r1(p.x), y: r1(p.y), z: r1(p.z), dim: g.playerDim });
+    } else if (a.a === 'tpgo') {
+      // on part, si on attendait cette réponse
+      const r = TP.out.get(pid);
+      const ok = (r && !r.here) || TP.go.has(pid);
+      if (!ok || !Number.isFinite(+a.x) || !Number.isFinite(+a.y) || !Number.isFinite(+a.z) || !CM.isDim(a.dim)) return;
+      TP.out.delete(pid);
+      TP.go.delete(pid);
+      const left = g.player.combatLeft();
+      if (left > 0 || !g.player.alive) {
+        print('⚔ Tu es en combat : téléportation vers ' + name + ' annulée', 'err');
+        sendTp(pid, { a: 'tpans', ok: 0, why: 'combat' });
+        return;
+      }
+      act(players()[0], { a: 'tp', x: +a.x, y: +a.y, z: +a.z, dim: a.dim, free: 1 });
+      print('✨ Téléporté vers ' + name, 'ok');
+      sendTp(pid, { a: 'tpans', ok: 1 });
+    }
+    if (CM.Teleport) CM.Teleport.changed();
+  }
   def('nether', {
     cat: 'Déplacement', cheat: true, usage: '', desc: 'voyage dans le Nether (un portail t’attend à l’arrivée)',
     run(ctx, a, o) {
@@ -1793,8 +1933,21 @@
     list: CMDS,
     norm,
     // Ligne tapée sur cet écran.
-    run(line) {
-      exec(selfCtx(String(line).slice(0, 300)));
+    // out(s, kind) : reçoit aussi ce que la commande affiche (menu Téléportation).
+    run(line, out) {
+      const ctx = selfCtx(String(line).slice(0, 300));
+      if (out)
+        ctx.out = (s, k) => {
+          print(s, k);
+          out(s, k);
+        };
+      exec(ctx);
+    },
+    // Menu Téléportation : maisons, demandes reçues et envoyées.
+    homes: () => homes(),
+    tpState() {
+      tpClean();
+      return { inc: [...TP.inc.entries()], out: [...TP.out.entries()], clock: G().clock, life: TP_LIFE };
     },
     print,
     // Hôte : commande envoyée par un invité.
@@ -1806,11 +1959,14 @@
     guestAct(e, m) {
       const g = G(), net = g.net, a = m.a;
       if (!a || typeof a !== 'object' || typeof a.a !== 'string') return;
-      if (a.a !== 'msg' && !net.rules.cmds) {
+      // (messages privés, demandes de téléportation et retour à sa maison : sans triches)
+      const tpa = CM.TP_ACTS.has(a.a);
+      if (a.a !== 'msg' && !tpa && !(a.a === 'tp' && a.free && (m.to | 0) === e.pid) && !net.rules.cmds) {
         net.sendTo(e.pid, { t: 'cr', s: 'Les triches sont désactivées par l’hôte', k: 'err' });
         return;
       }
-      if (a.a === 'msg') a.from = e.name;
+      if (a.a === 'msg' || tpa) a.from = e.name;
+      if (tpa) a.fp = e.pid;
       const to = m.to | 0;
       if (to === 0) apply(a);
       else hostAct(to, a);

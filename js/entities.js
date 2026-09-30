@@ -880,6 +880,7 @@
     // opts (enchantements de l'arme) : kb = Recul, fire = Aura de feu, loot = Butin.
     hurtMob(m, dmg, src, silent, by, opts) {
       const g = this.game;
+      if (by && by === g.player) by.combatT = g.clock; // (on se bat : pas de téléportation pendant 10 s)
       if (this.remote) {
         // invité : l'hôte applique le coup, on montre seulement l'impact tout de suite
         if (!silent) {

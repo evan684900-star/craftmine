@@ -1885,6 +1885,11 @@
       this.consume(1);
     }
 
+    // Secondes avant de pouvoir se téléporter (maison, joueur) : 10 s après le dernier coup donné ou reçu.
+    combatLeft() {
+      const d = this.game.clock - (this.combatT === undefined ? -99 : this.combatT);
+      return d < 0 ? 0 : Math.max(0, 10 - d);
+    }
     // attacker : créature qui frappe (pour les Épines).
     damage(n, sx, sz, cause, bypass, attacker) {
       if (CM.Dedicated.on) return; // (joueur invisible du serveur dédié)
@@ -1897,6 +1902,8 @@
       if (this.sleeping && !(this.creative && cause !== 'Le vide')) g.wake('hurt');
       if (this.creative && cause !== 'Le vide') return;
       if (this.cmdGod && cause !== 'Le vide') return; // /invincible
+      // coup d'une créature, d'un joueur, d'une explosion : en combat (pas de téléportation pendant 10 s)
+      if (attacker || (sx !== null && sx !== undefined)) this.combatT = g.clock;
       n = CM.Effects.reduce(this, n, cause); // résistance, résistance au feu
       if (n <= 0) return;
       if (this.invul > 0 && !bypass) return;

@@ -422,6 +422,7 @@
         player: you.player && Number.isFinite(you.player.x) ? you.player : { x: sp.x, y: sp.y, z: sp.z, health: 20, food: 20, sat: 5 },
         inv: you.inv || null, time: w.time, dayCount: w.day, stats: you.stats || {}, noteBlocks: w.notes || {}, chests: {},
         ach: you.ach && typeof you.ach === 'object' ? you.ach : {}, lastDeath: you.lastDeath || null,
+        homes: you.homes && typeof you.homes === 'object' ? you.homes : {},
         weather: w.wx && typeof w.wx === 'object' ? w.wx : null,
         beaconFx: w.bfx && typeof w.bfx === 'object' ? w.bfx : {},
         deco: w.deco && typeof w.deco === 'object' ? w.deco : null,
@@ -629,6 +630,7 @@
           stats: g.stats,
           ach: g.ach || {},
           lastDeath: g.lastDeath || null,
+          homes: g.homes || {},
         },
       });
     }
@@ -1658,6 +1660,7 @@
     }
     pvpHit(rp, dmg) {
       const p = this.game.player;
+      p.combatT = this.game.clock; // (pas de téléportation pendant 10 s)
       if (this.isHost) rp.damage(dmg, p.x, p.z, this.name);
       else this.send({ t: 'pvp', to: rp.pid, d: r2(dmg) });
     }
