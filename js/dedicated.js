@@ -63,6 +63,11 @@
       log('🌍 Création d’un nouveau monde (graine ' + seed + ')…');
       await g.startWorld(seed, null, worldSettings(c));
     }
+    // mode, difficulté et triches : ceux de config.json, même pour un monde déjà créé
+    const ws = worldSettings(c);
+    g.mode = ws.mode;
+    g.difficulty = ws.difficulty;
+    g.settings.guestCheats = ws.guestCheats;
     g.ui.hide('start');
     parkPlayer(g);
     // journal de la machine : tout ce qui s'écrit dans le tchat (messages, arrivées, départs, commandes)

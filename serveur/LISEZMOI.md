@@ -47,6 +47,10 @@ nom de domaine** ne sont nécessaires.
 
 ## Réglages (`craftmine config`)
 
+Dans l'éditeur : flèches pour se déplacer, **Ctrl+O** puis **Entrée** pour enregistrer, **Ctrl+X** pour
+quitter (le serveur redémarre alors tout seul). Garde les guillemets autour des textes, et une virgule à
+la fin de chaque ligne sauf la dernière.
+
 | Réglage | Valeurs |
 | --- | --- |
 | `nom` | Nom du serveur dans le tchat |
@@ -60,6 +64,10 @@ nom de domaine** ne sont nécessaires.
 | `garderInventaire` | `true` : on garde son inventaire à la mort |
 | `maxJoueurs` | Nombre de joueurs en même temps (10 par défaut, 20 au plus) |
 | `motDePasseAdmin` | Mot de passe de `/admin` (4 caractères au moins) |
+
+Les réglages marqués « seulement pour un nouveau monde » servent à la création du monde
+(`craftmine nouveau-monde`). Tous les autres s'appliquent au redémarrage, même sur le monde déjà créé :
+un `/mode` ou `/difficulte` tapé dans le jeu dure donc jusqu'au prochain redémarrage.
 
 ## Administrateurs
 
