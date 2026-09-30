@@ -1498,7 +1498,9 @@
 
     render(batch, cam, time) {
       const L = CM.Textures.layer;
+      const cull = cam.cull; // (extension Optimisation : créatures derrière nous ou cachées par le terrain)
       for (const m of this.mobs) {
+        if (cull && !cull(m.x, m.y + 0.5, m.z, 3)) continue;
         const l = this.lightAt(m.x, m.y + 0.6, m.z);
         const flags = m.hurt > 0 ? 2 : 0;
         mat4.compose(this.M, m.x, m.y, m.z, m.yaw, 0, 0, m.baby > 0 ? BABY_SCALE : 1);
@@ -1588,7 +1590,7 @@
       }
       this.renderExtra(batch);
       for (const d of this.drops) {
-        if (!this.game.world.loaded(d.x, d.z)) continue;
+        if (!this.game.world.loaded(d.x, d.z) || (cull && !cull(d.x, d.y, d.z, 1))) continue;
         // les 10 dernières secondes, il clignote avant de disparaître
         const age = d.age - ((d.life || DROP_LIFE) - DROP_LIFE);
         if (age > DROP_LIFE - 10 && Math.floor(age * (age > DROP_LIFE - 3 ? 8 : 4)) % 2) continue;

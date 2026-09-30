@@ -119,6 +119,14 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 #clock .biome { font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; margin-top: 1px; }
 #clock .biome.gold { color: var(--gold); }
 #hud.bare > *:not(#toasts) { display: none !important; }
+/* touches F : éclair de la capture d'écran (F2), voyant d'enregistrement vidéo (F6), infobulle avancée */
+#fk-flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+#fk-flash.go { animation: fkflash 0.45s ease-out; }
+@keyframes fkflash { from { opacity: 0.75; } to { opacity: 0; } }
+#fk-rec { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 55; pointer-events: none; background: rgba(0, 0, 0, 0.55); color: #fff; font: 700 13px/1 system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; letter-spacing: 0.04em; }
+#fk-rec i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; margin-right: 4px; vertical-align: -1px; animation: fkrec 1s steps(2) infinite; }
+@keyframes fkrec { 50% { opacity: 0.2; } }
+.tt-id { color: #8a8a8a; font-size: 11px; margin-top: 3px; font-family: ui-monospace, monospace; }
 #recipe-search { flex: 1; min-width: 110px; font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--text); }
 #toasts { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .toast {

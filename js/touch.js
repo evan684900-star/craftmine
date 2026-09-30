@@ -126,7 +126,7 @@
       });
       hold('t-reload', () => (inp.pressed[K().reload] = true));
       hold('t-horn', () => (inp.pressed[K().horn] = true));
-      hold('t-view', () => g.toggleView());
+      hold('t-view', () => g.toggleView(true)); // (derrière, de face, 1re personne)
       hold('t-fs', () => g.toggleFullscreen());
       this.buildEditor();
       // barre rapide : toucher une case la sélectionne

@@ -129,7 +129,7 @@
       }
     }
   }
-  const opts = { smoothLight: true, waving: true };
+  const opts = { smoothLight: true, waving: true, cull: false }; // (cull : extension Optimisation)
   CM.Mesher = {
     opts,
     init() {
@@ -532,7 +532,55 @@
       emit: emit.length ? emit : null,
       opaque: opaqueBuf.n ? opaqueBuf.result() : null,
       water: waterBuf.n ? waterBuf.result() : null,
+      vis: opts.cull ? faceLinks() : null,
     };
+  }
+
+  // Extension Optimisation : quelles faces de la section communiquent par des cases non opaques ?
+  // (remplissage de chaque zone d'air ; vis[f] = faces atteignables depuis la face f, en bits
+  // 0 +x, 1 −x, 2 +y, 3 −y, 4 +z, 5 −z). Sert à ne pas dessiner les sections cachées derrière la roche.
+  const seen = new Uint8Array(4096), stk = new Int16Array(4096);
+  function faceLinks() {
+    seen.fill(0);
+    const vis = new Uint8Array(6);
+    let all = 0, sp = 0;
+    const visit = (c) => {
+      if (seen[c]) return;
+      seen[c] = 1;
+      if (OPQ[padId[((c >> 8) + 1) * PP + (((c >> 4) & 15) + 1) * P + (c & 15) + 1]]) return;
+      stk[sp++] = c;
+    };
+    for (let i = 0; i < 4096; i++) {
+      if (seen[i]) continue;
+      if (OPQ[padId[((i >> 8) + 1) * PP + (((i >> 4) & 15) + 1) * P + (i & 15) + 1]]) {
+        seen[i] = 1;
+        continue;
+      }
+      let faces = 0;
+      sp = 0;
+      stk[sp++] = i;
+      seen[i] = 1;
+      while (sp) {
+        const c = stk[--sp];
+        const x = c & 15, z = (c >> 4) & 15, y = c >> 8;
+        if (x === 15) faces |= 1;
+        else visit(c + 1);
+        if (x === 0) faces |= 2;
+        else visit(c - 1);
+        if (y === 15) faces |= 4;
+        else visit(c + 256);
+        if (y === 0) faces |= 8;
+        else visit(c - 256);
+        if (z === 15) faces |= 16;
+        else visit(c + 16);
+        if (z === 0) faces |= 32;
+        else visit(c - 16);
+      }
+      for (let f = 0; f < 6; f++) if (faces & (1 << f)) vis[f] |= faces;
+      all |= faces;
+      if (all === 63 && vis.every((v) => v === 63)) break; // (tout communique déjà)
+    }
+    return vis;
   }
 
   function emitQuad(buf, layer, flip, flags) {

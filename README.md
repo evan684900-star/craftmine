@@ -58,9 +58,26 @@ Toutes les touches se changent dans **Options > Contrôles**.
 | **E** | Inventaire, fabrication, inventaire créatif, journal, aide |
 | **1–9 / molette** | Choisir l'objet en main |
 | **Q** (touche A en AZERTY) | Jeter l'objet en main (Ctrl+Q : toute la pile) |
-| **Échap** | Pause · **F1** : masquer l'interface · **F3** : informations de débogage |
+| **Échap** | Pause |
+| **F1 … F11** | Touches de fonction (voir ci-dessous) |
 | **P** | **Plein écran** (aussi : bouton « ⛶ Plein écran » du menu principal et du menu Pause, bouton ⛶ sur téléphone ; option « Plein écran automatique » dans Options > Interface) |
 | **V** · **R** · **H** | Vue de derrière · recharger (arme à feu) · klaxon, sirène (véhicule) |
+
+### Touches F
+
+| Touche | Action |
+| --- | --- |
+| **F1** | Masquer l'interface et la main (pour les belles images) |
+| **F2** | Capture d'écran : l'image PNG est téléchargée |
+| **F3** | Informations de débogage. En maintenant F3 : **A** recharger l'affichage du monde · **B** boîtes de collision des créatures · **C** copier ta position (commande /tp) · **D** effacer le tchat · **G** bordures des tronçons (16 × 16) · **H** infobulles avancées (identifiant, durabilité) · **Q** la liste |
+| **F4** | Deux appuis : survie ⇄ créatif (si les triches sont permises) |
+| **F5** | Vue à la 1re personne → de derrière → de face |
+| **F6** | Filmer une vidéo avec le son (F6 pour arrêter, 5 minutes au plus) |
+| **F7** | Croix là où les monstres peuvent apparaître : rouges tout le temps, jaunes la nuit |
+| **F8** | Caméra cinématique (mouvements de souris adoucis) |
+| **F9** | Sauvegarde rapide |
+| **F10** | Zoom ×4 |
+| **F11** | Plein écran |
 
 ### Sur téléphone ou tablette
 
@@ -184,6 +201,7 @@ Plus de 80 commandes, **en solo comme en multijoueur** : ouvre le tchat (**T**, 
 | 💡 **Extension Lumière réaliste** | Lumière colorée (torches orangées, redstone rouge, néons, lanternes des âmes…), flammes qui vacillent, halos la nuit, fumée des torches, lumière des torches qui s'ajoute à celle du jour, lumière tenue en main colorée. Cochée par défaut à la création du monde, désactivable dans les Options. |
 | 🔫 **Extension Armes à feu** | À cocher en créant le monde. Établi d’armurier (4 fers, 4 planches, 2 poudres à canon) : pièces d’arme, munitions (balles de pistolet, balles de fusil, cartouches de chasse, roquettes, cartouches de gaz, grenades) et **12 armes** en 3D : pistolet, revolver, pistolet-mitrailleur, fusil d’assaut, fusil à pompe (8 plombs, rechargé cartouche par cartouche), fusil à double canon, carabine de chasse (lunette ×2), fusil de précision (lunette ×5, traverse deux créatures), mitrailleuse (6 canons qui tournent), lance-roquettes et lance-grenades (explosions), lance-flammes (met le feu). Clic gauche : tirer ; clic droit : viser ; **R** : recharger (touche réglable). Les balles restent dans l’arme (barre jaune), recul, dispersion (moindre en visant, plus forte en courant ou en sautant), dégâts ×1,6 à la tête, le verre vole en éclats, traçantes, éclair au bout du canon, marqueur de touche, sons propres à chaque arme. Grenade à main (rebondit, explose en 3 s). La nuit, des **bandits** cagoulés tirent au pistolet. Munitions et parfois une arme dans les coffres. Multijoueur (tirs, dégâts, combats entre joueurs), boutons 🔫 🎯 ↻ sur téléphone, 4 succès. |
 | 🚗 **Extension Véhicules** | À cocher en créant le monde. Établi de mécanicien (6 fers, 2 planches, 2 redstone) : roues, moteurs, bidons d’essence et **11 véhicules** en 3D : **char d’assaut** (chenilles qui tournent sur place, tourelle qui suit ton regard, canon à obus explosifs au clic gauche avec des obus de char, blindage qui protège l’équipage des créatures, des balles et des explosions, il écrase les créatures, les haies et le verre), voiture (4 places), voiture de sport décapotable (100 km/h), 4x4 et quad tout-terrain (sable et neige sans ralentir, ils montent les marches), camion avec une benne de 27 cases, moto, voiture de police (gyrophares et sirène), hélicoptère (rotor qui tourne ; saut : monter, course : descendre), avion (décollage à 13 blocs/s, il suit ton regard) et bateau à moteur. Clic droit pour le poser et pour monter (les autres montent comme passagers), accroupi pour descendre. Gaz, frein, virages, frein à main (dérapage), klaxon (**H**), phares la nuit, compteur de vitesse, carburant (bidon : +40 %, charbon : +8 %), réparation au lingot de fer, peinture avec une teinture. Chocs, balles et explosions l’abîment : à 0, il prend feu puis explose. Accroupi + clic gauche : le ranger. Il renverse les créatures. **Vue de derrière** (touche **V**, bouton 👁 sur téléphone), par défaut en véhicule. Multijoueur (conducteur et passagers), 3 succès. |
+| 🚀 **Extension Optimisation** | Comme le mod Sodium : plus d’images par seconde, sans rien changer à l’image. Le monde est parcouru depuis la caméra en ne passant que là où l’air (ou le verre, l’eau…) relie deux côtés d’une section de 16 × 16 × 16 : les grottes sous tes pieds, l’intérieur des montagnes et les pièces fermées ne sont plus dessinés. Les sections sont dessinées de la plus proche à la plus lointaine (la carte graphique saute les pixels cachés), les créatures derrière toi ou cachées par le terrain ne sont plus dessinées, rien n’est dessiné au-delà du brouillard du Nether, et la **résolution dynamique** baisse la résolution (jusqu’à 50 %) quand ça rame. Mesures : 25 à 50 % de faces dessinées en moins, 50 à 80 % d’images par seconde en plus. Réglage de l’appareil (pour tous les mondes) : case dans l’écran Nouveau monde ou Options › Graphismes. |
 | 🏙 **Monde Ville** | Type de monde à choisir en créant la partie. Un quadrillage infini de rues : asphalte, lignes jaunes, passages piétons, trottoirs, lampadaires, feux tricolores, bornes incendie, poubelles (à fouiller) et bancs. Entre les rues, des îlots de 36 × 36 blocs : **gratte-ciel** de verre au centre (jusqu’à 12 étages, antenne ou héliport sur le toit), bureaux, immeubles, commerces avec auvent, **maisons** à toit à deux pans avec jardin, haie, arbre et parfois une piscine, **parcs** avec fontaine, arbres et bancs, **parkings**, **commissariat**, **station-service** (pompes sous un auvent), grande place centrale. Chaque étage est éclairé et relié par une **échelle** jusqu’au toit ; des coffres (butin selon le bâtiment : armes au commissariat, essence à la station…). Sous la ville : roche et minerais. Des **citadins** se promènent le jour ; la nuit, des Ombres et des bandits. Avec l’extension Véhicules, des voitures sont garées dans les parkings (et des voitures de police au commissariat). L’**échelle** (7 bâtons → 3) existe dans tous les mondes : avance ou saute pour monter, accroupis-toi pour rester. |
 | ☀ **Objectif final** | Forger le **Cœur d'aube** (4 éclats célestes, 4 essences d'ombre, 4 cristaux, 2 lingots de fer) et le poser : il chasse définitivement les Ombres alentour. |
 
@@ -237,8 +255,8 @@ js/blocks.js      blocs (0-999 puis 4000 et plus), objets (1000-3999), outils, r
 js/textures.js    textures pixel-art générées + icônes
 js/world.js       monde infini par tronçons : génération (monde normal et Nether), biomes, lumière, lancer de rayon
 js/blockticks.js  blocs qui évoluent seuls : eau et lave qui coulent, feu, portails cassés
-js/mesher.js      maillage des sections 16×16×16 (AO, lumière douce, dalles, translucides)
-js/renderer.js    rendu WebGL2 (monde, ciel, entités, eau)
+js/mesher.js      maillage des sections 16×16×16 (AO, lumière douce, dalles, translucides, faces reliées par l’air)
+js/renderer.js    rendu WebGL2 (monde, ciel, entités, eau, sections cachées de l’extension Optimisation)
 js/entities.js    physique, créatures, TNT, objets au sol, particules
 js/mob_defs.js    nouvelles créatures (poule, vache, lapin, cerf, chèvre, chauve-souris, loup, araignée, squelette, rampant, gluant, cube de magma)
 js/potions.js     effets, potions, alambic et balise
@@ -262,6 +280,7 @@ js/end.js         forts souterrains, œil de l'End, dimension de l'End (îles, p
 js/gun_defs.js    armes à feu (extension) : caractéristiques, objets, munitions, recettes, textures, bandit
 js/guns.js        tir, visée et lunette, recul, rechargement, roquettes et grenades, lance-flammes, modèles 3D, HUD, réseau
 js/vehicle_defs.js véhicules (extension) : caractéristiques, objets, recettes, textures, établi de mécanicien
+js/fkeys.js       touches F : capture d’écran, vidéo, vues, bordures des tronçons, boîtes, zones des monstres, zoom…
 js/vehicles.js    conduite, vol, bateau, carburant, dégâts, passagers, klaxon et sirène, caméra de derrière, modèles 3D, réseau
 js/city_defs.js   échelle, asphalte, trottoir, lampadaire, feu tricolore, borne incendie, poubelle, banc, pompe à essence, citadin
 js/city.js        monde Ville : rues, îlots (gratte-ciel, immeubles, maisons, parcs, parkings, commissariat…), butin, voitures garées

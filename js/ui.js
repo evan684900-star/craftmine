@@ -64,6 +64,7 @@
     ['🚪 Portes et lits', "Porte : 6 planches d'une même essence (chêne, sapin, bouleau, acacia) donnent 3 portes à l'Établi ; clic droit pour l'ouvrir ou la fermer. Lit : 3 laines + 3 planches. Clic droit sur un lit pour y placer ton point de réapparition ; la nuit, tu t'y couches et passes au matin (en multijoueur, quand tout le monde est couché). Pas de sommeil si des Ombres rôdent tout près !"],
     ['📦 Objets au sol', "Un objet jeté ou tombé au sol disparaît au bout de 5 minutes : il clignote pendant ses 10 dernières secondes. Tant que son tronçon n'est pas chargé (trop loin des joueurs), le temps ne passe pas pour lui."],
     ['💬 Commandes', "Ouvre le tchat (T, Entrée, / ou 💬 sur téléphone) et tape « / » : plus de 80 commandes, en solo comme en multijoueur. Des suggestions s'affichent pendant la frappe ; Tab complète, ↑ reprend la commande précédente. /aide les liste par catégorie. Exemples : /donner diamant 64 · /donner épée_en_diamant · /kit outils · /mode créatif · /temps midi · /météo orage · /tp ~ ~20 ~ · /tp Bob · /spawn · /defmaison base puis /maison base · /retour · /vol · /vitesse 2 · /soigner · /xp 30L · /enchanter tranchant 5 · /invoquer ombre 3 · /tuer ombres · /remplir ~-3 ~ ~-3 ~3 ~4 ~3 verre creux · /sphere 5 verre · /annuler · /localiser village · /regle faim off. Les objets s'écrivent en français avec des _ à la place des espaces (lingot_de_fer), ~ veut dire « ici ». En multijoueur, l'hôte autorise les triches aux invités avec /triche on."],
+    ['⌨ Touches F', "F1 : cache l'interface et la main (idéal pour les captures). F2 : capture d'écran, l'image est téléchargée. F3 : informations de débogage ; en maintenant F3, appuie sur A (recharger l'affichage), B (boîtes de collision des créatures), C (copier ta position en commande /tp), D (effacer le tchat), G (bordures des tronçons de 16 × 16 blocs), H (infobulles avancées) ou Q (la liste). F4 deux fois : survie ⇄ créatif (si les triches sont permises). F5 : vue à la 1re personne, de derrière, puis de face. F6 : filme une vidéo avec le son (F6 pour arrêter, 5 minutes au plus). F7 : croix rouges là où les monstres peuvent apparaître tout le temps, jaunes là où ils apparaissent la nuit (éclaire-les !). F8 : caméra cinématique, toute douce. F9 : sauvegarde rapide. F10 : zoom. F11 : plein écran."],
     ['🌦 Météo', "La météo change toute seule : beau temps 10 à 25 minutes, puis pluie (3 à 8 minutes) ou orage (2 à 6 minutes), annoncés à l'écran. /regle meteo_auto off la fige. On peut aussi la choisir : /météo pluie, /météo orage ou /météo clair (avec une durée en minutes si tu veux). La pluie s'arrête sous les toits et les feuilles, devient de la neige dans les biomes froids, assombrit le ciel et éteint un joueur en feu. L'orage lance des éclairs qui blessent et allument des feux."],
     ['🧱 Gravité réaliste (extension)', "À cocher en créant le monde. TOUS les blocs obéissent à la gravité, terrain naturel compris. Un bloc tient s'il est posé sur un bloc qui tient, ou accroché par le côté à des blocs qui tiennent, sans dépasser dans le vide de plus de : 7 blocs pour le métal, 6 pour la roche naturelle et les minerais, 5 pour le bois et les feuilles, 4 pour la pierre taillée, les pavés et les briques, 3 pour la glace, 2 pour la terre, l'herbe, la neige et la laine, 1 pour le verre. Le sable, le gravier et la poudre de béton ont besoin d'un appui juste dessous. Chaque couche peut dépasser un peu plus que celle du dessous : un plafond épais tient mieux qu'un plafond fin. Ce qui ne tient plus tombe d'un seul morceau jusqu'au premier appui : creuse sous un arbre et il tombe entier dans le trou, creuse une salle trop large et son plafond s'écroule, retire un pilier et le pont s'effondre. Les arbres sont d'un seul tenant (troncs coudés, feuilles pendantes). Le terrain généré qui ne tiendrait pas (grand plafond de grotte) reste en place tant qu'on n'y touche pas ; dès qu'on le dérange, il s'écroule. Un bloc qui tombe de haut fait mal ; le verre, la glace et les feuilles se brisent ; un coffre garde son contenu."],
     ['✋ Deuxième main et 🛡 bouclier', "La case « main secondaire » est à côté des cases d'armure dans l'inventaire (X échange les deux mains ; elle apparaît à gauche de la barre d'objets, touche-la sur téléphone pour échanger). Une torche en main secondaire éclaire en permanence ; avec un outil ou une épée en main, le clic droit pose le bloc de la main secondaire (torches, blocs de construction…). Bouclier : 6 planches + 1 lingot de fer à l'Établi. Maintiens le clic droit pour le lever (on marche plus lentement) : il arrête tous les coups venus de devant — Ombres, sangliers, flèches, autres joueurs et même les explosions — et repousse l'assaillant. Il s'use à chaque coup arrêté (336 de durabilité)."],
@@ -137,6 +138,8 @@
       { k: 'brightness', t: 'range', label: 'Luminosité', min: 0, max: 100, step: 5, fmt: (v) => (v <= 5 ? 'Sombre' : v >= 95 ? 'Très lumineux' : v + ' %') },
       { k: 'resolution', t: 'range', label: 'Résolution de rendu', min: 40, max: 100, step: 5, fmt: pct, note: 'Baisse-la si le jeu rame.' },
       { k: 'maxFps', t: 'select', label: 'Images par seconde max', opts: [[0, 'Illimitées'], [30, '30'], [60, '60'], [120, '120']] },
+      { k: 'perf', t: 'check', label: '🚀 Optimisation (façon Sodium) : plus d’images par seconde', note: 'Ne dessine plus ce qui est caché : grottes sous tes pieds, intérieur des montagnes, pièces fermées, créatures derrière toi. Le monde est dessiné du plus proche au plus lointain. Réglage de cet appareil, pour tous tes mondes.' },
+      { k: 'perfDynRes', t: 'check', label: 'Résolution dynamique (avec l’optimisation) : baisse la résolution quand ça rame' },
       { k: 'particles', t: 'select', label: 'Particules', opts: [[2, 'Toutes'], [1, 'Réduites'], [0, 'Aucune']] },
       { k: 'smoothLight', t: 'check', label: 'Éclairage doux et ombres dans les coins' },
       { k: 'realLight', t: 'check', label: 'Lumière réaliste (couleurs, flammes qui vacillent, halos)', note: 'Extension Lumière réaliste : sans effet dans un monde créé avec l’extension décochée.' },
@@ -544,7 +547,7 @@
       $('debug').classList.toggle('hidden', !this.debug);
     }
     toggleHud() {
-      $('hud').classList.toggle('bare');
+      this.hudHidden = $('hud').classList.toggle('bare'); // (F1 : sans interface ni main)
     }
     updateDebug() {
       const g = this.game, p = g.player, w = g.world;
@@ -559,7 +562,8 @@
         'Créatures ' + g.entities.mobs.length + ' · objets ' + g.entities.drops.length + ' · particules ' + g.entities.particles.length + '\n' +
         'Faim ' + p.food + ' · saturation ' + p.sat.toFixed(1) + ' · épuisement ' + p.exh.toFixed(2) + '\n' +
         'Visée ' + (t ? CM.blocks[t.id].name + ' (' + t.x + ',' + t.y + ',' + t.z + ')' : '—') + '\n' +
-        'Heure ' + g.time.toFixed(3) + ' · lumière du jour ' + g.daylight.toFixed(2);
+        'Heure ' + g.time.toFixed(3) + ' · lumière du jour ' + g.daylight.toFixed(2) +
+        (g.options.perf ? '\nOptimisation : ' + (g.renderer.stats.culled || 0) + ' sections cachées · résolution ' + Math.round((g.dynRes || 1) * g.options.resolution) + ' %' : '');
     }
 
     toast(msg, type, key) {
@@ -798,9 +802,11 @@
       $('help').innerHTML =
         '<h3>Commandes (modifiables dans Options &gt; Contrôles)</h3><ul>' +
         '<li><b>ZQSD / WASD</b> : se déplacer · <b>Espace</b> : sauter / nager · <b>Maj</b> : courir · <b>C</b> : s’accroupir</li>' +
-        '<li><b>F</b> : ruée · <b>E</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>F1</b> : masquer l’interface · <b>F3</b> : infos</li>' +
+        '<li><b>F</b> : ruée · <b>E</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>V</b> : vue de derrière · <b>P</b> : plein écran</li>' +
         '<li><b>Clic gauche</b> (maintenu) : miner / frapper · <b>Clic droit</b> : poser, manger, utiliser · <b>Clic molette</b> : choisir le bloc visé</li>' +
         '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>Q</b> : jeter</li></ul>' +
+        '<h3>Touches F</h3><ul>' + CM.FKeys.HELP.map(([k, d]) => '<li><b>' + k + '</b> : ' + d + '</li>').join('') +
+        '<li>En maintenant <b>F3</b> : ' + CM.FKeys.COMBOS.filter(([k]) => k !== 'F3 + Q').map(([k, d]) => '<b>' + k.slice(5) + '</b> ' + d).join(' · ') + '</li></ul>' +
         '<h3>Sur téléphone ou tablette</h3><ul>' +
         '<li>Tiens le téléphone en mode paysage. Pouce gauche : le joystick apparaît là où tu poses le doigt.</li>' +
         '<li>Glisse ailleurs pour regarder. <b>Touche un bloc</b> pour poser à côté, utiliser ou frapper ; <b>garde le doigt appuyé dessus</b> pour le casser (visée au doigt, modifiable dans Options › Contrôles).</li>' +
@@ -1456,6 +1462,12 @@
         if (b.tier > 1) bits.push('Pioche en ' + CM.TIER_NAMES[b.tier] + ' requise');
         if (bits.length) h += '<div class="tt-sub">' + bits.join(' · ') + '</div>';
       }
+      // infobulles avancées (F3+H) : nom interne, identifiant, durabilité
+      if (this.advTips) {
+        const key = info.key || (info.block && info.block.key) || '';
+        if (info.type === 'armor' || info.type === 'shield') h += '<div class="tt-sub">Durabilité : ' + Math.max(0, info.maxDur - ((s && s.xp) || 0)) + ' / ' + info.maxDur + '</div>';
+        h += '<div class="tt-id">craftmine:' + esc(String(key).toLowerCase()) + ' (#' + id + ')</div>';
+      }
       return h;
     }
 
@@ -1584,6 +1596,8 @@
     }
     openNewWorld() {
       $('seed').value = '';
+      const pf = $('nw-ext-perf');
+      if (pf) pf.checked = !!this.game.options.perf;
       this.show('newworld');
     }
     newWorldSettings() {
@@ -1716,7 +1730,7 @@
             g.applyOptions();
           });
         } else if (it.t === 'check') {
-          d.innerHTML = '<label><input type="checkbox" /> ' + it.label + '</label>';
+          d.innerHTML = '<label><input type="checkbox" /> ' + it.label + '</label>' + (it.note ? '<div class="opt-note">' + it.note + '</div>' : '');
           const inp = d.querySelector('input');
           inp.checked = !!o[it.k];
           inp.addEventListener('change', () => {

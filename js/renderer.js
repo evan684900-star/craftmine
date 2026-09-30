@@ -563,6 +563,7 @@
       this.freeMesh(sec.opaque);
       this.freeMesh(sec.water);
       this.sections.delete(k);
+      this.visDirty = true;
     }
     freeAll() {
       for (const k of [...this.sections.keys()]) this.freeSection(k);
@@ -574,9 +575,11 @@
         opaque: m.opaque ? this.makeMesh(m.opaque) : null,
         water: m.water ? this.makeMesh(m.water) : null,
         emit: m.emit || null,
+        vis: m.vis || null,
         cx, sy, cz,
       });
       world.dirty.delete(k);
+      this.visDirty = true;
     }
 
     // Construit les sections manquantes/modifiées autour du joueur, les plus proches d'abord.
@@ -741,7 +744,10 @@
       gl.uniform2f(cp.u.uWaveOrigin, cam[0] % ((2 * Math.PI * 1000) / 1.3), cam[2] % ((2 * Math.PI * 1000) / 1.1));
       let drawn = 0, quads = 0;
       const waterList = [];
-      for (const sec of this.sections.values()) {
+      // extension Optimisation : seulement les sections qu'on peut voir depuis la caméra, des plus proches aux plus lointaines
+      if (!this.cull) this.stats.culled = 0;
+      const list = this.cull ? this.visibleSections(cam, env) : this.sections.values();
+      for (const sec of list) {
         if (!sec.opaque && !sec.water) continue;
         const x0 = sec.cx * 16 - cam[0], y0 = MINY + sec.sy * 16 - cam[1], z0 = sec.cz * 16 - cam[2];
         if (!CM.aabbInFrustum(this.planes, x0, y0, z0, x0 + 16, y0 + 16, z0 + 16)) continue;
@@ -768,6 +774,7 @@
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       if (state.target) this.drawOutline(state.target, cam);
+      if (state.lines) this.drawLines(state.lines);
       if (state.overlay.n) {
         gl.depthMask(false);
         gl.enable(gl.POLYGON_OFFSET_FILL);
@@ -818,6 +825,97 @@
       gl.disable(gl.BLEND);
     }
 
+    // Extension Optimisation (comme Sodium et Minecraft) : parcours des sections depuis celle de la caméra,
+    // en ne passant que par où l'air (ou le verre, l'eau…) relie deux faces d'une section, et toujours en
+    // s'éloignant de la caméra. Les grottes sous nos pieds, les salles fermées, l'intérieur des montagnes
+    // ne sont plus dessinés. L'ordre du parcours (du plus proche au plus lointain) aide aussi la carte graphique.
+    visibleSections(cam, env) {
+      const rd = this.renderDist, R = rd + 1, Wd = 2 * R + 1;
+      const ccx = Math.floor(cam[0] / 16), ccz = Math.floor(cam[2] / 16);
+      const csy = Math.floor((cam[1] - MINY) / 16);
+      // brouillard opaque de la couleur du ciel (Nether, lave) : rien à voir au-delà
+      const fs = env.flatSky, fc = env.fogColor;
+      const fogEnd = fs && fs[0] === fc[0] && fs[1] === fc[1] && fs[2] === fc[2] ? env.fog[1] + 2 : Infinity;
+      const key = ccx + ',' + csy + ',' + ccz + ',' + rd + ',' + Math.round(fogEnd);
+      if (!this.visDirty && key === this.visKey) return this.visList;
+      this.visKey = key;
+      this.visDirty = false;
+      const N = Wd * Wd * SY;
+      if (!this.visSeen || this.visSeen.length < N) {
+        this.visSeen = new Uint8Array(N);
+        this.visDirs = new Uint8Array(N);
+        this.visFrom = new Int8Array(N);
+        this.visQ = new Int32Array(N);
+      }
+      const seen = this.visSeen, dirs = this.visDirs, from = this.visFrom, q = this.visQ;
+      seen.fill(0, 0, N);
+      const out = [];
+      const r2 = (rd + 0.5) * (rd + 0.5);
+      const idx = (dx, sy, dz) => ((dx + R) * SY + sy) * Wd + (dz + R);
+      let qh = 0, qt = 0;
+      const push = (dx, sy, dz, f, d) => {
+        const i = idx(dx, sy, dz);
+        if (seen[i]) return;
+        seen[i] = 1;
+        from[i] = f;
+        dirs[i] = d;
+        q[qt++] = i;
+      };
+      if (csy >= 0 && csy < SY) push(0, csy, 0, -1, 0);
+      else {
+        // caméra au-dessus (ou au-dessous) du monde : on entre par toute la couche du haut (du bas)
+        const top = csy >= SY, sy0 = top ? SY - 1 : 0;
+        for (let dx = -rd; dx <= rd; dx++) for (let dz = -rd; dz <= rd; dz++) if (dx * dx + dz * dz <= r2) push(dx, sy0, dz, top ? 2 : 3, top ? 8 : 4);
+      }
+      const DX = [1, -1, 0, 0, 0, 0], DY = [0, 0, 1, -1, 0, 0], DZ = [0, 0, 0, 0, 1, -1];
+      while (qh < qt) {
+        const i = q[qh++];
+        const dz = (i % Wd) - R, sy = Math.floor(i / Wd) % SY, dx = Math.floor(i / (Wd * SY)) - R;
+        const cx = ccx + dx, cz = ccz + dz;
+        const sec = this.sections.get(CM.skey(cx, sy, cz));
+        if (sec) out.push(sec);
+        const f = from[i], d0 = dirs[i], vis = sec && sec.vis;
+        for (let d = 0; d < 6; d++) {
+          if (d0 & (1 << (d ^ 1))) continue; // jamais en revenant vers la caméra
+          if (f >= 0 && vis && !(vis[f] & (1 << d))) continue; // pas de passage entre ces deux faces
+          const nx = dx + DX[d], ny = sy + DY[d], nz = dz + DZ[d];
+          if (ny < 0 || ny >= SY || nx * nx + nz * nz > r2) continue;
+          if (fogEnd < Infinity) {
+            const ex = Math.max(0, Math.abs((ccx + nx) * 16 + 8 - cam[0]) - 8), ey = Math.max(0, Math.abs(MINY + ny * 16 + 8 - cam[1]) - 8), ez = Math.max(0, Math.abs((ccz + nz) * 16 + 8 - cam[2]) - 8);
+            if (ex * ex + ey * ey + ez * ez > fogEnd * fogEnd) continue;
+          }
+          push(nx, ny, nz, d ^ 1, d0 | (1 << d));
+        }
+      }
+      this.stats.culled = this.sections.size - out.length;
+      this.visSet = new Set(out);
+      return (this.visList = out);
+    }
+
+    // Le point est-il dans une section vue au dernier parcours ? (sections pas encore construites : oui)
+    sectionShown(x, y, z) {
+      if (!this.visSet) return true;
+      const sy = Math.floor((y - MINY) / 16);
+      if (sy < 0 || sy >= SY) return true;
+      const sec = this.sections.get(CM.skey(Math.floor(x / 16), sy, Math.floor(z / 16)));
+      return !sec || this.visSet.has(sec);
+    }
+
+    // Traits de débogage (déjà relatifs à la caméra) : [{ v: [x, y, z, …], c: [r, g, b, a] }]
+    drawLines(list) {
+      const gl = this.gl;
+      gl.useProgram(this.line.p);
+      gl.uniformMatrix4fv(this.line.u.uViewProj, false, this.viewProj);
+      gl.bindVertexArray(this.lineVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.lineVbo);
+      for (const l of list) {
+        if (!l.v.length) continue;
+        gl.uniform4f(this.line.u.uColor, l.c[0], l.c[1], l.c[2], l.c[3]);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(l.v), gl.STREAM_DRAW);
+        gl.drawArrays(gl.LINES, 0, l.v.length / 3);
+      }
+      gl.bindVertexArray(null);
+    }
     drawOutline(t, cam) {
       const gl = this.gl;
       const e = 0.003;

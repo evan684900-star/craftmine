@@ -164,6 +164,24 @@
     ctx.fillText('N', W / 2 - 3, 10);
   }
   C.mapT = 0;
+  const mode0 = (hudOn, showBig, size) => (hudOn ? 1 : 0) + (showBig ? 2 : 0) + size * 4;
+  // Coin en haut à droite : horloge (coordonnées, biome…), puis mini-carte, puis effets, sans se chevaucher
+  // (le bloc de l'horloge grandit avec les options affichées).
+  function stackHud(g) {
+    const clock = $('clock'), mini = $('minimap'), eff = $('effects');
+    const par = clock && clock.offsetParent;
+    if (!par || !eff) return;
+    const top = par.getBoundingClientRect().top, cr = clock.getBoundingClientRect();
+    let y = Math.round((cr.height ? cr.bottom - top : 12) + 8);
+    if (mini && !mini.classList.contains('hidden')) {
+      const t = y + 'px';
+      if (mini.style.top !== t) mini.style.top = t;
+      y += Math.round(mini.getBoundingClientRect().height) + 8;
+    }
+    if (g.touch && g.touch.enabled) y = Math.max(y, 150); // (boutons tactiles)
+    const t = y + 'px';
+    if (eff.style.top !== t) eff.style.top = t;
+  }
   C.updateMaps = function (g, dt) {
     const mini = $('minimap'), big = $('bigmap');
     if (!mini || !big) return;
@@ -173,7 +191,12 @@
     mini.classList.toggle('hidden', !hudOn || !size || showBig);
     mini.classList.toggle('large', size === 2);
     big.classList.toggle('hidden', !hudOn || !showBig);
-    const mode = (hudOn ? 1 : 0) + (showBig ? 2 : 0) + size * 4;
+    C.stackT = (C.stackT || 0) - dt;
+    if (C.stackT <= 0 || mode0(hudOn, showBig, size) !== C.mapMode) {
+      C.stackT = 0.2;
+      stackHud(g);
+    }
+    const mode = mode0(hudOn, showBig, size);
     C.mapT -= dt;
     if (C.mapT > 0 && mode === C.mapMode) return;
     C.mapMode = mode;

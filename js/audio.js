@@ -4,7 +4,7 @@
   const A = (CM.Audio = { ctx: null, master: null, volume: 0.5, noise: null, cat: { sfx: 1, mob: 1, ui: 1 } });
   let MUL = 1; // volume de la catégorie du son en cours
   const MOB_SOUNDS = new Set(['shadow', 'shadow_hurt', 'grunt', 'squeak', 'baa', 'hmm', 'golem', 'cluck', 'moo', 'hiss', 'skitter', 'rattle', 'squish', 'growl', 'neigh', 'flop', 'dolphin', 'cackle', 'huh', 'warden', 'teleport', 'roar']);
-  const UI_SOUNDS = new Set(['click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant', 'vlevel']);
+  const UI_SOUNDS = new Set(['shutter', 'click', 'craft', 'level', 'objective', 'victory', 'pop', 'note', 'xp', 'enchant', 'vlevel']);
 
   A.init = function () {
     if (A.ctx) {
@@ -257,6 +257,10 @@
         break;
       case 'click':
         tone(t, 0.03, 'square', 1200, 800, 0.05);
+        break;
+      case 'shutter': // appareil photo (capture d'écran)
+        noise(t, 0.04, 'highpass', 3000, 0.7, 0.2);
+        noise(t + 0.09, 0.06, 'bandpass', 1800, 1.2, 0.16);
         break;
       case 'burn':
         noise(t, 0.2, 'highpass', 1800, 0.5, 0.08);

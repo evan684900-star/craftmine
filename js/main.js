@@ -15,7 +15,7 @@
   CM.DEFAULT_OPTIONS = {
     // graphismes
     renderDist: 8, fov: 75, dynFov: true, brightness: 30, clouds: true, smoothLight: true, waving: true, realLight: true, halos: true,
-    particles: 2, viewBob: true, showHand: true, resolution: 100, maxFps: 0,
+    particles: 2, viewBob: true, showHand: true, resolution: 100, maxFps: 0, perf: false, perfDynRes: true,
     // contrôles
     sens: 1, invertY: false, toggleSprint: false, autoJump: false, binds: null,
     // jeu
@@ -109,6 +109,7 @@
       this.overlay = new CM.Batch();
       this.hand = new CM.Batch();
       this.translucent = new CM.Batch();
+      CM.FKeys.init(); // (éclair de capture, voyant d'enregistrement)
       this.bindInput();
       this.bindMenus();
       this.refreshMenu();
@@ -136,13 +137,17 @@
       const o = this.options;
       const r = this.renderer;
       r.renderDist = o.renderDist;
-      r.resolution = o.resolution / 100;
       r.brightness = o.brightness / 100;
       r.clouds = o.clouds;
       const mo = CM.Mesher.opts;
-      if (mo.smoothLight !== o.smoothLight || mo.waving !== o.waving) {
+      // extension Optimisation (façon Sodium) : sections cachées, créatures cachées, résolution dynamique
+      r.cull = !!o.perf;
+      if (!o.perf || !o.perfDynRes) this.dynRes = 1;
+      r.resolution = (o.resolution / 100) * (this.dynRes || 1);
+      if (mo.smoothLight !== o.smoothLight || mo.waving !== o.waving || mo.cull !== !!o.perf) {
         mo.smoothLight = o.smoothLight;
         mo.waving = o.waving;
+        mo.cull = !!o.perf;
         this.remeshAll();
       }
       CM.Audio.setVolume(o.volume / 100);
@@ -943,7 +948,8 @@
       });
       document.addEventListener('mousemove', (e) => {
         if (!this.locked) return;
-        const s = 0.0023 * this.options.sens * CM.Guns.sensMul(this.player); // (plus doux dans la lunette)
+        const s = 0.0023 * this.options.sens * CM.Guns.sensMul(this.player) * CM.FKeys.sensMul(); // (plus doux dans la lunette, au zoom)
+        if (CM.FKeys.mouse(e.movementX * s, e.movementY * s * (this.options.invertY ? -1 : 1))) return; // caméra cinématique (F8)
         this.player.yaw -= e.movementX * s;
         this.player.pitch -= e.movementY * s * (this.options.invertY ? -1 : 1);
         this.player.pitch = CM.clamp(this.player.pitch, -1.55, 1.55);
@@ -990,19 +996,12 @@
         }
         const c = e.code;
         const K = this.binds;
-        if (['Space', 'Tab', 'F3', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
+        if (['Space', 'Tab', K.dash, K.jump].includes(c) || c.startsWith('Arrow')) e.preventDefault();
+        // touches F1 à F11, et F3 + touche
+        if (CM.FKeys.keydown(this, e)) return;
         // mini-carte : masquée / petite / grande
         if (c === K.map && !this.ui.invOpen) {
           CM.Comfort.cycleMap(this);
-          return;
-        }
-        if (c === 'F3') {
-          this.ui.toggleDebug();
-          return;
-        }
-        if (c === 'F1') {
-          e.preventDefault();
-          this.ui.toggleHud();
           return;
         }
         // tchat (et commandes, aussi en solo) ; « / » l'ouvre avec la commande commencée
@@ -1038,8 +1037,12 @@
       });
       window.addEventListener('keyup', (e) => {
         inp.keys[e.code] = false;
+        CM.FKeys.keyup(this, e);
       });
-      window.addEventListener('blur', () => this.clearInput());
+      window.addEventListener('blur', () => {
+        this.clearInput();
+        CM.FKeys.blur();
+      });
       // application mise en arrière-plan (téléphone) : pause et sauvegarde
       document.addEventListener('visibilitychange', () => {
         if (document.hidden && this.state === 'playing' && !this.paused && !this.autostart) {
@@ -1078,6 +1081,11 @@
       on('btn-fs', () => this.toggleFullscreen());
       on('btn-fs2', () => this.toggleFullscreen());
       for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => this.fsLabels());
+      // extension Optimisation : réglage de l'appareil (pas du monde), appliqué tout de suite
+      $('nw-ext-perf').addEventListener('change', (e) => {
+        this.options.perf = e.target.checked;
+        this.applyOptions();
+      });
       on('btn-nw-back', () => {
         this.ui.hide('newworld');
         this.ui.show('menu');
@@ -1836,21 +1844,46 @@
       CM.Audio.play('golem');
     }
 
+    // Extension Optimisation : résolution dynamique. Quand les images par seconde tombent, on dessine
+    // moins de pixels (jusqu'à 50 %) ; quand ça va mieux, on remonte doucement.
+    dynResolution(dt) {
+      const o = this.options;
+      if (!o.perf || !o.perfDynRes || this.paused) return;
+      this.dynT = (this.dynT || 0) + dt;
+      if (this.dynT < 1.5) return;
+      this.dynT = 0;
+      const target = Math.min(50, (o.maxFps > 0 ? o.maxFps : 60) * 0.85);
+      let k = this.dynRes || 1;
+      if (this.fps < target * 0.8 && k > 0.5) k = Math.max(0.5, Math.round((k - 0.1) * 100) / 100);
+      else if (this.fps > target * 1.1 && k < 1) k = Math.min(1, Math.round((k + 0.05) * 100) / 100);
+      if (k === this.dynRes) return;
+      this.dynRes = k;
+      this.renderer.resolution = (o.resolution / 100) * k;
+    }
+
     // ------------------------------------------------ vue de derrière ----
     // Vue à la 3e personne : { dist, c (véhicule) } ou null.
     thirdView() {
       const p = this.player;
       if (!p || !p.alive || p.sleeping) return null;
       const c = p.riding !== null && p.riding !== undefined && this.entities.cartByUid ? this.entities.cartByUid(p.riding) : null;
-      if (c && CM.VEH[c.type]) return this.vehView === false ? null : { dist: CM.Vehicles.camDist(c), c };
-      return this.view3 ? { dist: 4, c: null } : null;
+      if (c && CM.VEH[c.type]) {
+        const m = this.vehView === undefined ? 1 : this.vehView; // (de derrière par défaut en véhicule)
+        return m ? { dist: CM.Vehicles.camDist(c), c, front: m === 2 } : null;
+      }
+      return this.viewMode ? { dist: 4, c: null, front: this.viewMode === 2 } : null;
     }
-    toggleView() {
+    // V : 1re personne ⇄ derrière ; F5 (cycle) : 1re personne → derrière → de face
+    toggleView(cycle) {
       const p = this.player;
       const c = p && p.riding !== null && p.riding !== undefined ? this.entities.cartByUid(p.riding) : null;
-      if (c && CM.VEH[c.type]) this.vehView = this.vehView === false;
-      else this.view3 = !this.view3;
-      this.ui.toast(this.thirdView() ? '👁 Vue de derrière' : '👁 Vue à la 1re personne', 'info', 'view');
+      const veh = !!(c && CM.VEH[c.type]);
+      const cur = veh ? (this.vehView === undefined ? 1 : this.vehView) : this.viewMode || 0;
+      const next = cycle ? (cur + 1) % 3 : cur ? 0 : 1;
+      if (veh) this.vehView = next;
+      else this.viewMode = next;
+      const t = this.thirdView();
+      this.ui.toast(t ? (t.front ? '👁 Vue de face' : '👁 Vue de derrière') : '👁 Vue à la 1re personne', 'info', 'view');
     }
     // État de notre personnage pour le dessiner comme un autre joueur.
     selfModel() {
@@ -2090,6 +2123,8 @@
       if (this.state !== 'playing') return;
       try {
         this.touch.frame();
+        CM.FKeys.frame(this, dt); // caméra cinématique, durée de la vidéo
+        this.dynResolution(dt);
         // en multijoueur, la pause ne fige pas le monde (les autres continuent de jouer)
         if (!this.paused || this.net.active) this.update(dt);
         this.render();
@@ -2166,13 +2201,19 @@
       let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn, p.z];
       // vue de derrière (touche V ; par défaut dans un véhicule)
       const third = this.thirdView();
+      let camYaw = p.yaw, camPitch = p.pitch;
       if (third) {
         const cp0 = Math.cos(p.pitch), f0 = [-Math.sin(p.yaw) * cp0, Math.sin(p.pitch), -Math.cos(p.yaw) * cp0];
         const eye = third.c ? [third.c.x, third.c.y + CM.VEH[third.c.type].h + 0.5, third.c.z] : [p.x, p.y + 1.55, p.z];
-        cam = CM.Vehicles.thirdPerson(this, eye, f0, third.dist);
+        if (third.front) {
+          // vue de face (F5) : la caméra se place devant et regarde le joueur
+          cam = CM.Vehicles.thirdPerson(this, eye, [-f0[0], -f0[1], -f0[2]], third.dist);
+          camYaw = p.yaw + Math.PI;
+          camPitch = -p.pitch;
+        } else cam = CM.Vehicles.thirdPerson(this, eye, f0, third.dist);
       }
       const env = this.computeEnv(cam);
-      const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+      const cy = Math.cos(camYaw), sy = Math.sin(camYaw), cp = Math.cos(camPitch), sp = Math.sin(camPitch);
       const right = [cy, 0, -sy];
       const up = [sy * sp, cp, cy * sp];
       const fwd = [-sy * cp, sp, -cy * cp];
@@ -2180,7 +2221,16 @@
       this.overlay.reset(cam);
       this.hand.reset();
       this.translucent.reset(cam);
-      this.entities.render(this.batch, { right, up }, this.clock);
+      // extension Optimisation : on ne dessine pas les créatures derrière la caméra ni celles cachées par le terrain
+      const R = this.renderer;
+      const cull = R.cull
+        ? (x, y, z, m) => {
+            const dx = x - cam[0], dy = y - cam[1], dz = z - cam[2];
+            if (dx * fwd[0] + dy * fwd[1] + dz * fwd[2] < -m) return false;
+            return dx * dx + dy * dy + dz * dz < 400 || R.sectionShown(x, y, z);
+          }
+        : null;
+      this.entities.render(this.batch, { right, up, cull }, this.clock);
       if (this.enchTables.size) {
         const rdt = Math.min(0.1, this.clock - (this.lastRenderClock || this.clock));
         this.renderEnchantTables(rdt);
@@ -2224,18 +2274,19 @@
         const bx = m.box || CM.FULL_BOX;
         this.overlay.box(M, bx[0] - 0.003, bx[1] - 0.003, bx[2] - 0.003, bx[3] + 0.003, bx[4] + 0.003, bx[5] + 0.003, CM.Textures.layer['crack_' + stage], 1, 1, 1);
       }
-      if (p.alive && !third) p.buildHand(this.hand, this.clock);
+      if (p.alive && !third && !this.ui.hudHidden) p.buildHand(this.hand, this.clock); // (F1 : sans la main)
       else if (p.alive && third && !CM.Effects.invisible(p)) this.net.drawPlayer(this.batch, this.selfModel()); // soi-même, vu de derrière
       const t = p.target;
       const dyn = this.options.dynFov;
-      const targetFov = (this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0)) * CM.Guns.fovMul(p); // (visée)
+      const targetFov = (this.options.fov + (dyn && p.sprinting ? 6 : 0) + (dyn && p.dashTime > 0 ? 12 : 0) + (dyn && p.flying && p.sprinting ? 6 : 0) - (dyn && p.bowT > 0 ? 12 * Math.min(1, p.bowT) : 0)) * CM.Guns.fovMul(p) * CM.FKeys.fovMul(); // (visée, zoom F10)
       this.fovCur += (targetFov - (this.fovCur || this.options.fov)) * 0.2;
       this.renderer.render({
         env,
         cam,
-        yaw: p.yaw,
-        pitch: p.pitch,
+        yaw: camYaw,
+        pitch: camPitch,
         fov: this.fovCur,
+        lines: CM.FKeys.lines(this, cam), // bordures des tronçons, boîtes, zones des monstres
         batch: this.batch,
         overlay: this.overlay,
         hand: this.hand,
@@ -2243,6 +2294,7 @@
         glow: env.real && this.options.halos !== false ? this.glowQuads(right, up, cam) : null,
         target: t && this.player.alive && !this.ui.invOpen ? { x: t.x, y: t.y, z: t.z, h: CM.blocks[t.id].height, box: t.box } : null,
       });
+      CM.FKeys.afterRender(this); // capture d'écran (F2)
       this.net.updateTags(cam);
       const nowC = performance.now(), rdtC = Math.min(0.2, Math.max(0, (nowC - (this.comfortT || nowC)) / 1000));
       this.comfortT = nowC;
