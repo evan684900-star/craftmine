@@ -58,15 +58,16 @@ la fin de chaque ligne sauf la dernière.
 | `type` | `normal`, `ville`, `plat`, `archipel`, `amplifie`. Seulement pour un nouveau monde |
 | `mode` | `survie` ou `creatif` |
 | `difficulte` | `paisible`, `facile`, `normal`, `difficile` |
-| `extensions` | Liste parmi `lumiere`, `electricite`, `armes`, `vehicules`, `gravite`. Seulement pour un nouveau monde |
+| `extensions` | Liste parmi `lumiere`, `electricite`, `armes`, `vehicules`, `gravite`, par exemple `["lumiere", "vehicules", "armes"]`. S'applique aussi au monde déjà créé (les minerais de l'Électricité n'apparaissent que dans les zones jamais visitées) |
 | `triches` | `true` : tout le monde peut utiliser les commandes de triche |
 | `pvp` | `true` : combats entre joueurs |
 | `garderInventaire` | `true` : on garde son inventaire à la mort |
 | `maxJoueurs` | Nombre de joueurs en même temps (10 par défaut, 20 au plus) |
 | `motDePasseAdmin` | Mot de passe de `/admin` (4 caractères au moins) |
 
-Les réglages marqués « seulement pour un nouveau monde » servent à la création du monde
-(`craftmine nouveau-monde`). Tous les autres s'appliquent au redémarrage, même sur le monde déjà créé :
+`graine` et `type` servent seulement à la création du monde (`craftmine nouveau-monde`). Tous les
+autres s'appliquent au redémarrage, même sur le monde déjà créé (le journal affiche les extensions
+actives, et prévient si un nom est mal écrit) :
 un `/mode` ou `/difficulte` tapé dans le jeu dure donc jusqu'au prochain redémarrage.
 
 ## Administrateurs

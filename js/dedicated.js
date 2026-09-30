@@ -19,9 +19,15 @@
   };
   D.log = log;
 
-  // Réglages du nouveau monde (config.json de la machine).
+  // Extensions de config.json : sans accents ni majuscules, au singulier comme au pluriel.
+  const EXTS = ['lumiere', 'electricite', 'armes', 'vehicules', 'gravite'];
+  const extName = (s) => {
+    const n = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    return EXTS.find((k) => k === n || k === n + 's' || k.replace(/s$/, '') === n) || null;
+  };
+  // Réglages du monde (config.json de la machine).
   function worldSettings(c) {
-    const ext = [].concat(c.extensions || []);
+    const ext = [].concat(c.extensions || []).map(extName);
     return {
       mode: c.mode === 'creatif' || c.mode === 'creative' ? 'creative' : 'survival',
       difficulty: ['peaceful', 'easy', 'normal', 'hard'].includes(c.difficulte) ? c.difficulte : { paisible: 'peaceful', facile: 'easy', difficile: 'hard' }[c.difficulte] || 'normal',
@@ -30,7 +36,8 @@
       bonusChest: !!c.coffreBonus,
       dayCycle: c.cycleJour !== false,
       guestCheats: !!c.triches,
-      ext: { tech: ext.includes('electricite'), light: ext.includes('lumiere') || c.lumiere !== false, gravity: ext.includes('gravite'), guns: ext.includes('armes'), vehicles: ext.includes('vehicules') },
+      // (sans liste d'extensions : Lumière réaliste seule, comme config.exemple.json)
+      ext: { tech: ext.includes('electricite'), light: c.extensions === undefined || ext.includes('lumiere'), gravity: ext.includes('gravite'), guns: ext.includes('armes'), vehicles: ext.includes('vehicules') },
     };
   }
   function seedOf(v) {
@@ -45,6 +52,8 @@
     document.body.classList.add('dedicated');
     const c = (D.cfg = (window.cmServerConfig ? await window.cmServerConfig() : null) || {});
     D.max = Math.max(2, Math.min(20, c.maxJoueurs | 0 || 10));
+    const unknown = [].concat(c.extensions || []).filter((x) => !extName(x));
+    if (unknown.length) log('⚠ Extension inconnue dans config.json : ' + unknown.join(', ') + ' (possibles : ' + EXTS.join(', ') + ')');
     // (rien à dessiner : on économise la machine)
     Object.assign(g.options, { maxFps: 20, renderDist: 4, particles: 0, touchControls: 'off', toasts: 0, perf: false, autosave: 60, minimap: 0, keepInventory: !!c.garderInventaire });
     g.applyOptions();
@@ -56,6 +65,11 @@
       log('⚠ Sauvegarde illisible : ' + e.message + ' (un nouveau monde est créé)');
     }
     if (save && save.seed !== undefined) {
+      // mode, difficulté, triches et extensions : ceux de config.json, même pour un monde déjà créé
+      // (le jeu vérifie les extensions en cours de partie ; les minerais de l'Électricité
+      // n'apparaissent que dans les zones encore jamais visitées)
+      const ws = worldSettings(c);
+      save.settings = Object.assign({}, save.settings, { mode: ws.mode, difficulty: ws.difficulty, guestCheats: ws.guestCheats, ext: ws.ext });
       log('🌍 Chargement du monde (graine ' + save.seed + ')…');
       await g.startWorld(save.seed, save);
     } else {
@@ -63,11 +77,6 @@
       log('🌍 Création d’un nouveau monde (graine ' + seed + ')…');
       await g.startWorld(seed, null, worldSettings(c));
     }
-    // mode, difficulté et triches : ceux de config.json, même pour un monde déjà créé
-    const ws = worldSettings(c);
-    g.mode = ws.mode;
-    g.difficulty = ws.difficulty;
-    g.settings.guestCheats = ws.guestCheats;
     g.ui.hide('start');
     parkPlayer(g);
     // journal de la machine : tout ce qui s'écrit dans le tchat (messages, arrivées, départs, commandes)
@@ -102,6 +111,9 @@
     }
     g.net.rules.cmds = !!(g.settings && g.settings.guestCheats);
     g.net.sendCfg();
+    const e = g.settings.ext || {};
+    const on = [e.light && 'Lumière réaliste', e.tech && 'Électricité', e.guns && 'Armes à feu', e.vehicles && 'Véhicules', e.gravity && 'Gravité réaliste'].filter(Boolean);
+    log('🧩 Extensions : ' + (on.length ? on.join(', ') : 'aucune') + ' · mode ' + (g.mode === 'creative' ? 'créatif' : 'survie'));
     log('✅ Serveur ouvert ! On le rejoint avec le bouton « Serveur » du jeu.');
   }
 
