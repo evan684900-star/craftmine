@@ -10,7 +10,7 @@
   // Réglages par défaut (modifiables dans Options).
   CM.DEFAULT_BINDS = {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR', horn: 'KeyH', view: 'KeyV',
+    sneak: 'KeyC', dash: 'KeyF', inventory: 'KeyE', drop: 'KeyQ', swap: 'KeyX', map: 'KeyM', reload: 'KeyR', horn: 'KeyH', view: 'KeyV', fullscreen: 'KeyP',
   };
   CM.DEFAULT_OPTIONS = {
     // graphismes
@@ -23,7 +23,7 @@
     // audio
     volume: 50, sfxVolume: 100, mobVolume: 100, uiVolume: 100,
     // interface
-    guiScale: 100, crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true, minimap: 1,
+    guiScale: 100, autoFs: 'touch', crosshair: 'cross', showCoords: false, showFps: false, showBiome: true, itemNames: true, minimap: 1,
     // apparence (multijoueur)
     lookSkin: 0, lookHair: 0, lookShirt: 'blue', lookPants: 'jeans', lookCape: 'none',
     // écran tactile
@@ -1032,6 +1032,7 @@
         if (c === K.drop) this.dropHeld(e.ctrlKey);
         if (c === K.swap && !e.repeat && this.player.alive) this.swapHands();
         if (c === K.view && !e.repeat) this.toggleView();
+        if (c === K.fullscreen && !e.repeat) this.toggleFullscreen();
         inp.keys[c] = true;
         if (!e.repeat) inp.pressed[c] = true;
       });
@@ -1074,6 +1075,9 @@
         this.ui.hide('menu');
         this.ui.openNewWorld();
       });
+      on('btn-fs', () => this.toggleFullscreen());
+      on('btn-fs2', () => this.toggleFullscreen());
+      for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => this.fsLabels());
       on('btn-nw-back', () => {
         this.ui.hide('newworld');
         this.ui.show('menu');
@@ -1270,9 +1274,10 @@
       }
     }
 
-    // Plein écran automatique sur téléphone (là où le navigateur le permet).
+    // Plein écran automatique en lançant une partie (option : sur téléphone, toujours ou jamais).
     maybeFullscreen() {
-      if (!this.touch.enabled || document.fullscreenElement) return;
+      const mode = this.options.autoFs || 'touch';
+      if (mode === 'never' || (mode === 'touch' && !this.touch.enabled) || this.isFullscreen()) return;
       const el = document.documentElement;
       const fn = el.requestFullscreen || el.webkitRequestFullscreen;
       if (!fn) return;
@@ -1282,6 +1287,46 @@
       } catch (e) {
         /* ignore */
       }
+    }
+
+    isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+    // Plein écran : bouton du menu, du menu pause, du téléphone, ou touche P.
+    toggleFullscreen() {
+      const d = document, el = d.documentElement;
+      try {
+        if (this.isFullscreen()) {
+          const ex = d.exitFullscreen || d.webkitExitFullscreen;
+          if (ex) ex.call(d);
+          return;
+        }
+        const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!fn) {
+          // (iPhone : pas de plein écran pour les pages, sauf depuis l'écran d'accueil)
+          const ios = /iPhone|iPod/.test(navigator.userAgent);
+          this.ui.toast(ios ? 'Sur iPhone : touche Partager puis « Sur l’écran d’accueil », et lance le jeu depuis son icône : il s’ouvre en plein écran.' : 'Ce navigateur ne permet pas le plein écran', 'info', 'fs');
+          return;
+        }
+        const pr = fn.call(el, { navigationUI: 'hide' });
+        // en jeu : on reprend la souris si le passage en plein écran l'a libérée
+        const relock = () => {
+          if (this.state === 'playing' && !this.paused && !this.touch.enabled && !this.locked && !this.ui.invOpen && !this.net.chatOpen) this.captureMouse();
+        };
+        if (pr && pr.then) pr.then(relock).catch(() => this.ui.toast('Le navigateur a refusé le plein écran', 'warn', 'fs'));
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    // Libellé des boutons de plein écran.
+    fsLabels() {
+      const on = this.isFullscreen();
+      for (const id of ['btn-fs', 'btn-fs2']) {
+        const b = $(id);
+        if (b) b.textContent = on ? '⛶ Quitter le plein écran' : '⛶ Plein écran';
+      }
+      const t = $('t-fs');
+      if (t) t.classList.toggle('on', on);
     }
 
     refreshMenu() {

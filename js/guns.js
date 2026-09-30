@@ -8,7 +8,8 @@
   const r2 = (v) => Math.round(v * 100) / 100;
   const $ = (id) => document.getElementById(id);
   const GRENADE_FUSE = 3;
-  const POWER = { missile: 3.6, grenade: 2.6, hgrenade: 3 };
+  const POWER = { missile: 3.6, grenade: 2.6, hgrenade: 3, shell: 4.4 }; // (shell : obus du char)
+  const PROJ = new Set(Object.keys(POWER));
   const glassy = (b) => b && /GLASS|ICE$/.test(b.key) && !b.unbreakable && b.hardness >= 0 && b.hardness < 1;
 
   // --------------------------------------------------------- modèles --
@@ -559,7 +560,7 @@
   // ------------------------------------------- projectiles (roquette, grenades) --
   const upd0 = E.updateSpecialArrow, ren0 = E.renderSpecialArrow;
   E.updateSpecialArrow = function (a, dt) {
-    if (a.kind !== 'missile' && a.kind !== 'grenade' && a.kind !== 'hgrenade') return upd0.call(this, a, dt);
+    if (!PROJ.has(a.kind)) return upd0.call(this, a, dt);
     const g = this.game, w = g.world, L = CM.Textures.layer;
     const boom = () => {
       a.dead = true;
@@ -605,7 +606,10 @@
         } else a.y = ny;
       }
     }
-    if (a.kind === 'missile') {
+    if (a.kind === 'shell') {
+      a.vy -= 6 * dt;
+      if (Math.random() < dt * 25) this.burst(L.smoke, a.x, a.y, a.z, 1, { speed: 0.3, grav: -0.3, life: 0.6, size: 0.15 });
+    } else if (a.kind === 'missile') {
       a.vy -= 2 * dt;
       if (Math.random() < dt * 40) this.burst(L.smoke, a.x, a.y, a.z, 1, { speed: 0.4, grav: -0.3, life: 0.8, size: 0.2 });
       if (Math.random() < dt * 30) this.burst(L.muzzle, a.x, a.y, a.z, 1, { speed: 0.5, grav: 0, life: 0.15, size: 0.12, emissive: true });
@@ -616,9 +620,9 @@
     return true;
   };
   E.renderSpecialArrow = function (batch, a, l) {
-    if (a.kind !== 'missile' && a.kind !== 'grenade' && a.kind !== 'hgrenade') return ren0.call(this, batch, a, l);
+    if (!PROJ.has(a.kind)) return ren0.call(this, batch, a, l);
     const L = CM.Textures.layer;
-    if (a.kind === 'missile') {
+    if (a.kind === 'missile' || a.kind === 'shell') {
       // orientation d'après la vitesse (ou le déplacement chez les invités)
       let vx = a.vx, vy = a.vy, vz = a.vz;
       if (!vx && !vy && !vz && a.lx !== undefined) {
@@ -631,6 +635,11 @@
       a.lz = a.z;
       const yaw = Math.atan2(vx, vz), pitch = Math.atan2(-vy, Math.hypot(vx, vz));
       mat4.compose(this.M, a.x, a.y, a.z, yaw || 0, pitch || 0, 0, 1);
+      if (a.kind === 'shell') {
+        batch.box(this.M, -0.09, -0.09, -0.25, 0.09, 0.09, 0.2, L.gunm_olive, l[0], l[1], 0);
+        batch.box(this.M, -0.06, -0.06, 0.2, 0.06, 0.06, 0.36, L.gunm_dark, l[0], l[1], 0);
+        return true;
+      }
       batch.box(this.M, -0.06, -0.06, -0.3, 0.06, 0.06, 0.2, L.gunm_olive, l[0], l[1], 0);
       batch.box(this.M, -0.05, -0.05, 0.2, 0.05, 0.05, 0.34, L.gunm_orange, l[0], l[1], 0);
       batch.box(this.M, -0.04, -0.04, -0.42, 0.04, 0.04, -0.3, L.muzzle, 1, 1, 1);
@@ -646,7 +655,7 @@
   if (remote0)
     E.updateExtraRemote = function (dt) {
       remote0.call(this, dt);
-      for (const a of this.arrows || []) if (a.kind === 'missile' || a.kind === 'grenade' || a.kind === 'hgrenade') a.age = (a.age || 0) + dt;
+      for (const a of this.arrows || []) if (PROJ.has(a.kind)) a.age = (a.age || 0) + dt;
     };
 
   // --------------------------------------------------------------- succès --

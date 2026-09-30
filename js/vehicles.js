@@ -34,6 +34,11 @@
       c.rot = 0;
       c.thr = c.thr || 0;
       c.pitchV = c.pitchV || 0;
+      if (d.cannon) {
+        if (c.tyaw === undefined) c.tyaw = c.yaw || 0; // tourelle (cap et hausse du canon)
+        c.tpitch = c.tpitch || 0;
+        c.reload = 0;
+      }
       c.hp = 999; // (les coups de carts.js passent par vehicles.js)
     },
     seatsFree(c) {
@@ -106,8 +111,10 @@
         // virage : impossible à l'arrêt, plus serré à basse vitesse
         const steer = ctl ? ctl.steer : 0;
         c.steer += (steer - c.steer) * Math.min(1, dt * 8);
-        const k = Math.min(1, Math.abs(vf) / 5) * (1 - Math.min(0.45, Math.abs(vf) / d.maxV * 0.45));
-        c.yaw = wrap(c.yaw - c.steer * d.turn * k * Math.sign(vf) * dt);
+        const k = d.tracked ? 1 : Math.min(1, Math.abs(vf) / 5) * (1 - Math.min(0.45, Math.abs(vf) / d.maxV * 0.45));
+        // (chenilles : il tourne même à l'arrêt ; en marche arrière, le virage s'inverse)
+        const dir = d.tracked ? (vf < -0.5 ? -1 : 1) : Math.sign(vf);
+        c.yaw = wrap(c.yaw - c.steer * d.turn * k * dir * dt);
         // adhérence : la glace et le frein à main font déraper
         const grip = ice ? 0.35 : ctl && ctl.brake ? 0.55 : d.grip;
         const keep = Math.pow(1 - grip, dt * 6);
@@ -144,12 +151,69 @@
           }
         }
       }
+      // char : il écrase ce qui est fragile devant lui (feuilles, verre, cactus, citrouilles…)
+      if ((c.hitX || c.hitZ) && CM.VEH[c.type].crush && sp > 0.5 && this.crush(g, c)) return;
       // choc contre un mur à pleine vitesse : le véhicule s'abîme
       if ((c.hitX || c.hitZ) && sp > 9 && !g.net.isClient) this.damage(g, c, (sp - 9) * 2.5, 'crash');
       if (c.hitX) c.vx *= -0.15;
       if (c.hitZ) c.vz *= -0.15;
       // (sur la route, la vitesse perdue dans le choc est reportée)
       if (c.hitX || c.hitZ) c.spd *= 0.3;
+    },
+    // Blocs fragiles devant le char : ils volent en éclats (true s'il y en avait).
+    crush(g, c) {
+      const w = g.world, d = CM.VEH[c.type], fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), s = Math.sign(c.spd || 1);
+      let n = 0;
+      for (let side = -1; side <= 1; side++)
+        for (let y = Math.floor(c.y + 0.05); y < c.y + d.h; y++) {
+          const x = Math.floor(c.x + fx * s * (d.hw + 0.4) + Math.cos(c.yaw) * side * d.hw * 0.8);
+          const z = Math.floor(c.z + fz * s * (d.hw + 0.4) - Math.sin(c.yaw) * side * d.hw * 0.8);
+          const id = w.get(x, y, z), b = CM.blocks[id];
+          if (!id || !b || b.unbreakable || !(/LEAVES|GLASS|ICE$|CACTUS|PUMPKIN|MELON|HAY|BAMBOO|WOOL|SNOW/.test(b.key) || b.plant) || b.hardness > 1) continue;
+          w.setBlock(x, y, z, 0);
+          const lay = CM.blockLayers[id] && CM.blockLayers[id][0];
+          if (lay !== undefined) g.entities.burst(lay, x + 0.5, y + 0.5, z + 0.5, 6, { speed: 3, size: 0.08 });
+          CM.Audio.play('break', { mat: b.sound });
+          n++;
+        }
+      return n > 0;
+    },
+    // Char : la tourelle suit le regard du pilote ; clic gauche : un obus (un obus de char par tir).
+    turret(p, c, dt, input) {
+      const g = p.game, inv = g.inventory;
+      const want = wrap(p.yaw - c.tyaw);
+      c.tyaw = wrap(c.tyaw + Math.max(-1.4 * dt, Math.min(1.4 * dt, want)));
+      const wp = Math.max(-0.12, Math.min(0.5, p.pitch + 0.08));
+      c.tpitch += Math.max(-0.8 * dt, Math.min(0.8 * dt, wp - c.tpitch));
+      c.reload = Math.max(0, (c.reload || 0) - dt);
+      if (!input.pressed.mouse0 || g.ui.invOpen) return;
+      if (c.reload > 0) return g.ui.toast('Canon en rechargement…', 'info', 'tank');
+      if (!p.creative && !inv.has(CM.I.TANK_SHELL)) return g.ui.toast('Il faut un obus de char (établi de mécanicien)', 'warn', 'tank');
+      if (!p.creative) inv.remove(CM.I.TANK_SHELL, 1);
+      c.reload = 3.5;
+      const cp = Math.cos(c.tpitch), dir = [-Math.sin(c.tyaw) * cp, Math.sin(c.tpitch), -Math.cos(c.tyaw) * cp];
+      const t = this.turretBase(c), mz = [t[0] + dir[0] * 3.3, t[1] + dir[1] * 3.3, t[2] + dir[2] * 3.3];
+      g.entities.shootArrow(mz[0], mz[1], mz[2], dir[0] * 48, dir[1] * 48 + 1, dir[2] * 48, p, 'shell', 0, { np: 1 });
+      // recul, fumée, bruit
+      c.vx -= dir[0] * 2;
+      c.vz -= dir[2] * 2;
+      p.pitch = Math.min(1.55, p.pitch + 0.05);
+      g.entities.burst(CM.Textures.layer.smoke, mz[0], mz[1], mz[2], 12, { speed: 2.5, grav: -0.6, life: 1.1, size: 0.22 });
+      g.entities.burst(CM.Textures.layer.muzzle, mz[0], mz[1], mz[2], 6, { speed: 3, grav: 0, life: 0.15, size: 0.3, emissive: true });
+      CM.Audio.play('gun', { g: 'cannon' });
+      if (g.net.isClient) g.net.send({ t: 'vact', id: c.uid, a: 'cannon' });
+      else this.fxAll(g, { k: 'veh_cannon', x: r2(mz[0]), y: r2(mz[1]), z: r2(mz[2]) });
+    },
+    // Pivot de la tourelle (dans le monde).
+    turretBase(c) {
+      const cy = Math.cos(c.yaw || 0), sy = Math.sin(c.yaw || 0), lz = 0.1;
+      return [c.x + lz * sy, c.y + 1.75, c.z + lz * cy];
+    },
+    // L'équipage d'un char est à l'abri des coups venus de dehors (créatures, explosions, balles).
+    armored(p) {
+      if (!p || p.riding === null || p.riding === undefined) return false;
+      const c = p.game.entities.cartByUid && p.game.entities.cartByUid(p.riding);
+      return !!(c && CM.VEH[c.type] && CM.VEH[c.type].cannon);
     },
     // Hélicoptère et avion.
     fly(g, c, dt, ctl, fuelOk, vf, sx, sz, fx, fz) {
@@ -215,7 +279,7 @@
       if (c.rider !== null && c.rider !== undefined && g.mode !== 'creative') c.fuel = Math.max(0, (c.fuel || 0) - FUEL_USE * dt * (0.25 + Math.abs(c.thrIn || 0) * 0.75));
       // renverse les créatures (et les joueurs, si les combats sont permis)
       const sp = Math.abs(c.spd || 0);
-      if (sp > 5 && !d.fly) {
+      if ((sp > 5 || (d.tracked && sp > 1)) && !d.fly) {
         const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw);
         for (const m of ents.mobs) {
           if (m.dead || now(g) - (m.vHit || -9) < 0.6) continue;
@@ -223,11 +287,11 @@
           if (Math.abs(m.y - c.y) > 1.6 || Math.hypot(dx, dz) > d.hw + m.hw + 0.5) continue;
           if ((dx * fx + dz * fz) * Math.sign(c.spd) < 0) continue; // (seulement devant)
           m.vHit = now(g);
-          ents.hurtMob(m, sp * 1.1, [c.x, c.z], false, c.rider === 'local' ? g.player : null);
+          ents.hurtMob(m, d.tracked ? 12 + sp * 3 : sp * 1.1, [c.x, c.z], false, c.rider === 'local' ? g.player : null);
           m.vx = fx * sp * 0.8 * Math.sign(c.spd);
           m.vz = fz * sp * 0.8 * Math.sign(c.spd);
           m.vy = 5;
-          this.damage(g, c, 1, 'hit');
+          if (!d.tracked) this.damage(g, c, 1, 'hit');
         }
       }
       if (c.y < CM.WORLD.MINY - 20) c.dead = true;
@@ -290,6 +354,12 @@
         }
         const ctl = { thr: f, steer: s, brake: !d.fly && !!k[K.jump], up: (k[K.jump] ? 1 : 0) - (k[K.sprint] ? 1 : 0), look: p.yaw, pitch: p.pitch };
         if (d.fly === 'plane') ctl.brake = !!k[K.sprint];
+        if (d.cannon) {
+          this.turret(p, c, dt, input);
+          // (le clic gauche est pour le canon : on ne frappe pas, on ne casse rien)
+          input.pressed.mouse0 = false;
+          input.mouse[0] = false;
+        }
         c.thrIn = f;
         const x0 = c.x, z0 = c.z;
         this.step(g, c, dt, ctl);
@@ -306,7 +376,7 @@
           p.vposT = (p.vposT || 0) - dt;
           if (p.vposT <= 0) {
             p.vposT = 0.08;
-            g.net.send({ t: 'bpos', id: c.uid, p: [r2(c.x), r2(c.y), r2(c.z), r2(c.yaw)], v: [r2(c.spd || 0), r2(c.steer || 0), r2(c.pitchV || 0), r2(c.roll || 0), r2(f)] });
+            g.net.send({ t: 'bpos', id: c.uid, p: [r2(c.x), r2(c.y), r2(c.z), r2(c.yaw)], v: [r2(c.spd || 0), r2(c.steer || 0), r2(c.pitchV || 0), r2(c.roll || 0), r2(f), r2(c.tyaw || 0), r2(c.tpitch || 0)] });
           }
         }
         // klaxon, sirène
@@ -356,7 +426,7 @@
       if (!mine && Math.abs(c.spd || 0) < 0.5) return;
       const sp = Math.abs(c.spd || 0) / d.maxV;
       c.sndT = 0.09;
-      CM.Audio.play('engine', { pitch: (c.type === 'truck' ? 0.6 : c.type === 'sport' ? 1.2 : c.type === 'moto' ? 1.35 : 1) * (0.7 + sp * 1.3), vol: mine ? 0.5 : 0.22 });
+      CM.Audio.play('engine', { pitch: (c.type === 'tank' ? 0.42 : c.type === 'truck' ? 0.6 : c.type === 'sport' ? 1.2 : c.type === 'moto' ? 1.35 : 1) * (0.7 + sp * 1.3), vol: mine ? 0.5 : 0.22 });
       if (c.siren && Math.floor(g.clock * 2) !== c.sirenT) {
         c.sirenT = Math.floor(g.clock * 2);
         CM.Audio.play('siren', { pitch: c.sirenT % 2 ? 1 : 0.8, vol: mine ? 0.5 : 0.35 });
@@ -427,6 +497,7 @@
         c.burn = 0;
       } else if (a === 'paint' && CM.DYES.some((dy) => dy.key === m.c) && !d.fixed) c.color = m.c;
       else if (a === 'horn') this.fxAll(g, { k: 'veh_horn', x: c.x, y: c.y, z: c.z, ty: c.type });
+      else if (a === 'cannon' && d.cannon) this.fxAll(g, { k: 'veh_cannon', x: r2(c.x), y: r2(c.y + 2), z: r2(c.z) });
       else if (a === 'siren' && d.siren) {
         c.siren = !c.siren;
         this.fxAll(g, { k: 'veh_siren', x: c.x, y: c.y, z: c.z, id: c.uid, on: c.siren ? 1 : 0 });
@@ -478,7 +549,7 @@
     // Données supplémentaires dans l'instantané des invités.
     snap(c) {
       const pax = (c.pax || []).map((q) => (q === 'local' ? 0 : q));
-      return [Math.round(c.fuel || 0), Math.round(c.vhp === undefined ? CM.VEH[c.type].hp : c.vhp), c.color || CM.VEH[c.type].color, (c.siren ? 1 : 0) | (c.burn > 0 ? 2 : 0), pax, r2(c.spd || 0), r2(c.steer || 0), r2(c.pitchV || 0), r2(c.roll || 0), r2(c.thr || 0)];
+      return [Math.round(c.fuel || 0), Math.round(c.vhp === undefined ? CM.VEH[c.type].hp : c.vhp), c.color || CM.VEH[c.type].color, (c.siren ? 1 : 0) | (c.burn > 0 ? 2 : 0), pax, r2(c.spd || 0), r2(c.steer || 0), r2(c.pitchV || 0), r2(c.roll || 0), r2(c.thr || 0), r2(c.tyaw || 0), r2(c.tpitch || 0)];
     },
     unsnap(c, x, own) {
       if (!Array.isArray(x)) return;
@@ -494,11 +565,18 @@
       c.pitchV = +x[7] || 0;
       c.roll = +x[8] || 0;
       c.thr = +x[9] || 0;
+      if (x.length > 10) {
+        c.tyaw = +x[10] || 0;
+        c.tpitch = +x[11] || 0;
+      }
     },
     // Effets reçus (klaxon, sirène, choc).
     onFx(g, m) {
       const d = Math.hypot(g.player.x - m.x, g.player.z - m.z);
-      if (m.k === 'veh_horn' && d < 64) CM.Audio.play('klaxon', { vol: Math.max(0.2, 1 - d / 64), pitch: m.ty === 'truck' ? 0.7 : m.ty === 'moto' ? 1.3 : 1 });
+      if (m.k === 'veh_cannon' && d < 160) {
+        CM.Audio.play('gun', { g: 'cannon', vol: Math.max(0.2, 1 - d / 140) });
+        g.entities.burst(CM.Textures.layer.smoke, m.x, m.y, m.z, 10, { speed: 2.5, grav: -0.6, life: 1.1, size: 0.22 });
+      } else if (m.k === 'veh_horn' && d < 64) CM.Audio.play('klaxon', { vol: Math.max(0.2, 1 - d / 64), pitch: m.ty === 'truck' ? 0.7 : m.ty === 'moto' ? 1.3 : 1 });
       else if (m.k === 'veh_crash' && d < 40) CM.Audio.play('break', { mat: 'metal' });
       else if (m.k === 'veh_siren') {
         const c = g.entities.cartByUid(m.id);
@@ -529,7 +607,7 @@
     },
     camDist(c) {
       const d = CM.VEH[c.type];
-      return d.fly === 'plane' ? 9 : d.fly === 'heli' ? 8 : c.type === 'truck' ? 8 : c.type === 'moto' || c.type === 'quad' ? 4.5 : 6;
+      return d.fly === 'plane' ? 9 : d.fly === 'heli' ? 8 : c.type === 'truck' || c.type === 'tank' ? 8.5 : c.type === 'moto' || c.type === 'quad' ? 4.5 : 6;
     },
 
     // ------------------------------------------------------------ HUD --
@@ -545,7 +623,8 @@
       const fuel = g.mode === 'creative' ? '∞' : Math.round(c.fuel || 0) + ' %';
       const hp = Math.max(0, Math.round(((c.vhp === undefined ? d.hp : c.vhp) / d.hp) * 100));
       const alt = d.fly ? ' · ↥ ' + Math.round(c.y) : '';
-      const thr = d.fly === 'plane' ? ' · gaz ' + Math.round((c.thr || 0) * 100) + ' %' : '';
+      let thr = d.fly === 'plane' ? ' · gaz ' + Math.round((c.thr || 0) * 100) + ' %' : '';
+      if (d.cannon) thr = ' · 💥 ' + (c.reload > 0 ? c.reload.toFixed(1) + ' s' : 'prêt') + ' (' + (p.creative ? '∞' : g.inventory.count(CM.I.TANK_SHELL)) + ')';
       const key = kmh + '|' + fuel + '|' + hp + '|' + alt + thr + (c.burn > 0 ? 'b' : '');
       if (el.dataset.k === key) return;
       el.dataset.k = key;
@@ -728,6 +807,35 @@
           wheel(-1.05, 0.2, 0.25, 0.2, 0.14, 0);
           wheel(1.05, 0.2, 0.25, 0.2, 0.14, 0);
           box(-0.3, 1.0, -0.4, 0.3, 1.1, 0.8, S);
+          break;
+        }
+        case 'tank': {
+          const TR = L.veh_track;
+          box(-1.3, 0.25, -1.9, 1.3, 1.15, 1.9, P); // caisse
+          box(-1.15, 1.15, -1.5, 1.15, 1.35, 1.6, P);
+          box(-1.45, 0.0, -2.05, -0.95, 0.85, 2.05, TR); // chenilles
+          box(0.95, 0.0, -2.05, 1.45, 0.85, 2.05, TR);
+          box(-1.5, 0.75, -2.0, -0.9, 0.85, 2.0, P); // garde-boue
+          box(0.9, 0.75, -2.0, 1.5, 0.85, 2.0, P);
+          for (const zz of [-1.5, -0.75, 0, 0.75, 1.5]) {
+            wheel(-1.2, 0.34, zz, 0.3, 0.52, 0);
+            wheel(1.2, 0.34, zz, 0.3, 0.52, 0);
+          }
+          lights(0.95, -1.9, 1.1, 0.25);
+          tails(0.95, 1.9, 1.1, 0.2);
+          // tourelle (tourne indépendamment de la caisse) et canon
+          const R = ents.W || (ents.W = mat4.create()), Q = ents.WQ || (ents.WQ = mat4.create());
+          const T2 = ents.W2 || (ents.W2 = mat4.create()), Q2 = ents.WQ2 || (ents.WQ2 = mat4.create());
+          mat4.compose(Q, 0, 1.35, 0.1, wrap((c.tyaw === undefined ? c.yaw : c.tyaw) - (c.yaw || 0)), 0, 0, 1);
+          mat4.multiply(R, M, Q);
+          batch.box(R, -0.85, 0, -0.85, 0.85, 0.65, 0.95, P, l[0], l[1], 0);
+          batch.box(R, -0.3, 0.65, 0.2, 0.3, 0.78, 0.7, DK, l[0], l[1], 0); // trappe
+          batch.box(R, 0.5, 0.65, 0.5, 0.55, 1.8, 0.55, K, l[0], l[1], 0); // antenne
+          mat4.compose(Q2, 0, 0.35, -0.8, 0, c.tpitch || 0, 0, 1);
+          mat4.multiply(T2, R, Q2);
+          batch.box(T2, -0.22, -0.2, -0.3, 0.22, 0.2, 0.1, DK, l[0], l[1], 0); // masque
+          batch.box(T2, -0.1, -0.1, -2.55, 0.1, 0.1, -0.3, K, l[0], l[1], 0); // tube
+          batch.box(T2, -0.14, -0.14, -2.8, 0.14, 0.14, -2.55, DK, l[0], l[1], 0); // frein de bouche
           break;
         }
         case 'speedboat': {

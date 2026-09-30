@@ -1014,9 +1014,9 @@
           // flèche tirée par un invité (arc)
           if (!Array.isArray(m.p) || !Array.isArray(m.v)) break;
           const [x, y, z] = m.p.map(num), v = m.v.map((a) => Math.max(-80, Math.min(80, num(a))));
-          if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > (m.k === 'rocket' ? 7 : 4)) break;
+          if (Math.hypot(x - rp.x, y - rp.y - 1.6, z - rp.z) > (m.k === 'rocket' ? 7 : m.k === 'shell' ? 9 : 4)) break; // (obus : au bout du canon du char)
           const it = m.k === 'potion' && CM.itemInfo(m.it | 0) && CM.itemInfo(m.it | 0).potion ? m.it | 0 : 0;
-          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : ['trident', 'rocket', 'pearl', 'eye', 'missile', 'grenade', 'hgrenade'].includes(m.k) ? m.k : undefined;
+          const kind = m.k === 'egg' ? 'egg' : it ? 'potion' : ['trident', 'rocket', 'pearl', 'eye', 'missile', 'grenade', 'hgrenade', 'shell'].includes(m.k) ? m.k : undefined;
           const xo = m.x && typeof m.x === 'object' ? m.x : {};
           const extra = { pi: Math.min(4, xo.pi | 0), np: xo.np ? 1 : 0, pw: Math.min(5, xo.pw | 0), pu: Math.min(2, xo.pu | 0), fl: xo.fl ? 1 : 0, ench: CM.cleanEnch(xo.ench) };
           g.entities.shootArrow(x, y, z, v[0], v[1], v[2], rp, kind, kind === 'trident' ? CM.I.TRIDENT : kind === 'rocket' ? CM.I.FIREWORK : kind === 'pearl' ? CM.I.ENDER_PEARL : kind === 'eye' ? CM.I.EYE_OF_ENDER : it, extra);
@@ -1073,6 +1073,10 @@
             c.pitchV = v[2] || 0;
             c.roll = v[3] || 0;
             c.thrIn = v[4] || 0;
+            if (v.length > 5) {
+              c.tyaw = v[5] || 0; // tourelle du char
+              c.tpitch = v[6] || 0;
+            }
             break;
           }
           const d = Math.hypot(x - c.x, z - c.z);

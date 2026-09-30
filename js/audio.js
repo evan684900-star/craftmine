@@ -416,6 +416,11 @@
             noise(t, 0.9, 'lowpass', 900, 0.6, 0.6 * v, 200);
             noise(t, 0.4, 'highpass', 2500, 0.5, 0.3 * v);
             break;
+          case 'cannon':
+            noise(t, 1.2, 'lowpass', 700, 0.6, 1.0 * v, 60);
+            tone(t, 0.7, 'sine', 60, 25, 0.7 * v);
+            noise(t + 0.1, 1.4, 'lowpass', 300, 0.6, 0.25 * v, 50); // écho
+            break;
           case 'thump':
             tone(t, 0.18, 'sine', 160, 50, 0.5 * v);
             noise(t, 0.12, 'lowpass', 600, 1, 0.3 * v);

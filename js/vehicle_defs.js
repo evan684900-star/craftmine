@@ -21,6 +21,7 @@
     police: { item: 'POLICE_CAR', id: 1547, name: 'Voiture de police', maxV: 21, acc: 11, turn: 2, grip: 0.92, hw: 0.9, h: 1.9, step: 1, hp: 80, color: 'WHITE', siren: true, fixed: true, seats: [[-0.34, 0.24, 0.05], [0.34, 0.24, 0.05], [-0.34, 0.24, 0.72], [0.34, 0.24, 0.72]], desc: 'Gyrophares et sirène (touche H).' },
     heli: { item: 'HELICOPTER', id: 1548, name: 'Hélicoptère', fly: 'heli', maxV: 20, climb: 8, acc: 7, turn: 1.6, hw: 1, h: 2.3, hp: 80, color: 'BLUE', seats: [[-0.32, 0.55, -0.35], [0.32, 0.55, -0.35], [0, 0.55, 0.45]], desc: 'Saut : monter · course : descendre · avancer, reculer, tourner comme en voiture.' },
     plane: { item: 'PLANE', id: 1549, name: 'Avion', fly: 'plane', maxV: 42, minV: 13, acc: 8, turn: 1.3, hw: 1, h: 2.1, hp: 60, color: 'WHITE', seats: [[0, 0.75, -0.2], [0, 0.75, 0.6]], desc: 'Accélère sur une piste pour décoller (13 blocs/s) ; il suit ton regard. Ralentis pour atterrir.' },
+    tank: { item: 'TANK', id: 1551, name: 'Char d’assaut', maxV: 8, acc: 5, turn: 1.3, grip: 0.98, hw: 1.3, h: 2.3, step: 1.1, hp: 400, color: 'GREEN', offroad: true, tracked: true, cannon: true, crush: true, seats: [[0, 0.62, 0.35], [0, 0.62, 1.05]], desc: 'Chenilles (il tourne sur place), blindage épais qui protège l’équipage, tourelle qui suit ton regard : clic gauche pour tirer un obus explosif (un obus de char dans l’inventaire). Écrase les créatures, les haies et le verre.' },
     speedboat: { item: 'SPEEDBOAT', id: 1550, name: 'Bateau à moteur', water: true, maxV: 20, acc: 10, turn: 2, grip: 0.6, hw: 0.95, h: 1, hp: 60, color: 'WHITE', seats: [[-0.3, 0.3, 0.1], [0.3, 0.3, 0.1], [0, 0.3, 0.8]], desc: 'File sur l’eau (inutile sur terre).' },
   });
   CM.VEH_OF = {}; // identifiant d'objet -> type de véhicule
@@ -37,6 +38,7 @@
     defItem(1538, 'WHEEL', T({ name: 'Roue', tex: 'veh_wheel_icon', stack: 16, desc: 'Pour fabriquer les véhicules (établi de mécanicien).' }));
     defItem(1539, 'ENGINE', T({ name: 'Moteur', tex: 'veh_engine_icon', stack: 8, desc: 'Le cœur des véhicules.' }));
     defItem(1540, 'FUEL_CAN', T({ name: 'Bidon d’essence', tex: 'veh_fuel_icon', stack: 16, type: 'fuel', desc: 'Clic droit sur un véhicule pour faire le plein (+40 %). Le charbon marche aussi (+8 %).' }));
+    defItem(1552, 'TANK_SHELL', T({ name: 'Obus de char', tex: 'veh_shell_icon', stack: 16, desc: 'Munition du char d’assaut : un obus explosif.' }));
     for (const [type, v] of Object.entries(VEH)) {
       defItem(v.id, v.item, T({ name: v.name, tex: 'veh_icon_' + type, stack: 1, type: 'vehicle', vehicle: type, desc: v.desc + ' Clic droit pour le poser, clic droit dessus pour monter, accroupi pour descendre.' }));
       CM.VEH_OF[v.id] = type;
@@ -67,6 +69,8 @@
       G(I.HELICOPTER, 1, [[I.IRON_INGOT, 14], [I.ENGINE, 2], [B.GLASS, 4], [I.DIAMOND, 2]]),
       G(I.PLANE, 1, [[I.IRON_INGOT, 12], [I.ENGINE, 2], [I.WHEEL, 3], [B.GLASS, 2], [I.FEATHER, 4]]),
       G(I.SPEEDBOAT, 1, [[I.BOAT, 1], [I.ENGINE, 1], [I.IRON_INGOT, 4]]),
+      G(I.TANK, 1, [[I.IRON_INGOT, 24], [I.ENGINE, 2], [I.WHEEL, 8], [I.DIAMOND, 2]]),
+      G(I.TANK_SHELL, 4, [[I.IRON_INGOT, 2], [I.GUNPOWDER, 2], [B.TNT, 1]]),
     );
   });
 
@@ -121,6 +125,17 @@
       for (let x = 0; x < 16; x += 4) for (let y = 0; y < 16; y++) put(d, x, y, [160, 164, 170]);
     });
     make('veh_rotor', (d, r) => fill(d, r, [40, 42, 46], 4));
+    make('veh_track', (d, r) => {
+      fill(d, r, [38, 38, 40], 4);
+      for (let x = 0; x < 16; x += 4) for (let y = 0; y < 16; y++) put(d, x, y, [70, 70, 74]);
+    });
+    make('veh_shell_icon', (d, r) => {
+      clear(d);
+      rect(d, r, 6, 5, 10, 15, [200, 160, 70], 8);
+      rect(d, r, 6, 12, 10, 15, [150, 110, 50], 6);
+      rect(d, r, 6, 2, 10, 5, [70, 76, 60], 6);
+      put(d, 7, 1, [70, 76, 60]), put(d, 8, 1, [70, 76, 60]);
+    });
     // établi de mécanicien
     make('mech_top', (d, r) => {
       fill(d, r, [70, 74, 82], 8);
@@ -177,6 +192,7 @@
       police: [[1, 7, 15, 11, [236, 238, 240]], [1, 9, 15, 10, [24, 36, 90]], [4, 4, 11, 7, [236, 238, 240]], [5, 5, 7, 7, GL], [8, 5, 10, 7, GL], [5, 3, 7, 4, [255, 40, 40]], [8, 3, 10, 4, [50, 90, 255]], [2, 10, 5, 13, TY], [11, 10, 14, 13, TY]],
       heli: [[7, 5, 15, 11, 'p'], [11, 6, 15, 9, GL], [0, 6, 8, 8, 'p'], [0, 4, 2, 8, 'p'], [1, 2, 16, 3, K], [10, 3, 11, 5, K], [7, 12, 16, 13, K]],
       plane: [[1, 7, 15, 10, 'p'], [5, 6, 12, 7, 'p'], [10, 6, 12, 7, GL], [1, 4, 3, 7, 'p'], [15, 5, 16, 12, K], [6, 10, 7, 13, K], [12, 10, 13, 13, K]],
+      tank: [[1, 8, 15, 12, 'p'], [0, 11, 16, 14, TY], [1, 13, 15, 14, [70, 70, 74]], [4, 5, 11, 8, 'p'], [10, 6, 16, 7, K], [6, 4, 8, 5, K]],
       speedboat: [[1, 8, 15, 12, 'p'], [2, 11, 14, 13, 'p'], [8, 6, 11, 8, GL], [0, 7, 2, 11, K]],
     };
     for (const [type, parts] of Object.entries(ICONS)) {

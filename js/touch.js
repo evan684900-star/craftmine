@@ -22,7 +22,7 @@
     't-jump': 'Sauter', 't-sneak': 'S’accroupir', 't-sprint': 'Courir', 't-dash': 'Ruée', 't-use': 'Poser au centre',
     't-inv': 'Inventaire', 't-drop': 'Jeter', 't-chat': 'Tchat', 't-pause': 'Pause',
     't-fire': 'Tirer (arme à feu)', 't-aim': 'Viser (arme à feu)', 't-reload': 'Recharger (arme à feu)',
-    't-horn': 'Klaxon (véhicule)', 't-view': 'Vue de derrière',
+    't-horn': 'Klaxon (véhicule)', 't-view': 'Vue de derrière', 't-fs': 'Plein écran',
   };
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -127,6 +127,7 @@
       hold('t-reload', () => (inp.pressed[K().reload] = true));
       hold('t-horn', () => (inp.pressed[K().horn] = true));
       hold('t-view', () => g.toggleView());
+      hold('t-fs', () => g.toggleFullscreen());
       this.buildEditor();
       // barre rapide : toucher une case la sélectionne
       $('hotbar').addEventListener('pointerdown', (e) => {

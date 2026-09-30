@@ -49,7 +49,7 @@
       if (x2.np) a.pick = false;
     }
     this.arrows.push(a);
-    if (kind !== 'orb' && kind !== 'fireball' && kind !== 'dbreath' && kind !== 'eye' && kind !== 'missile' && kind !== 'grenade' && kind !== 'hgrenade') CM.Audio.play(kind === 'trident' ? 'bow' : kind === 'rocket' ? 'fuse' : kind ? 'pop' : 'bow', { pitch: kind === 'trident' ? 0.55 : 0.9 + Math.random() * 0.2 });
+    if (kind !== 'orb' && kind !== 'fireball' && kind !== 'dbreath' && kind !== 'eye' && kind !== 'missile' && kind !== 'grenade' && kind !== 'hgrenade' && kind !== 'shell') CM.Audio.play(kind === 'trident' ? 'bow' : kind === 'rocket' ? 'fuse' : kind ? 'pop' : 'bow', { pitch: kind === 'trident' ? 0.55 : 0.9 + Math.random() * 0.2 });
   };
   // Un œuf se casse : parfois un poussin en sort.
   E.eggHit = function (a) {
@@ -62,9 +62,9 @@
     }
   };
   // projectiles gérés à part (weapons.js, raids.js, end.js)
-  const SPECIAL_KINDS = new Set(['trident', 'rocket', 'orb', 'fireball', 'pearl', 'eye', 'dbreath', 'missile', 'grenade', 'hgrenade']);
+  const SPECIAL_KINDS = new Set(['trident', 'rocket', 'orb', 'fireball', 'pearl', 'eye', 'dbreath', 'missile', 'grenade', 'hgrenade', 'shell']);
   // numéros des projectiles dans l'instantané des invités
-  const KINDS = [null, 'egg', 'potion', 'trident', 'rocket', 'orb', 'fireball', 'pearl', 'eye', 'dbreath', 'missile', 'grenade', 'hgrenade'];
+  const KINDS = [null, 'egg', 'potion', 'trident', 'rocket', 'orb', 'fireball', 'pearl', 'eye', 'dbreath', 'missile', 'grenade', 'hgrenade', 'shell'];
   E.updateArrows = function (dt) {
     const g = this.game, w = g.world;
     for (const a of this.arrows) {

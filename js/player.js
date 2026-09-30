@@ -1896,6 +1896,8 @@
       n = CM.Effects.reduce(this, n, cause); // résistance, résistance au feu
       if (n <= 0) return;
       if (this.invul > 0 && !bypass) return;
+      // dans un char : le blindage arrête les coups venus du dehors (créatures, explosions, balles)
+      if (sx !== null && sx !== undefined && CM.Vehicles && CM.Vehicles.armored(this)) return;
       // bouclier levé : arrête les coups venus de devant (créatures, flèches, joueurs, explosions)
       if (this.blocking && sx !== null && sx !== undefined && (!bypass || cause === 'Une explosion')) {
         const dx = sx - this.x, dz = sz - this.z, l = Math.hypot(dx, dz);
