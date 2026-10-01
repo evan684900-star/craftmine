@@ -2307,7 +2307,10 @@
     render() {
       const p = this.player;
       const bobOn = this.options.viewBob ? 1 : 0;
-      let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn, p.z];
+      let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn - p.landOffset() * bobOn, p.z];
+      // roulis : la vue penche un peu en marchant, et du côté d'un coup reçu
+      let camRoll = Math.sin(p.bob) * 0.009 * p.bobAmp * bobOn;
+      if (p.hurtFlash > 0 && p.alive) camRoll += (p.hurtDir || 1) * Math.sin(Math.pow(p.hurtFlash / 0.45, 2) * Math.PI) * 0.11; // (vite, puis revient doucement)
       // vue de derrière (touche V ; par défaut dans un véhicule)
       const third = this.thirdView();
       let camYaw = p.yaw, camPitch = p.pitch;
@@ -2393,6 +2396,7 @@
         cam,
         yaw: camYaw,
         pitch: camPitch,
+        roll: third ? 0 : camRoll,
         fov: this.fovCur,
         lines: CM.FKeys.lines(this, cam), // bordures des tronçons, boîtes, zones des monstres
         batch: this.batch,

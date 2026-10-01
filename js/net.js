@@ -172,7 +172,12 @@
       this.offhand = CM.itemInfo(a[9] | 0) ? a[9] | 0 : 0; // main secondaire
       this.bob = Array.isArray(a[10]) && a[10].length === 3 ? a[10].map(num) : null; // flotteur de canne à pêche
       this.blocking = !!(this.flags & 64);
+      const wasAlive = this.alive;
       this.alive = !!(this.flags & 4);
+      if (wasAlive && !this.alive && this.seen) {
+        this.deathAt = this.net.game.clock;
+        this.poofed = false;
+      }
       if (this.flags & 8) this.swingT = 0.3;
       if (!this.seen || Math.hypot(this.x - this.rx, this.y - this.ry, this.z - this.rz) > 12) {
         this.rx = this.x;
@@ -1842,7 +1847,18 @@
       if (!this.active) return;
       const me = this.game.player;
       for (const rp of this.remotes.values()) {
-        if (!rp.seen || !rp.alive || rp.dim !== this.game.playerDim) continue;
+        if (!rp.seen || rp.dim !== this.game.playerDim) continue;
+        if (!rp.alive) {
+          // (mort : il tombe sur le côté, puis disparaît dans un nuage)
+          const t = rp.deathAt === undefined ? 9 : this.game.clock - rp.deathAt;
+          if (t > 0.95) {
+            if (!rp.poofed && t < 3) {
+              rp.poofed = true;
+              this.game.entities.burst(CM.Textures.layer.smoke, rp.rx, rp.ry + 0.6, rp.rz, 8, { speed: 1.2, grav: -1.5, life: 0.7, size: 0.18, spread: 1 });
+            }
+            continue;
+          }
+        }
         if (rp.flags & 256) continue; // invisible (potion)
         // caméra à l'intérieur du personnage (même point d'apparition) : on ne le dessine pas
         if (Math.hypot(rp.rx - me.x, rp.rz - me.z) < 0.5 && Math.abs(rp.ry - me.y) < 1.8) continue;
@@ -1855,20 +1871,38 @@
       const head = [L.player_head, L.player_head, L.player_hair, L.skin, L.player_hair, L.player_face];
       {
         const l = ents.lightAt(rp.rx, rp.ry + 1.2, rp.rz);
-        const fl = rp.flags & 16 ? 2 : 0;
+        const fl = rp.flags & 16 || !rp.alive ? 2 : 0;
         const sneak = rp.flags & 1, rides = rp.flags & 128, seated = rp.flags & 512, glides = rp.flags & 1024;
         const M = this.M;
         // (assis dans un véhicule : tourné comme lui)
         const vc = seated && CM.Vehicles ? CM.Vehicles.vehicleAt(ents, rp.rx, rp.ry, rp.rz) : null;
+        // animation : temps écoulé depuis la dernière image de ce joueur
+        const now = this.game.clock, dtA = Math.min(0.1, Math.max(0, now - (rp.animT === undefined ? now : rp.animT)));
+        rp.animT = now;
+        // pas qui démarrent et s'arrêtent en douceur
+        rp.wamp = (rp.wamp || 0) + ((rp.moving && !rides && !seated ? 1 : 0) - (rp.wamp || 0)) * Math.min(1, dtA * 8);
+        // le corps suit la tête : aussitôt en marchant, sinon quand elle tourne de plus de 50°
+        if (rp.byaw === undefined) rp.byaw = rp.ryaw;
+        let dB = rp.ryaw - rp.byaw;
+        dB = Math.atan2(Math.sin(dB), Math.cos(dB));
+        if (rp.moving || vc || glides || rides) rp.byaw += dB * Math.min(1, dtA * 10);
+        else if (Math.abs(dB) > 0.87) rp.byaw += dB - Math.sign(dB) * 0.87;
+        else rp.byaw += dB * Math.min(1, dtA * 1.2);
+        let headYaw = rp.ryaw - rp.byaw;
+        headYaw = vc || glides ? 0 : Math.atan2(Math.sin(headYaw), Math.cos(headYaw));
+        // mort : il tombe sur le côté
+        const dying = !rp.alive && rp.deathAt !== undefined ? Math.min(1, (now - rp.deathAt) / 0.45) : 0;
         if (glides) CM.Weapons.glideMatrix(M, this.Q, this.P, rp.rx, rp.ry, rp.rz, rp.ryaw, rp.pitch);
-        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, vc ? vc.yaw : rp.ryaw, 0, 0, 1);
+        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, vc ? vc.yaw : rp.byaw, 0, dying * dying * (Math.PI / 2), 1);
         if (rp.flags & 2048) CM.Weapons.renderWings(ents, batch, M, l, fl, glides);
         // canne à pêche : la ligne jusqu'au flotteur
         if (rp.bob) {
           const cy = Math.cos(rp.ryaw), sy2 = Math.sin(rp.ryaw);
           CM.Fishing.drawLine(ents, batch, [rp.rx + cy * 0.4 - sy2 * 0.9, rp.ry + 1.75 - (seated ? 0.45 : 0), rp.rz - sy2 * 0.4 - cy * 0.9], rp.bob, false);
         }
-        const sw = rp.moving && !rides && !seated ? Math.sin(rp.walk) : 0;
+        const sw = Math.sin(rp.walk) * rp.wamp;
+        // bras au repos : ils respirent et s'écartent à peine (comme dans Minecraft)
+        const idleZ = 0.05 + Math.sin(now * 1.35 + (rp.pid || 0)) * 0.035, idleX = Math.sin(now * 1.05 + (rp.pid || 0)) * 0.04;
         const lk = CM.Comfort.layers(rp.look, rp.shirt), shirt = lk.shirt; // apparence choisie par le joueur
         // (rotation autour de x : positif = vers l'avant pour un membre qui pend)
         // (à cheval : jambes écartées de part et d'autre)
@@ -1881,8 +1915,8 @@
         const lean = sneak ? 0.4 : 0;
         ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], shirt, l, fl);
         const ny = 0.7 + 0.65 * Math.cos(lean), nz = -0.65 * Math.sin(lean);
-        ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], rp.look ? lk.head : head, l, fl);
-        if (rp.look) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.232, 0, -0.232, 0.232, 0.452, 0.232], lk.hair, l, fl);
+        ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], rp.look ? lk.head : head, l, fl, null, headYaw);
+        if (rp.look) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.232, 0, -0.232, 0.232, 0.452, 0.232], lk.hair, l, fl, null, headYaw);
         // bras (le droit frappe, et avance un peu quand il tient quelque chose)
         const swing = rp.swingT > 0 ? 1.3 * Math.sin((1 - rp.swingT / 0.3) * Math.PI) : 0;
         const sy = ny - 0.02, sz = nz * 0.9;
@@ -1890,11 +1924,11 @@
         // arme à feu : les deux bras tendus vers là où il vise
         const gunAim = hinfo && hinfo.gun ? Math.PI / 2 + CM.clamp(rp.pitch, -1.2, 1.2) * 0.9 : null;
         const arms = gunAim !== null
-          ? [[-0.36, gunAim - 0.15], [0.36, gunAim]]
-          : [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0)], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0)]];
-        for (const [ax, rot] of arms) {
-          ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl);
-          ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl);
+          ? [[-0.36, gunAim - 0.15, 0], [0.36, gunAim, 0]]
+          : [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0) + idleX, rp.blocking ? 0 : -idleZ], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0) - idleX, swing ? 0 : idleZ]];
+        for (const [ax, rot, rz] of arms) {
+          ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl, null, 0, rz);
+          ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl, null, 0, rz);
         }
         // armure portée : coques un peu plus grandes que chaque partie du corps
         const am = (k) => {
@@ -1902,10 +1936,10 @@
           return i ? L['armor_skin_' + CM.ARMOR_MATS[i - 1].key.toLowerCase()] : null;
         };
         const helm = am(0), chest = am(1), legs = am(2), boots = am(3);
-        if (helm) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.25, 0.28, -0.25, 0.25, 0.48, 0.25], helm, l, fl);
+        if (helm) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.25, 0.28, -0.25, 0.25, 0.48, 0.25], helm, l, fl, null, headYaw);
         if (chest) {
           ents.part(batch, M, 0, 0.7, 0, -lean, [-0.27, 0.06, -0.15, 0.27, 0.67, 0.15], chest, l, fl);
-          for (const [ax, rot] of arms) ents.part(batch, M, ax, sy, sz, rot, [-0.13, -0.27, -0.13, 0.13, 0.06, 0.13], chest, l, fl);
+          for (const [ax, rot, rz] of arms) ents.part(batch, M, ax, sy, sz, rot, [-0.13, -0.27, -0.13, 0.13, 0.06, 0.13], chest, l, fl, null, 0, rz);
         }
         for (const [lx, rot] of [[-0.12, seated ? 1.45 : sw * 0.7], [0.12, seated ? 1.45 : -sw * 0.7]]) {
           if (legs) ents.part(batch, M, lx, 0.7, 0, rot, [-0.135, -0.48, -0.135, 0.135, 0.02, 0.135], legs, l, fl);
@@ -1915,14 +1949,14 @@
         // main secondaire (gauche) : bouclier ou objet
         const oinfo = rp.offhand ? CM.itemInfo(rp.offhand) : null;
         if (oinfo && oinfo.type === 'shield') {
-          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], 0, 1);
+          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], arms[0][2], 1);
           mat4.multiply(this.R, M, this.P);
           mat4.compose(this.P, -0.08, -0.5, -0.16, rp.blocking ? 0.2 : 1.45, -Math.PI / 2, 0, 1);
           mat4.multiply(this.Q, this.R, this.P);
           const e = L.shield_edge;
           batch.box(this.Q, -0.24, -0.34, -0.03, 0.24, 0.34, 0.03, [e, e, e, e, L.shield_back, L.shield_face], l[0], l[1], 0);
         } else if (oinfo) {
-          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], 0, 1);
+          mat4.compose(this.P, -0.36, sy, sz, 0, arms[0][1], arms[0][2], 1);
           mat4.multiply(this.R, M, this.P);
           const layer = oinfo.isBlock ? CM.blockLayers[rp.offhand][0] : L[oinfo.tex];
           mat4.compose(this.P, 0, -0.6, -0.02, -Math.PI * 0.75, Math.PI, Math.PI / 2, 1);
@@ -1932,13 +1966,13 @@
         // objet tenu, dans la main droite
         const info = hinfo;
         if (info && info.gun && CM.Guns) {
-          mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], 0, 1);
+          mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], arms[1][2], 1);
           mat4.multiply(this.R, M, this.P);
           mat4.compose(this.P, 0, -0.62, 0, 0, -Math.PI / 2, 0, 1);
           mat4.multiply(this.Q, this.R, this.P);
           CM.Guns.drawModel(batch, this.Q, info.gun, l, 0, false);
         } else if (info) {
-          mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], 0, 1);
+          mat4.compose(this.P, 0.36, sy, sz, 0, arms[1][1], arms[1][2], 1);
           mat4.multiply(this.R, M, this.P);
           const r = info.isBlock ? info.block.render : '';
           const emi = info.isBlock && info.block.light ? 1 : 0;

@@ -6,6 +6,7 @@
   const mat4 = CM.mat4;
 
   const GRAVITY = 28;
+  const NO_SWING = { a: 0, b: 0, c: 0, d: 0 };
   const REACH = 5;
   // objets dont le clic droit a déjà un usage (le bouclier ne se lève pas, la main secondaire attend)
   const MAIN_USES = ['food', 'bucket', 'bow', 'grapple', 'cart', 'seeds', 'bonemeal', 'igniter', 'armor', 'vehicle'];
@@ -139,6 +140,7 @@
       this.regenEffect = Math.max(0, this.regenEffect - dt);
       CM.Effects.tick(this, dt);
       this.swing = Math.max(0, this.swing - dt * 3.2);
+      if (this.landT > 0) this.landT = Math.max(0, this.landT - dt);
       this.comboTimer = Math.max(0, this.comboTimer - dt);
       if (this.comboTimer <= 0) this.combo = 0;
       if (!this.creative && !this.cmdFly) this.flying = false;
@@ -468,6 +470,11 @@
       // ----- chute, rebond
       if (this.landed) {
         const under2 = w.get(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z));
+        // atterrissage : la vue plonge un peu, selon la vitesse de chute
+        if (!wasGround && prevVy < -6 && !this.inFluid && !this.flying) {
+          this.landAmp = Math.min(0.22, (-prevVy - 5) * 0.012);
+          this.landT = 0.32;
+        }
         // (/saut amortit les chutes ; règle « dégâts de chute »)
         const fall = this.fallStart - this.y - (this.cmdJump || 0) * 1.5 - (CM.gameRule && !CM.gameRule(g, 'fallDamage') ? 1e9 : 0) - (mounted ? 4 : 0) - CM.Effects.lv(this, 'jump') * 1.5 - (CM.Effects.lv(this, 'slow_falling') ? 1e9 : 0);
         const bouncy = under2 === B.MUSHROOM || under2 === B.SLIME_BLOCK;
@@ -1942,6 +1949,9 @@
       // (la brûlure qui dure ne protège pas des autres coups)
       if (!(bypass && cause === 'Le feu')) this.invul = 0.55;
       this.hurtFlash = 0.45;
+      // la vue penche du côté du coup (au hasard s'il ne vient de nulle part)
+      if (sx !== null && sx !== undefined) this.hurtDir = (sx - this.x) * Math.cos(this.yaw) - (sz - this.z) * Math.sin(this.yaw) > 0 ? 1 : -1;
+      else this.hurtDir = Math.random() < 0.5 ? 1 : -1;
       this.exhaust(EXH.hurt);
       CM.Audio.play('hurt');
       if (sx !== null && sx !== undefined) {
@@ -2073,13 +2083,55 @@
     }
 
     // ------------------------------------------------- main à l'écran ----
+    // Animation de la main : coup (façon Minecraft), objet qui sort quand on en change, retard
+    // sur les mouvements de la caméra, respiration au repos, plongée à l'atterrissage.
+    animHand(time) {
+      const dt = Math.min(0.1, Math.max(0, time - (this.handT === undefined ? time : this.handT)));
+      this.handT = time;
+      const inv = this.game.inventory, stack = inv.held();
+      const key = inv.selected + ':' + (stack ? stack.id : 0);
+      if (this.heldKey !== undefined && key !== this.heldKey) this.equipK = 0;
+      this.heldKey = key;
+      this.equipK = Math.min(1, (this.equipK === undefined ? 1 : this.equipK) + dt * 4.5);
+      // coup : avance rapide (racine carrée), retour plus lent ; s2 fait monter puis descendre
+      const p = this.swing > 0 ? 1 - this.swing : 0, sq = Math.sqrt(p);
+      const S = this.swingS || (this.swingS = { a: 0, b: 0, c: 0, d: 0 });
+      S.a = p ? Math.sin(sq * Math.PI) : 0;
+      S.b = p ? Math.sin(sq * Math.PI * 2) : 0;
+      S.c = p ? Math.sin(p * Math.PI) : 0;
+      S.d = p ? Math.sin(p * p * Math.PI) : 0;
+      // la main suit le regard avec un peu de retard
+      if (this.handYaw === undefined) {
+        this.handYaw = this.yaw;
+        this.handPitch = this.pitch;
+      }
+      const k = 1 - Math.exp(-dt * 14);
+      let dy = this.yaw - this.handYaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      this.handYaw += dy * k;
+      this.handPitch += (this.pitch - this.handPitch) * k;
+      const lagY = CM.clamp(dy, -0.5, 0.5), lagP = CM.clamp(this.pitch - this.handPitch, -0.5, 0.5);
+      const aim = Math.min(1, this.gunAim || 0); // (en visant avec une arme : main stable)
+      const e = 1 - Math.pow(1 - this.equipK, 3);
+      const still = 1 - Math.min(1, this.bobAmp);
+      const breath = Math.sin(time * 1.7) * 0.006 * still * (1 - aim);
+      const land = this.landOffset ? this.landOffset() * 0.6 : 0;
+      mat4.compose(this.handPre, -lagY * 0.12 * (1 - aim), -(1 - e) * 0.42 + breath - land - lagP * 0.06 * (1 - aim), 0, lagY * 0.18 * (1 - aim), -(1 - e) * 0.5 + lagP * 0.16 * (1 - aim), 0, 1);
+    }
+    // Plongée de la caméra et de la main à l'atterrissage (0 au repos).
+    landOffset() {
+      if (!this.landT || this.landT <= 0) return 0;
+      return this.landAmp * Math.sin((1 - this.landT / 0.32) * Math.PI);
+    }
     buildHand(batch, time) {
       if (!this.game.options.showHand) return;
+      if (!this.handPre) this.handPre = mat4.create();
+      this.animHand(time);
       const inv = this.game.inventory, stack = inv.held(), off = inv.offhand;
       const l = [this.game.world.skyAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15,
         this.game.world.blockLightAt(Math.floor(this.x), Math.floor(this.y + 1.6), Math.floor(this.z)) / 15];
-      const sw = Math.sin(Math.min(1, 1 - this.swing) * Math.PI);
-      const swingOn = this.swing > 0 ? sw : 0;
+      const S = this.swingS;
+      const swingOn = S.a;
       const bobOn = this.game.options.viewBob ? 1 : 0;
       const bx = Math.sin(this.bob) * 0.035 * this.bobAmp * bobOn;
       const by = -Math.abs(Math.cos(this.bob)) * 0.03 * this.bobAmp * bobOn;
@@ -2093,7 +2145,8 @@
         else this.drawHeld(batch, off, -1, 0, l, bx, by);
       }
       if (!stack) {
-        mat4.compose(M, 0.48 + bx - swingOn * 0.12, -0.44 + by + swingOn * 0.08, -0.62 - swingOn * 0.18, 0.3, -1.25 - swingOn * 0.5, 0, 1);
+        mat4.compose(M, 0.48 + bx - S.a * 0.16, -0.44 + by + S.b * 0.08, -0.62 - S.c * 0.18, 0.3 + S.d * 0.25, -1.25 - S.a * 0.6, -S.a * 0.15, 1);
+        mat4.multiply(M, this.handPre, M);
         const look = CM.Comfort.layers(CM.Comfort.myLook(this.game));
         batch.box(M, -0.07, -0.2, -0.07, 0.07, 0.2, 0.07, look.skin, l[0], l[1], 0);
         batch.box(M, -0.075, -0.52, -0.075, 0.075, -0.2, 0.075, look.shirt, l[0], l[1], 0);
@@ -2114,8 +2167,11 @@
       const info = CM.itemInfo(stack.id);
       const r = info.isBlock ? info.block.render : '';
       const cubeish = info.isBlock && (r === 'cube' || r === 'glass' || r === 'tglass' || r === 'slab' || r === 'carpet' || r === 'stairs');
+      // (coup : seulement la main droite ; voir animHand)
+      const S = side === 1 && swingOn ? this.swingS : NO_SWING;
       if (cubeish) {
-        mat4.compose(M, side * (0.44 + bx - swingOn * 0.12), -0.38 + by + swingOn * 0.1, -0.7 - swingOn * 0.2, side * (0.75 + swingOn * 0.3), 0.12 - swingOn * 0.6, 0, 1);
+        mat4.compose(M, side * (0.44 + bx) - side * S.a * 0.15, -0.38 + by + S.b * 0.09, -0.7 - S.c * 0.18, side * (0.75 + S.d * 0.3), 0.12 - S.a * 0.7, -side * S.a * 0.2, 1);
+        mat4.multiply(M, this.handPre, M);
         const hh = 0.32 * Math.max(info.block.height, 0.1);
         if (r === 'stairs') {
           batch.box(M, -0.16, -0.16, -0.16, 0.16, 0, 0.16, CM.blockLayers[stack.id], l[0], l[1], 0);
@@ -2127,7 +2183,8 @@
           // porté à la bouche, petits mouvements de mastication
           const k = Math.min(1, this.eating.t / 0.15), chew = Math.abs(Math.sin(this.eating.t * 16)) * 0.035 * k;
           mat4.compose(M, 0.52 - 0.36 * k, -0.36 + 0.1 * k - chew, -0.72 + 0.2 * k, -0.55 + 0.4 * k, -0.2 + 0.25 * k, 0.3, 1);
-        } else mat4.compose(M, side * (0.52 + bx - swingOn * 0.1), -0.36 + by + swingOn * 0.05, -0.72 - swingOn * 0.15, side * -0.55, -0.2 - swingOn * 1.1, side * 0.3, 1);
+        } else mat4.compose(M, side * (0.52 + bx) - side * S.a * 0.13, -0.36 + by + S.b * 0.07, -0.72 - S.c * 0.15, side * -0.55 - side * S.d * 0.3, -0.2 - S.a * 1.15, side * 0.3 - side * S.a * 0.25, 1);
+        mat4.multiply(M, this.handPre, M);
         const emi = info.isBlock && info.block.light ? 1 : 0;
         batch.box(M, -0.2, -0.2, 0, 0.2, 0.2, 0, [-1, -1, -1, -1, layer, -1], l[0], l[1], emi);
       }
@@ -2137,6 +2194,7 @@
       const M = this.M, L = CM.Textures.layer;
       const x = side * (0.5 - 0.3 * raise) + bx, y = -0.42 + 0.14 * raise + by, z = -0.68 + 0.1 * raise;
       mat4.compose(M, x, y, z, side * (0.45 - 0.35 * raise), 0.05, 0, 1);
+      mat4.multiply(M, this.handPre, M);
       const e = L.shield_edge;
       batch.box(M, -0.2, -0.32, -0.025, 0.2, 0.28, 0.025, [e, e, e, e, L.shield_back, L.shield_face], l[0], l[1], 0);
     }

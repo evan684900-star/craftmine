@@ -464,6 +464,7 @@
       const hx = 0.3 * (1 - a) + bx * (1 - a * 0.8), hy = -0.3 * (1 - a) - (md.sight + 0.006) * S * a + by * (1 - a * 0.8) - rl * 0.2;
       const hz = -0.66 + 0.1 * a + kick * 0.07;
       mat4.compose(M, hx, hy, hz, 0.1 * (1 - a) + rl * 0.5, kick * 0.12 + rl * 0.5, -rl * 0.4, S);
+      if (p.handPre) mat4.multiply(M, p.handPre, M); // (sortie de l'arme, retard sur le regard)
       this.drawModel(batch, M, key, l, p.gunRot, p.gunFlash > 0);
       return true;
     },

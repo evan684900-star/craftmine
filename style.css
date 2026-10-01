@@ -715,3 +715,34 @@ body.touch #effects { top: 150px; }
 #tablist .tl-row i.tl-host { color: var(--gold); }
 #tablist .tl-row i.tl-adm { color: #7fd6ff; }
 #tablist .tl-foot { font-size: 12px; color: var(--muted); padding: 6px 4px 2px; }
+
+/* ------------------------------------------------------------ animations */
+/* menus et fenêtres : apparition en fondu, le panneau monte un peu */
+.screen:not(.hidden) { animation: scrFade 0.18s ease-out; }
+.screen:not(.hidden) > .menu-box, .screen:not(.hidden) > .panel, .screen:not(.hidden) > .inv-wrap { animation: scrPop 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+@keyframes scrFade { from { opacity: 0; } }
+@keyframes scrPop { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+/* barre d'objets : la case choisie se soulève */
+#hotbar .slot { transition: transform 0.12s ease-out, border-color 0.12s, box-shadow 0.12s; }
+#hotbar .slot.sel { transform: translateY(-3px) scale(1.06); }
+/* cœurs : éclair blanc quand on est touché, vague quand on guérit */
+#hearts.hit i { animation: heartHit 0.42s ease-out; }
+@keyframes heartHit { 0% { filter: brightness(2.4) drop-shadow(0 0 3px #fff); transform: scale(1.2); } 100% { filter: none; transform: none; } }
+#hearts.heal i { animation: heartWave 0.45s ease-out both; animation-delay: calc(var(--i, 0) * 35ms); }
+@keyframes heartWave { 0%, 100% { transform: none; } 40% { transform: translateY(-4px); } }
+/* expérience : la barre se remplit, le niveau grossit quand il monte */
+#xp-fill { transition: width 0.35s ease-out; }
+#xp-level.up { animation: lvlUp 0.7s ease-out; }
+@keyframes lvlUp { 0% { transform: translate(-50%, -50%) scale(1.9); color: #fff; } 100% { transform: translate(-50%, -50%) scale(1); } }
+/* objets ramassés et lignes du tchat : elles glissent en place */
+.pickup { animation: pickIn 0.2s ease-out; }
+@keyframes pickIn { from { opacity: 0; transform: translateX(18px); } }
+.cl { animation: chatIn 0.16s ease-out; }
+@keyframes chatIn { from { opacity: 0; transform: translateY(6px); } }
+/* boutons et cases d'inventaire */
+button { transition: background 0.15s, transform 0.08s, box-shadow 0.08s, filter 0.15s; }
+.grid .slot .icon { transition: transform 0.1s ease-out; }
+.grid .slot:hover .icon { transform: scale(1.1); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

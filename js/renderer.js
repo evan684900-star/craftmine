@@ -687,7 +687,7 @@
       const aspect = this.canvas.width / this.canvas.height;
       const far = (this.renderDist + 1) * 16 + 40;
       mat4.perspective(this.proj, (state.fov * Math.PI) / 180, aspect, 0.05, Math.max(far, 300));
-      mat4.fps(this.view, 0, 0, 0, state.yaw, state.pitch);
+      mat4.fps(this.view, 0, 0, 0, state.yaw, state.pitch, state.roll || 0);
       mat4.multiply(this.viewProj, this.proj, this.view);
       CM.frustumPlanes(this.viewProj, this.planes);
 
@@ -697,7 +697,7 @@
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
 
       // Ciel
-      mat4.fps(this.tmp, 0, 0, 0, state.yaw, state.pitch);
+      mat4.fps(this.tmp, 0, 0, 0, state.yaw, state.pitch, state.roll || 0);
       mat4.multiply(this.tmp, this.proj, this.tmp);
       mat4.invert(this.invVP, this.tmp);
       gl.disable(gl.DEPTH_TEST);

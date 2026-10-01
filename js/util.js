@@ -289,12 +289,19 @@ CM.mat4 = {
     out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
     return out;
   },
-  // Matrice de vue d'une caméra à la première personne (lacet / tangage).
-  fps(out, px, py, pz, yaw, pitch) {
+  // Matrice de vue d'une caméra à la première personne (lacet / tangage / roulis).
+  fps(out, px, py, pz, yaw, pitch, roll) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    const rx = cy, ry = 0, rz = -sy;
-    const ux = sy * sp, uy = cp, uz = cy * sp;
+    let rx = cy, ry = 0, rz = -sy;
+    let ux = sy * sp, uy = cp, uz = cy * sp;
+    if (roll) {
+      // (la vue tourne autour de l'axe du regard)
+      const cr = Math.cos(roll), sr = Math.sin(roll);
+      const r0 = rx, r1 = ry, r2 = rz;
+      rx = r0 * cr + ux * sr; ry = r1 * cr + uy * sr; rz = r2 * cr + uz * sr;
+      ux = ux * cr - r0 * sr; uy = uy * cr - r1 * sr; uz = uz * cr - r2 * sr;
+    }
     const bx = sy * cp, by = -sp, bz = cy * cp;
     out[0] = rx; out[4] = ry; out[8] = rz; out[12] = -(rx * px + ry * py + rz * pz);
     out[1] = ux; out[5] = uy; out[9] = uz; out[13] = -(ux * px + uy * py + uz * pz);

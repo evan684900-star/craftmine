@@ -135,6 +135,7 @@
     return tmin;
   };
 
+  const LOOKERS = new Set(['villager', 'mouflon', 'boar']); // (tournent la tête vers le joueur)
   const DROP_LIFE = 300; // durée de vie d'un objet au sol (secondes)
   CM.DROP_LIFE = DROP_LIFE;
   const MOBS = {
@@ -256,6 +257,8 @@
       this.mobs = [];
       this.drops = [];
       this.particles = [];
+      this.corpses = []; // créatures tuées, en train de tomber (animation)
+      this.pickups = []; // objets ramassés, en train de voler vers le joueur (animation)
       this.spawnTimer = 0;
       this.tnts = [];
       this.nightfall = false;
@@ -435,6 +438,9 @@
     // Instantané envoyé par l'hôte : { m: créatures, d: objets au sol, tn: TNT }.
     applySnapshot(s) {
       const oldM = new Map(this.mobs.map((m) => [m.uid, m]));
+      const keep = new Set((s.m || []).map((a) => a[0]));
+      // (retirées par l'hôte : gardées un instant, pour l'animation de mort qui peut arriver après)
+      this.lastGone = this.mobs.filter((m) => !keep.has(m.uid) && !m.corpse);
       this.mobs = [];
       for (const a of s.m || []) {
         const [uid, type, x, y, z, yaw, fl, pet, ex] = a;
@@ -488,6 +494,12 @@
         d.count = count;
         d.tx = x; d.ty = y; d.tz = z;
         this.drops.push(d);
+        oldD.delete(uid);
+      }
+      // objets disparus tout près d'un joueur : ramassés, ils volent vers lui
+      for (const d of oldD.values()) {
+        const q = this.nearPlayer(d.x, d.y, d.z, 1.8);
+        if (q) this.addPickup(d, q);
       }
       const oldT = new Map(this.tnts.map((t) => [t.uid, t]));
       this.tnts = [];
@@ -988,8 +1000,48 @@
       if (g.net) g.net.fx({ k: 'kill', ty: m.type, x: m.x, y: m.y, z: m.z });
       if (def.onDeath) def.onDeath(this, m, by); // gluant : se divise ; capitaine pillard : mauvais présage
     }
+    // Objet ramassé : il file vers le joueur en rapetissant (seulement à l'écran).
+    addPickup(d, q) {
+      if (this.game.dedicated || this.pickups.length > 40) return;
+      this.pickups.push({ id: d.id, x: d.x, y: d.y + 0.1, z: d.z, q, t: 0 });
+    }
+    // Joueur (soi ou un autre) le plus proche d'un point, à moins de r blocs.
+    nearPlayer(x, y, z, r) {
+      let best = null, bd = r * r;
+      const g = this.game, list = [g.player].concat(g.net && g.net.active ? [...g.net.remotes.values()].filter((q) => q.dim === g.playerDim) : []);
+      for (const q of list) {
+        if (!q || q.alive === false) continue;
+        const qx = q.rx !== undefined ? q.rx : q.x, qy = q.ry !== undefined ? q.ry : q.y, qz = q.rz !== undefined ? q.rz : q.z;
+        const dd = (qx - x) ** 2 + (qy + 0.8 - y) ** 2 + (qz - z) ** 2;
+        if (dd < bd) {
+          bd = dd;
+          best = q;
+        }
+      }
+      return best;
+    }
+    // Créature tuée : une copie tombe sur le côté avant de disparaître (voir render). L'invité
+    // retrouve la créature dans sa liste, ou parmi celles que l'hôte vient de retirer.
+    addCorpse(type, x, y, z) {
+      const def = MOBS[type];
+      if (this.game.dedicated || !def || def.boss || (def.h || 1) > 3.2) return;
+      let best = null, bd = 2.5;
+      for (const m of this.lastGone ? this.mobs.concat(this.lastGone) : this.mobs) {
+        if (m.type !== type || m.corpse) continue;
+        const d = (m.x - x) ** 2 + (m.y - y) ** 2 + (m.z - z) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = m;
+        }
+      }
+      if (!best || this.corpses.length > 24) return;
+      best.corpse = true;
+      const c = Object.assign({}, best, { corpse: false, hurt: 0, moving: false });
+      this.corpses.push({ m: c, t: 0 });
+    }
     // Nuage de particules à la mort d'une créature.
     killFx(type, x, y, z) {
+      this.addCorpse(type, x, y, z);
       const L = CM.Textures.layer, def = MOBS[type];
       if (def && def.fxTex) {
         this.burst(L[def.fxTex], x, y + def.h * 0.5, z, 10 + Math.round(def.h * 8), { speed: 3 });
@@ -1048,6 +1100,7 @@
         if (dist < 1.0 && p !== g.player) {
           g.net.give(p, d);
           d.dead = true;
+          this.addPickup(d, p);
         } else if (dist < 1.0) {
           const left = g.inventory.add(d.id, d.count, d.extra);
           if (left < d.count) {
@@ -1055,7 +1108,10 @@
             g.onPickup(d.id, d.count - left);
           }
           d.count = left;
-          if (left <= 0) d.dead = true;
+          if (left <= 0) {
+            d.dead = true;
+            this.addPickup(d, p);
+          }
           else d.pickDelay = 1;
         }
       }
@@ -1508,91 +1564,138 @@
       batch.box(this.R, box[0], box[1], box[2], box[3], box[4], box[5], layers, l[0], l[1], flags, null, faceFlags);
     }
 
+    // Une créature. roll : chute sur le côté (morte). Pour toutes : rotation lissée, pas qui
+    // démarrent et s'arrêtent en douceur, léger rebond en marchant, recul quand elle est touchée.
+    drawMob(batch, m, time, dt, roll) {
+      const L = CM.Textures.layer;
+      const def = MOBS[m.type];
+      const l = this.lightAt(m.x, m.y + 0.6, m.z);
+      const flags = m.hurt > 0 || roll ? 2 : 0;
+      if (m.ryaw === undefined) m.ryaw = m.yaw;
+      let dy = m.yaw - m.ryaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      m.ryaw += Math.abs(dy) > 2.5 ? dy : dy * Math.min(1, dt * 10);
+      m.wamp = (m.wamp || 0) + ((m.moving && !roll ? 1 : 0) - (m.wamp || 0)) * Math.min(1, dt * 7);
+      const ground = !def.fly && !def.water && !def.swim;
+      const bounce = ground ? Math.abs(Math.sin(m.walk)) * 0.035 * m.wamp : 0;
+      const knock = m.hurt > 0 && !roll ? Math.sin((m.hurt / 0.35) * Math.PI) * 0.18 : 0;
+      mat4.compose(this.M, m.x, m.y + bounce, m.z, m.ryaw, -knock, roll || 0, m.baby > 0 ? BABY_SCALE : 1);
+      const sw = Math.sin(m.walk) * m.wamp;
+      // animaux et villageois : la tête se tourne vers le joueur proche
+      if (LOOKERS.has(m.type)) {
+        const p = this.game.player, dx = p.x - m.x, dz = p.z - m.z;
+        let want = 0;
+        if (!roll && p.alive && dx * dx + dz * dz < 49) {
+          const a = Math.atan2(-dx, -dz) - m.ryaw;
+          want = CM.clamp(Math.atan2(Math.sin(a), Math.cos(a)), -1.1, 1.1);
+        }
+        m.look = (m.look || 0) + (want - (m.look || 0)) * Math.min(1, dt * 5);
+      }
+      {
+      if (def.render) {
+        def.render(this, batch, m, l, flags, sw, time);
+      } else if (m.type === 'mouflon') {
+        const wool = L.mouflon_wool, skin = L.mouflon_skin;
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.33, 0.42, -0.5, 0.33, 1.02, 0.5], wool, l, flags);
+        const hb = Math.sin(time * 2 + m.age) * 0.05;
+        this.part(batch, this.M, 0, 0.92, -0.48, hb, [-0.2, -0.12, -0.38, 0.2, 0.28, 0.02], [skin, skin, wool, skin, skin, L.mouflon_face], l, flags, null, m.look || 0);
+        this.part(batch, this.M, 0, 0.92, -0.48, hb, [-0.32, 0.08, -0.26, -0.2, 0.24, -0.06], L.mouflon_horn, l, flags, null, m.look || 0);
+        this.part(batch, this.M, 0, 0.92, -0.48, hb, [0.2, 0.08, -0.26, 0.32, 0.24, -0.06], L.mouflon_horn, l, flags, null, m.look || 0);
+        const legs = [[-0.2, -0.32, 1], [0.2, -0.32, -1], [-0.2, 0.32, -1], [0.2, 0.32, 1]];
+        for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.45, lz, sw * 0.7 * ph, [-0.09, -0.45, -0.09, 0.09, 0, 0.09], skin, l, flags);
+      } else if (m.type === 'boar') {
+        const hide = L.boar_hide;
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.38, 0.35, -0.55, 0.38, 0.92, 0.55], hide, l, flags);
+        const hb = Math.sin(time * 3 + m.age) * 0.04;
+        this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.26, -0.22, -0.36, 0.26, 0.24, 0.02], [hide, hide, hide, hide, hide, L.boar_face], l, flags, null, m.look || 0);
+        this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.22, -0.2, -0.44, -0.14, -0.04, -0.34], L.boar_tusk, l, flags, null, m.look || 0);
+        this.part(batch, this.M, 0, 0.7, -0.55, hb, [0.14, -0.2, -0.44, 0.22, -0.04, -0.34], L.boar_tusk, l, flags, null, m.look || 0);
+        const legs = [[-0.22, -0.36, 1], [0.22, -0.36, -1], [-0.22, 0.36, -1], [0.22, 0.36, 1]];
+        for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.36, lz, sw * 0.8 * ph, [-0.1, -0.36, -0.1, 0.1, 0, 0.1], hide, l, flags);
+      } else if (m.type === 'penguin') {
+        const bodyT = L.penguin_body, waddle = m.moving ? Math.sin(m.walk * 1.5) * 0.12 : 0;
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.24, 0.12, -0.2, 0.24, 0.72, 0.2], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_belly], l, flags, null, 0, waddle);
+        this.part(batch, this.M, 0, 0.72, 0, 0, [-0.19, 0, -0.18, 0.19, 0.32, 0.18], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_face], l, flags, null, 0, waddle);
+        this.part(batch, this.M, 0, 0.72, 0, 0, [-0.06, 0.1, -0.32, 0.06, 0.18, -0.18], L.penguin_beak, l, flags, null, 0, waddle);
+        const flap = m.moving ? Math.sin(m.walk * 3) * 0.3 : 0.1;
+        this.part(batch, this.M, -0.25, 0.66, 0, 0, [-0.05, -0.42, -0.12, 0, 0, 0.12], bodyT, l, flags, null, 0, -flap - 0.15);
+        this.part(batch, this.M, 0.25, 0.66, 0, 0, [0, -0.42, -0.12, 0.05, 0, 0.12], bodyT, l, flags, null, 0, flap + 0.15);
+        this.part(batch, this.M, -0.1, 0.12, -0.04, sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
+        this.part(batch, this.M, 0.1, 0.12, -0.04, -sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
+      } else if (m.type === 'golem') {
+        const G = L.golem_body;
+        const leg = [-0.2, -0.95, -0.2, 0.2, 0, 0.2];
+        this.part(batch, this.M, -0.26, 0.95, 0, sw * 0.5, leg, G, l, flags);
+        this.part(batch, this.M, 0.26, 0.95, 0, -sw * 0.5, leg, G, l, flags);
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.45, 0.95, -0.28, 0.45, 1.55, 0.28], G, l, flags);
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.62, 1.55, -0.34, 0.62, 2.2, 0.34], G, l, flags);
+        // bras : balancement, levés quand il charge, frappe vers le haut
+        const hit = (m.ai.swing || 0) > 0 ? Math.sin(((0.5 - m.ai.swing) / 0.5) * Math.PI) * 1.8 : 0;
+        const armA = hit || (m.ai.chasing ? 0.35 : sw * 0.45);
+        const arm = [-0.17, -1.55, -0.17, 0.17, 0.05, 0.17];
+        this.part(batch, this.M, -0.8, 2.12, 0, hit ? armA : armA, arm, G, l, flags);
+        this.part(batch, this.M, 0.8, 2.12, 0, hit ? armA : -armA, arm, G, l, flags);
+        this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.24, 0, -0.26, 0.24, 0.48, 0.22], [G, G, G, G, G, L.golem_face], l, flags);
+        this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.05, 0.04, -0.38, 0.05, 0.26, -0.26], G, l, flags);
+      } else if (m.type === 'villager') {
+        if (!m.prof) m.prof = CM.villagerProf(m);
+        const robe = L[m.prof.robe] || L.wool;
+        const skin = L.skin;
+        this.part(batch, this.M, -0.12, 0.62, 0, sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
+        this.part(batch, this.M, 0.12, 0.62, 0, -sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.27, 0.35, -0.17, 0.27, 1.45, 0.17], robe, l, flags);
+        // bras croisés
+        this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.3, -0.12, -0.1, 0.3, 0.1, 0.1], robe, l, flags);
+        this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.14, -0.1, -0.12, 0.14, 0.08, 0.08], skin, l, flags);
+        const nod = Math.sin(time * 1.3 + m.age) * 0.08;
+        const vh = L.villager_head;
+        this.part(batch, this.M, 0, 1.45, 0, nod, [-0.23, 0, -0.23, 0.23, 0.56, 0.23], [vh, vh, vh, skin, vh, L.villager_face], l, flags, null, m.look || 0);
+        this.part(batch, this.M, 0, 1.45, 0, nod, [-0.05, 0.08, -0.34, 0.05, 0.3, -0.23], skin, l, flags, null, m.look || 0);
+        // insigne de niveau sur la robe : pierre, fer, or, émeraude, diamant
+        const bk = ['STONE', 'IRON_BLOCK', 'GOLD_BLOCK', 'EMERALD_BLOCK', 'DIAMOND_BLOCK'][(m.vlv || 1) - 1];
+        const bl = CM.B[bk] !== undefined && CM.blockLayers[CM.B[bk]];
+        if (bl) this.part(batch, this.M, 0, 0.95, -0.17, 0, [-0.07, -0.07, -0.02, 0.07, 0.07, 0], bl[0], l, flags);
+      } else {
+        const body = m.type === 'ardent' ? L.ardent_body : L.ombre_body;
+        this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);
+        this.part(batch, this.M, -0.12, 0.8, 0, sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
+        this.part(batch, this.M, 0.12, 0.8, 0, -sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
+        const armA = m.ai.chasing ? -1.35 + Math.sin(time * 6 + m.age) * 0.1 : sw * 0.5;
+        this.part(batch, this.M, -0.34, 1.48, 0, armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
+        this.part(batch, this.M, 0.34, 1.48, 0, m.ai.chasing ? armA : -armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
+        const ff = [flags, flags, flags, flags, flags, flags ? 2 : 1];
+        this.part(batch, this.M, 0, 1.52, 0, 0, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], [body, body, body, body, body, m.type === 'ardent' ? L.ardent_face : L.ombre_face], l, flags, ff);
+      }
+      }
+    }
+
     render(batch, cam, time) {
       const L = CM.Textures.layer;
       const cull = cam.cull; // (extension Optimisation : créatures derrière nous ou cachées par le terrain)
+      const dt = Math.min(0.1, Math.max(0, time - (this.renderT === undefined ? time : this.renderT)));
+      this.renderT = time;
       for (const m of this.mobs) {
+        if (m.corpse) continue; // (déjà dessinée en train de tomber)
         if (cull && !cull(m.x, m.y + 0.5, m.z, 3)) continue;
-        const l = this.lightAt(m.x, m.y + 0.6, m.z);
-        const flags = m.hurt > 0 ? 2 : 0;
-        mat4.compose(this.M, m.x, m.y, m.z, m.yaw, 0, 0, m.baby > 0 ? BABY_SCALE : 1);
-        const sw = m.moving ? Math.sin(m.walk) : 0;
-        const def = MOBS[m.type];
-        if (def.render) {
-          def.render(this, batch, m, l, flags, sw, time);
-        } else if (m.type === 'mouflon') {
-          const wool = L.mouflon_wool, skin = L.mouflon_skin;
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.33, 0.42, -0.5, 0.33, 1.02, 0.5], wool, l, flags);
-          const hb = Math.sin(time * 2 + m.age) * 0.05;
-          this.part(batch, this.M, 0, 0.92, -0.48, hb, [-0.2, -0.12, -0.38, 0.2, 0.28, 0.02], [skin, skin, wool, skin, skin, L.mouflon_face], l, flags);
-          this.part(batch, this.M, 0, 0.92, -0.48, hb, [-0.32, 0.08, -0.26, -0.2, 0.24, -0.06], L.mouflon_horn, l, flags);
-          this.part(batch, this.M, 0, 0.92, -0.48, hb, [0.2, 0.08, -0.26, 0.32, 0.24, -0.06], L.mouflon_horn, l, flags);
-          const legs = [[-0.2, -0.32, 1], [0.2, -0.32, -1], [-0.2, 0.32, -1], [0.2, 0.32, 1]];
-          for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.45, lz, sw * 0.7 * ph, [-0.09, -0.45, -0.09, 0.09, 0, 0.09], skin, l, flags);
-        } else if (m.type === 'boar') {
-          const hide = L.boar_hide;
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.38, 0.35, -0.55, 0.38, 0.92, 0.55], hide, l, flags);
-          const hb = Math.sin(time * 3 + m.age) * 0.04;
-          this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.26, -0.22, -0.36, 0.26, 0.24, 0.02], [hide, hide, hide, hide, hide, L.boar_face], l, flags);
-          this.part(batch, this.M, 0, 0.7, -0.55, hb, [-0.22, -0.2, -0.44, -0.14, -0.04, -0.34], L.boar_tusk, l, flags);
-          this.part(batch, this.M, 0, 0.7, -0.55, hb, [0.14, -0.2, -0.44, 0.22, -0.04, -0.34], L.boar_tusk, l, flags);
-          const legs = [[-0.22, -0.36, 1], [0.22, -0.36, -1], [-0.22, 0.36, -1], [0.22, 0.36, 1]];
-          for (const [lx, lz, ph] of legs) this.part(batch, this.M, lx, 0.36, lz, sw * 0.8 * ph, [-0.1, -0.36, -0.1, 0.1, 0, 0.1], hide, l, flags);
-        } else if (m.type === 'penguin') {
-          const bodyT = L.penguin_body, waddle = m.moving ? Math.sin(m.walk * 1.5) * 0.12 : 0;
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.24, 0.12, -0.2, 0.24, 0.72, 0.2], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_belly], l, flags, null, 0, waddle);
-          this.part(batch, this.M, 0, 0.72, 0, 0, [-0.19, 0, -0.18, 0.19, 0.32, 0.18], [bodyT, bodyT, bodyT, bodyT, bodyT, L.penguin_face], l, flags, null, 0, waddle);
-          this.part(batch, this.M, 0, 0.72, 0, 0, [-0.06, 0.1, -0.32, 0.06, 0.18, -0.18], L.penguin_beak, l, flags, null, 0, waddle);
-          const flap = m.moving ? Math.sin(m.walk * 3) * 0.3 : 0.1;
-          this.part(batch, this.M, -0.25, 0.66, 0, 0, [-0.05, -0.42, -0.12, 0, 0, 0.12], bodyT, l, flags, null, 0, -flap - 0.15);
-          this.part(batch, this.M, 0.25, 0.66, 0, 0, [0, -0.42, -0.12, 0.05, 0, 0.12], bodyT, l, flags, null, 0, flap + 0.15);
-          this.part(batch, this.M, -0.1, 0.12, -0.04, sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
-          this.part(batch, this.M, 0.1, 0.12, -0.04, -sw * 0.5, [-0.08, -0.12, -0.14, 0.08, 0, 0.06], L.penguin_beak, l, flags);
-        } else if (m.type === 'golem') {
-          const G = L.golem_body;
-          const leg = [-0.2, -0.95, -0.2, 0.2, 0, 0.2];
-          this.part(batch, this.M, -0.26, 0.95, 0, sw * 0.5, leg, G, l, flags);
-          this.part(batch, this.M, 0.26, 0.95, 0, -sw * 0.5, leg, G, l, flags);
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.45, 0.95, -0.28, 0.45, 1.55, 0.28], G, l, flags);
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.62, 1.55, -0.34, 0.62, 2.2, 0.34], G, l, flags);
-          // bras : balancement, levés quand il charge, frappe vers le haut
-          const hit = (m.ai.swing || 0) > 0 ? Math.sin(((0.5 - m.ai.swing) / 0.5) * Math.PI) * 1.8 : 0;
-          const armA = hit || (m.ai.chasing ? 0.35 : sw * 0.45);
-          const arm = [-0.17, -1.55, -0.17, 0.17, 0.05, 0.17];
-          this.part(batch, this.M, -0.8, 2.12, 0, hit ? armA : armA, arm, G, l, flags);
-          this.part(batch, this.M, 0.8, 2.12, 0, hit ? armA : -armA, arm, G, l, flags);
-          this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.24, 0, -0.26, 0.24, 0.48, 0.22], [G, G, G, G, G, L.golem_face], l, flags);
-          this.part(batch, this.M, 0, 2.18, -0.12, 0, [-0.05, 0.04, -0.38, 0.05, 0.26, -0.26], G, l, flags);
-        } else if (m.type === 'villager') {
-          if (!m.prof) m.prof = CM.villagerProf(m);
-          const robe = L[m.prof.robe] || L.wool;
-          const skin = L.skin;
-          this.part(batch, this.M, -0.12, 0.62, 0, sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
-          this.part(batch, this.M, 0.12, 0.62, 0, -sw * 0.5, [-0.11, -0.62, -0.11, 0.11, 0, 0.11], robe, l, flags);
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.27, 0.35, -0.17, 0.27, 1.45, 0.17], robe, l, flags);
-          // bras croisés
-          this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.3, -0.12, -0.1, 0.3, 0.1, 0.1], robe, l, flags);
-          this.part(batch, this.M, 0, 1.12, -0.2, 0, [-0.14, -0.1, -0.12, 0.14, 0.08, 0.08], skin, l, flags);
-          const nod = Math.sin(time * 1.3 + m.age) * 0.08;
-          const vh = L.villager_head;
-          this.part(batch, this.M, 0, 1.45, 0, nod, [-0.23, 0, -0.23, 0.23, 0.56, 0.23], [vh, vh, vh, skin, vh, L.villager_face], l, flags);
-          this.part(batch, this.M, 0, 1.45, 0, nod, [-0.05, 0.08, -0.34, 0.05, 0.3, -0.23], skin, l, flags);
-          // insigne de niveau sur la robe : pierre, fer, or, émeraude, diamant
-          const bk = ['STONE', 'IRON_BLOCK', 'GOLD_BLOCK', 'EMERALD_BLOCK', 'DIAMOND_BLOCK'][(m.vlv || 1) - 1];
-          const bl = CM.B[bk] !== undefined && CM.blockLayers[CM.B[bk]];
-          if (bl) this.part(batch, this.M, 0, 0.95, -0.17, 0, [-0.07, -0.07, -0.02, 0.07, 0.07, 0], bl[0], l, flags);
-        } else {
-          const body = m.type === 'ardent' ? L.ardent_body : L.ombre_body;
-          this.part(batch, this.M, 0, 0, 0, 0, [-0.25, 0.8, -0.13, 0.25, 1.52, 0.13], body, l, flags);
-          this.part(batch, this.M, -0.12, 0.8, 0, sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
-          this.part(batch, this.M, 0.12, 0.8, 0, -sw * 0.6, [-0.1, -0.8, -0.1, 0.1, 0, 0.1], body, l, flags);
-          const armA = m.ai.chasing ? -1.35 + Math.sin(time * 6 + m.age) * 0.1 : sw * 0.5;
-          this.part(batch, this.M, -0.34, 1.48, 0, armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
-          this.part(batch, this.M, 0.34, 1.48, 0, m.ai.chasing ? armA : -armA, [-0.08, -0.74, -0.08, 0.08, 0.04, 0.08], body, l, flags);
-          const ff = [flags, flags, flags, flags, flags, flags ? 2 : 1];
-          this.part(batch, this.M, 0, 1.52, 0, 0, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], [body, body, body, body, body, m.type === 'ardent' ? L.ardent_face : L.ombre_face], l, flags, ff);
-        }
+        this.drawMob(batch, m, time, dt, 0);
       }
+      // créatures tuées : elles tombent sur le côté, rouges, puis disparaissent dans un nuage
+      for (const c of this.corpses) {
+        c.t += dt;
+        if (c.t >= 0.95) {
+          if (!c.done) {
+            c.done = true;
+            const h = (MOBS[c.m.type] && MOBS[c.m.type].h) || 1;
+            this.burst(L.smoke, c.m.x, c.m.y + h * 0.4, c.m.z, 8, { speed: 1.2, grav: -1.5, life: 0.7, size: 0.18, spread: Math.min(1.6, h) });
+            this.burst(L.white, c.m.x, c.m.y + h * 0.4, c.m.z, 6, { speed: 1.5, grav: -0.5, life: 0.5, size: 0.06, spread: Math.min(1.6, h) });
+          }
+          continue;
+        }
+        if (cull && !cull(c.m.x, c.m.y + 0.5, c.m.z, 3)) continue;
+        const k = Math.min(1, c.t / 0.5);
+        this.drawMob(batch, c.m, time, dt, k * k * (Math.PI / 2));
+      }
+      if (this.corpses.length && this.corpses.every((c) => c.done)) this.corpses.length = 0;
       for (const t of this.tnts) {
         const l = this.lightAt(t.x, t.y + 0.5, t.z);
         const flash = (t.fuse * 4) % 1 < 0.5 ? 1 : 0;
@@ -1616,6 +1719,16 @@
           this.drawItem(batch, this.R, d.id, l, 0.25);
         }
       }
+      // objets ramassés : ils filent vers le joueur en rapetissant (0,15 s)
+      for (const k of this.pickups) {
+        k.t += dt;
+        const q = k.q, f = Math.min(1, k.t / 0.15), e = f * f;
+        const qx = q.rx !== undefined ? q.rx : q.x, qy = (q.ry !== undefined ? q.ry : q.y) + (q === this.game.player ? 0.6 : 0.9), qz = q.rz !== undefined ? q.rz : q.z;
+        const l = this.lightAt(k.x, k.y + 0.2, k.z);
+        mat4.compose(this.M, k.x + (qx - k.x) * e, k.y + (qy - k.y) * e, k.z + (qz - k.z) * e, k.t * 6, 0, 0, 1 - 0.6 * e);
+        this.drawItem(batch, this.M, k.id, l, 0.25);
+      }
+      this.pickups = this.pickups.filter((k) => k.t < 0.15);
       // particules (panneaux face caméra)
       const rx = cam.right, uy = cam.up;
       for (const p of this.particles) {

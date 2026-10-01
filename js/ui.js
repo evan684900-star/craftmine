@@ -303,7 +303,11 @@
         const el = $(id);
         el.innerHTML = '';
         const out = [];
-        for (let i = 0; i < n; i++) out.push(el.appendChild(document.createElement('i')));
+        for (let i = 0; i < n; i++) {
+          const e = el.appendChild(document.createElement('i'));
+          e.style.setProperty('--i', i); // (vague des cœurs : un léger décalage chacun)
+          out.push(e);
+        }
         return out;
       };
       this.heartEls = mk('hearts', 10);
@@ -422,11 +426,17 @@
       const nHearts = p.maxHealth / 2;
       if (nHearts !== this.heartEls.length) {
         const he = $('hearts');
-        while (this.heartEls.length < nHearts) this.heartEls.push(he.appendChild(document.createElement('i')));
+        while (this.heartEls.length < nHearts) {
+          const e = he.appendChild(document.createElement('i'));
+          e.style.setProperty('--i', this.heartEls.length);
+          this.heartEls.push(e);
+        }
         while (this.heartEls.length > nHearts) he.removeChild(this.heartEls.pop());
         this.lastHealth = -1;
       }
       if (hp !== this.lastHealth) {
+        // cœurs : ils clignotent quand on perd de la vie, font une vague quand on en regagne
+        if (this.lastHealth >= 0 && hp > 0) this.animClass($('hearts'), hp < this.lastHealth ? 'hit' : 'heal');
         this.lastHealth = hp;
         for (let i = 0; i < nHearts; i++) {
           const v = hp - i * 2;
@@ -442,6 +452,8 @@
         this.lastLvl = li.level;
         this.lastXpLeft = li.left;
         $('xp-fill').style.width = (li.frac * 100).toFixed(1) + '%';
+        if (this.lastLvlShown !== undefined && li.level > this.lastLvlShown) this.animClass($('xp-level'), 'up'); // (niveau gagné)
+        this.lastLvlShown = li.level;
         $('xp-level').textContent = li.level > 0 ? li.level : '';
       }
       const food = Math.ceil(p.food);
@@ -1654,6 +1666,15 @@
         dayCycle: $('nw-daycycle').checked,
         ext: { tech: $('nw-ext-tech').checked, light: $('nw-ext-light').checked, gravity: $('nw-ext-gravity').checked, guns: !!($('nw-ext-guns') || {}).checked, vehicles: !!($('nw-ext-vehicles') || {}).checked },
       };
+    }
+    // Relance une animation CSS (la classe est retirée puis remise).
+    animClass(el, c) {
+      if (!el) return;
+      el.classList.remove('hit', 'heal', 'up');
+      void el.offsetWidth;
+      el.classList.add(c);
+      clearTimeout(el._anim);
+      el._anim = setTimeout(() => el.classList.remove(c), 800);
     }
     refreshPause() {
       const g = this.game;
