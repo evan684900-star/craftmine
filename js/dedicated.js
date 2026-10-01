@@ -161,6 +161,28 @@
     if (g.net.isHost) g.net.broadcast({ t: 'bye', r: 'Le serveur CraftMine redémarre (mise à jour ou maintenance). Reviens dans une minute !' });
   };
 
+  // Personne de connecté depuis une minute : le monde se fige (heure, cultures, créatures) et la
+  // machine se repose. Les connexions restent ouvertes : il repart dès qu'un joueur arrive.
+  // Réglage pauseVide (true par défaut).
+  D.paused = function (g, dt) {
+    if (g.net.links.size > 0 || D.cfg.pauseVide === false) {
+      if (D.isPaused) {
+        D.isPaused = false;
+        log('▶ Un joueur arrive : le monde reprend');
+      }
+      D.emptyT = 0;
+      return false;
+    }
+    D.emptyT = (D.emptyT || 0) + dt;
+    if (D.emptyT < (+D.cfg.pauseDelai || 60)) return false; // (pauseDelai : réglage caché, pour les essais)
+    if (!D.isPaused) {
+      D.isPaused = true;
+      D.save(g);
+      log('⏸ Personne sur le serveur : monde en pause (il reprend dès qu’un joueur arrive)');
+    }
+    return true;
+  };
+
   // À chaque image : nuit passée si tous les joueurs du monde normal dorment.
   D.tick = function (g, dt) {
     const pls = [...g.net.remotes.values()].filter((rp) => rp.seen && rp.alive && rp.dim === 'overworld');
@@ -192,6 +214,7 @@
     return {
       ok: !!(g && g.state === 'playing' && net && net.isHost && net.peer && !net.peer.destroyed),
       joueurs: net ? [...net.links.values()].map((e) => e.name) : [],
+      pause: !!D.isPaused,
       jour: g ? g.dayCount + 1 : 0,
     };
   };

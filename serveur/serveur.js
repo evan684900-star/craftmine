@@ -70,6 +70,7 @@ const SETTABLE = {
   garderInventaire: (v) => typeof v === 'boolean',
   triches: (v) => typeof v === 'boolean',
   maxJoueurs: (v) => Number.isInteger(v) && v >= 2 && v <= 20,
+  pauseVide: (v) => typeof v === 'boolean',
   extensions: (v) => Array.isArray(v) && v.every((x) => ['lumiere', 'electricite', 'armes', 'vehicules', 'gravite'].includes(x)),
 };
 function setConfig(patch) {

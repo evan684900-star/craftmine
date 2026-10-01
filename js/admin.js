@@ -116,6 +116,7 @@
         name: net.name,
         n: net.links.size,
         max: D.on ? D.max : 0,
+        pause: D.on ? D.cfg.pauseVide !== false : false,
         mode: g.mode,
         diff: g.difficulty,
         pvp: !!net.rules.pvp,
@@ -170,6 +171,7 @@
         $('adm-pvp').checked = st.pvp;
         $('adm-keep').checked = st.keep;
         $('adm-cheats').checked = st.cheats;
+        $('adm-pause').checked = !!st.pause;
         const want = st.next || st.ext;
         for (const [c] of EXT) $('adm-ext-' + c).checked = want.includes(c);
       }
@@ -191,6 +193,7 @@
       if (diff !== DIFF_CFG[st.diff]) lines.push('/serveur difficulte ' + diff);
       const max = Math.max(2, Math.min(20, +$('adm-max').value | 0));
       if (st.srv && max && max !== st.max) lines.push('/serveur max ' + max);
+      if (st.srv && $('adm-pause').checked !== !!st.pause) lines.push('/serveur pause ' + ($('adm-pause').checked ? 'on' : 'off'));
       for (const [id, k, cur] of [['adm-pvp', 'pvp', st.pvp], ['adm-keep', 'garder_inventaire', st.keep], ['adm-cheats', 'triches', st.cheats]]) {
         if ($(id).checked !== cur) lines.push('/serveur ' + k + ' ' + ($(id).checked ? 'on' : 'off'));
       }
@@ -257,7 +260,7 @@
         if (act) act();
       });
       // réglages modifiés : on ne les remplace plus par l'état reçu, jusqu'à « Enregistrer »
-      for (const id of ['adm-name', 'adm-mode', 'adm-diff', 'adm-max', 'adm-pvp', 'adm-keep', 'adm-cheats', ...EXT.map(([c]) => 'adm-ext-' + c)]) $(id).addEventListener('input', () => (this.dirty = true));
+      for (const id of ['adm-name', 'adm-mode', 'adm-diff', 'adm-max', 'adm-pvp', 'adm-keep', 'adm-cheats', 'adm-pause', ...EXT.map(([c]) => 'adm-ext-' + c)]) $(id).addEventListener('input', () => (this.dirty = true));
       // champs : Entrée valide, Échap ferme
       for (const [id, a] of [['adm-pw', 'login'], ['adm-ann', 'ann'], ['adm-name', 'saveCfg'], ['adm-max', 'saveCfg']]) {
         $(id).addEventListener('keydown', (e) => {

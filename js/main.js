@@ -2217,6 +2217,7 @@
       if (this.state !== 'playing') return;
       // serveur dédié : seulement la simulation et le réseau, rien à dessiner
       if (this.dedicated) {
+        if (CM.Dedicated.paused(this, dt)) return; // (personne de connecté : monde figé)
         try {
           this.update(dt);
         } catch (err) {

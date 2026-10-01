@@ -1621,12 +1621,13 @@
     garder_inventaire: ['garder_inventaire', 'garderinventaire', 'keep', 'keepinventory'],
     triches: ['triches', 'cheats', 'triches_invites'],
     max: ['max', 'maxjoueurs', 'max_joueurs'],
+    pause: ['pause', 'pausevide', 'pause_vide'],
     extensions: ['extensions', 'ext'],
     redemarrer: ['redemarrer', 'restart', 'reboot'],
   };
   def('serveur server srv', {
     cat: 'Partie', hostOnly: true, local: false, usage: '[réglage valeur] | redemarrer', desc: 'hôte ou administrateur : réglages de la partie (sur le serveur, enregistrés sur la machine)',
-    more: 'Réglages : nom, mode (survie/creatif), difficulte, pvp (on/off), garder_inventaire, triches, max (2 à 20), extensions (lumiere, electricite, armes, vehicules, gravite, ou aucune). /serveur redemarrer relance le serveur.',
+    more: 'Réglages : nom, mode (survie/creatif), difficulte, pvp (on/off), garder_inventaire, triches, max (2 à 20), pause (on/off : monde figé sans joueur), extensions (lumiere, electricite, armes, vehicules, gravite, ou aucune). /serveur redemarrer relance le serveur.',
     args: [() => Object.keys(SRV_KEYS)],
     run(ctx, a, o) {
       const g = G(), net = g.net, D = CM.Dedicated;
@@ -1666,6 +1667,11 @@
         D.max = int(v, 2, 20, 'Nombre de joueurs');
         cfg = { maxJoueurs: D.max };
         o.ok('👥 ' + D.max + ' joueurs au plus');
+      } else if (key === 'pause') {
+        needSrv();
+        const on = onOff(v || undefined, D.cfg.pauseVide !== false);
+        cfg = { pauseVide: on };
+        o.ok(on ? '⏸ Le monde se met en pause quand personne n’est connecté (au bout d’une minute)' : '▶ Le monde continue de tourner même sans joueur');
       } else if (key === 'extensions') {
         needSrv();
         const list = /^(aucune|none|rien)$/.test(norm(v)) ? [] : v.split(/[\s,;]+/).filter(Boolean);

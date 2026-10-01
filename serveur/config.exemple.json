@@ -9,5 +9,6 @@
   "pvp": false,
   "garderInventaire": false,
   "maxJoueurs": 10,
+  "pauseVide": true,
   "motDePasseAdmin": "a-changer"
 }

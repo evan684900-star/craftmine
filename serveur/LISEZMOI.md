@@ -68,6 +68,7 @@ la fin de chaque ligne sauf la dernière.
 | `pvp` | `true` : combats entre joueurs |
 | `garderInventaire` | `true` : on garde son inventaire à la mort |
 | `maxJoueurs` | Nombre de joueurs en même temps (10 par défaut, 20 au plus) |
+| `pauseVide` | `true` (par défaut) : au bout d'une minute sans joueur, le monde se fige (heure, cultures, créatures) et la machine se repose ; il repart dès qu'un joueur arrive. `false` : il tourne tout le temps |
 | `motDePasseAdmin` | Mot de passe de `/admin` (4 caractères au moins) |
 
 `graine` et `type` servent seulement à la création du monde (`craftmine nouveau-monde`). Tous les
