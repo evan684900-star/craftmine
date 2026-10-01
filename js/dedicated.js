@@ -7,6 +7,10 @@
   const D = (CM.Dedicated = { on: false, cfg: {}, max: 10 });
   CM.SERVER_CODE = 'SERVEUR'; // code affiché aux joueurs
   CM.SERVER_PEER = 'craftmine16-serveur-officiel'; // identifiant du serveur sur le réseau de mise en relation
+  // Relais WebRTC installé sur la machine du serveur (coturn, voir serveur/installer.sh) : en 4G,
+  // les opérateurs empêchent la connexion directe, on passe alors par lui (TCP 443 passe partout).
+  // Il ne relaie que vers la machine du serveur, d'où un mot de passe sans secret.
+  CM.SERVER_TURN = { host: '217.160.131.60', username: 'craftmine', credential: 'craftmine16-relais' };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = (s) => {

@@ -9,6 +9,11 @@ l'hôte permanent de la partie : tout le multijoueur de CraftMine marche comme d
 relation passe par le même service que les parties entre amis, donc **aucun port à ouvrir et aucun
 nom de domaine** ne sont nécessaires.
 
+Pour les joueurs en 4G/5G (les opérateurs empêchent souvent la connexion directe), l'installation
+ajoute un **relais** sur la machine (coturn, port 443 en TCP et 3478) : il ne relaie que vers le
+serveur. Si un joueur en 4G n'arrive toujours pas à se connecter, vérifie dans le panneau IONOS que
+le pare-feu de la machine laisse passer le port **443 (TCP)**, et si possible **3478 (UDP et TCP)**.
+
 ## Installation (Ubuntu 22.04 ou 24.04, 1 cœur et 2 Go de mémoire suffisent)
 
 1. Connecte-toi à la machine depuis ton ordinateur (Windows : ouvre **PowerShell**) :

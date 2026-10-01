@@ -15,26 +15,26 @@ if [ "$(id -u)" != 0 ]; then
 fi
 step() { echo; echo "=== $1"; }
 
-step "1/6 Mise à jour du système (quelques minutes)"
+step "1/7 Mise à jour du système (quelques minutes)"
 apt-get update -y
 apt-get upgrade -y -o Dpkg::Options::=--force-confold
 apt-get install -y curl ca-certificates nano
 
-step "2/6 Node.js"
+step "2/7 Node.js"
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
 node -v
 
-step "3/6 Mémoire d'appoint (2 Go sur le disque)"
+step "3/7 Mémoire d'appoint (2 Go sur le disque)"
 if ! swapon --show | grep -q .; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 free -h | head -3
 
-step "4/6 Fichiers du serveur"
+step "4/7 Fichiers du serveur"
 id craftmine >/dev/null 2>&1 || useradd --system --create-home --home-dir "$DIR" --shell /usr/sbin/nologin craftmine
 mkdir -p "$DIR"
 for f in serveur.js package.json config.exemple.json; do
@@ -48,13 +48,50 @@ if [ ! -f "$DIR/config.json" ]; then
 fi
 chown -R craftmine:craftmine "$DIR"
 
-step "5/6 Navigateur invisible (Chromium, environ 300 Mo)"
+step "5/7 Navigateur invisible (Chromium, environ 300 Mo)"
 cd "$DIR"
 sudo -u craftmine env HOME="$DIR" npm install --omit=dev --no-audit --no-fund
 PLAYWRIGHT_BROWSERS_PATH="$DIR/navigateurs" "$DIR/node_modules/.bin/playwright" install-deps chromium
 sudo -u craftmine env HOME="$DIR" PLAYWRIGHT_BROWSERS_PATH="$DIR/navigateurs" "$DIR/node_modules/.bin/playwright" install chromium
 
-step "6/6 Service (démarre tout seul, même après un redémarrage de la machine)"
+step "6/7 Relais réseau (pour les joueurs en 4G)"
+# En 4G, les opérateurs empêchent la connexion directe entre le téléphone et le serveur : le jeu passe
+# alors par ce relais (coturn), joignable sur le port 443 (TCP) comme un site web. Il ne relaie que
+# vers cette machine : il ne peut servir à rien d'autre.
+apt-get install -y --no-install-recommends coturn
+IP=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')
+cat > /etc/turnserver.conf <<EOF
+# Relais WebRTC du serveur CraftMine (écrit par installer.sh)
+listening-port=443
+alt-listening-port=3478
+relay-ip=$IP
+min-port=49160
+max-port=49400
+fingerprint
+lt-cred-mech
+user=craftmine:craftmine16-relais
+realm=craftmine
+no-cli
+no-tls
+no-dtls
+no-multicast-peers
+denied-peer-ip=0.0.0.0-255.255.255.255
+denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+allowed-peer-ip=$IP
+log-file=syslog
+simple-log
+EOF
+if [ -f /etc/default/coturn ]; then sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn; fi
+# (port 443 : il faut le droit d'ouvrir un port réservé)
+mkdir -p /etc/systemd/system/coturn.service.d
+printf '[Service]\nAmbientCapabilities=CAP_NET_BIND_SERVICE\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\n' > /etc/systemd/system/coturn.service.d/craftmine.conf
+systemctl daemon-reload
+systemctl enable coturn >/dev/null 2>&1
+systemctl restart coturn
+sleep 1
+if systemctl is-active coturn >/dev/null; then echo "Relais actif ($IP, ports 443 et 3478)"; else echo "⚠ Le relais n'a pas démarré (journalctl -u coturn)"; fi
+
+step "7/7 Service (démarre tout seul, même après un redémarrage de la machine)"
 cat > /etc/systemd/system/craftmine.service <<EOF
 [Unit]
 Description=Serveur CraftMine

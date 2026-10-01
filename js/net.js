@@ -10,6 +10,11 @@
   const PREFIX = 'craftmine16-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const MAX_PLAYERS = 8;
+  // Serveurs STUN/TURN par défaut de PeerJS (repris quand on ajoute le relais du serveur CraftMine).
+  const DEFAULT_ICE = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+  ];
   const PART = 15000; // découpe des gros messages (limite des canaux WebRTC)
   const TIMEOUT = 45000; // ms sans nouvelles : joueur considéré comme parti
   const VIEW = 80; // distance d'envoi des créatures et objets au sol
@@ -251,13 +256,23 @@
     }
 
     // ----------------------------------------------- connexion -------
-    peerOptions() {
+    // srv : connexion au serveur CraftMine (on ajoute son relais).
+    peerOptions(srv) {
       const o = { debug: 1 };
+      const params = new URLSearchParams(location.search);
       // tests : serveur de mise en relation local (« ?peerserver=localhost:9000 »)
-      const q = new URLSearchParams(location.search).get('peerserver');
+      const q = params.get('peerserver');
       if (q) {
         const [host, port] = q.split(':');
         Object.assign(o, { host, port: +port || 9000, path: '/', secure: false, config: { iceServers: [] } });
+      }
+      if (srv && CM.SERVER_TURN) {
+        // (tests : « ?turnhost=… » ; « ?relay=1 » force le relais, comme en 4G ; « ?relay=tcp » : seulement par TCP 443)
+        const T = CM.SERVER_TURN, host = params.get('turnhost') || T.host, relay = params.get('relay');
+        const ice = q ? [] : DEFAULT_ICE;
+        const urls = relay === 'tcp' ? ['turn:' + host + ':443?transport=tcp'] : ['turn:' + host + ':443?transport=tcp', 'turn:' + host + ':3478', 'turn:' + host + ':3478?transport=tcp'];
+        o.config = { iceServers: ice.concat([{ urls, username: T.username, credential: T.credential }]) };
+        if (relay) o.config.iceTransportPolicy = 'relay';
       }
       return o;
     }
@@ -265,9 +280,9 @@
       if (!window.Peer) await loadScript('js/vendor/peerjs.min.js');
       if (!window.Peer) throw new Error('bibliothèque réseau indisponible');
     }
-    openPeer(id) {
+    openPeer(id, srv) {
       return new Promise((resolve, reject) => {
-        const p = id ? new window.Peer(id, this.peerOptions()) : new window.Peer(this.peerOptions());
+        const p = id ? new window.Peer(id, this.peerOptions(srv)) : new window.Peer(this.peerOptions(srv));
         let done = false;
         const to = setTimeout(() => {
           if (done) return;
@@ -314,7 +329,7 @@
       for (let k = 0; k < (fixed ? 1 : 4) && !peer; k++) {
         const code = fixed ? CM.SERVER_CODE : randomCode();
         try {
-          peer = await this.openPeer(fixed || PREFIX + code);
+          peer = await this.openPeer(fixed || PREFIX + code, !!fixed);
           this.code = code;
         } catch (e) {
           last = e;
@@ -344,7 +359,7 @@
       if (!srv && code.length !== 5) throw { type: 'input', message: 'Tape le code de la partie (5 caractères, donné par l’hôte).' };
       await this.ensureLib();
       status('Connexion au serveur de mise en relation…');
-      const peer = await this.openPeer(null);
+      const peer = await this.openPeer(null, srv);
       this.peer = peer;
       status(srv ? 'Connexion au serveur CraftMine…' : 'Recherche de la partie ' + code + '…');
       try {

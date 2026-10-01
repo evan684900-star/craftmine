@@ -124,6 +124,7 @@ async function start() {
   const pub = Object.assign({}, cfg);
   delete pub.site;
   delete pub.peerserver;
+  delete pub.turnhost;
   await page.exposeFunction('cmServerConfig', () => pub);
   await page.exposeFunction('cmServerLoad', () => (fs.existsSync(SAVE) ? fs.readFileSync(SAVE, 'utf8') : null));
   await page.exposeFunction('cmServerSave', (json) => {
@@ -152,7 +153,7 @@ async function start() {
     process.exit(1);
   });
   // (peerserver : serveur de mise en relation local, pour les essais)
-  await page.goto(SITE + '/?server=1&t=' + Date.now() + (cfg.peerserver ? '&peerserver=' + cfg.peerserver : ''), { waitUntil: 'load', timeout: 180000 });
+  await page.goto(SITE + '/?server=1&t=' + Date.now() + (cfg.peerserver ? '&peerserver=' + cfg.peerserver : '') + (cfg.turnhost ? '&turnhost=' + cfg.turnhost : ''), { waitUntil: 'load', timeout: 180000 });
   setInterval(tick, 5000);
   setInterval(checkUpdate, 10 * 60e3);
 }
