@@ -126,6 +126,7 @@
         next: D.on && D.extNext ? D.extNext : null,
         persist: D.on ? (D.canPersist() ? 1 : 0) : 1,
         bans: Object.keys(net.bans || {}),
+        lim: CM.Social.D.lim,
         day: g.dayCount + 1,
         hour: Math.floor(((g.time * 24 + 6) % 24) * 10) / 10,
         wx: (g.weather && g.weather.type) || 'clear',
@@ -161,6 +162,7 @@
             })
             .join('')
         : '<div class="tp-empty">Personne n’est connecté.</div>');
+      if (document.activeElement !== $('adm-lim')) $('adm-lim').placeholder = st.lim || 16;
       put('adm-bans', st.bans.length ? st.bans.map((n) => '<div class="tp-row"><span class="tp-name"><b>' + esc(n) + '</b></span><button data-a="unban" data-n="' + esc(n) + '">Débannir</button></div>').join('') : '<div class="tp-empty">Personne n’est banni.</div>');
       // réglages (pas pendant qu'on les modifie)
       if (!this.dirty) {
@@ -238,6 +240,16 @@
           kick: () => this.run(g, '/expulser ' + q(n)),
           ban: () => this.run(g, '/bannir ' + q(n)),
           unban: () => this.run(g, '/debannir ' + q(n)),
+          free: () => {
+            const v = $('adm-free').value.trim();
+            if (!v) return;
+            $('adm-free').value = '';
+            this.run(g, '/liberer ' + q(v));
+          },
+          lim: () => {
+            const v = Math.round(+$('adm-lim').value);
+            if (v > 0) this.run(g, '/terrain limite ' + v);
+          },
           saveCfg: () => this.saveCfg(g),
           time: () => this.run(g, '/temps ' + b.dataset.v),
           wx: () => this.run(g, '/meteo ' + b.dataset.v),
@@ -262,7 +274,7 @@
       // réglages modifiés : on ne les remplace plus par l'état reçu, jusqu'à « Enregistrer »
       for (const id of ['adm-name', 'adm-mode', 'adm-diff', 'adm-max', 'adm-pvp', 'adm-keep', 'adm-cheats', 'adm-pause', ...EXT.map(([c]) => 'adm-ext-' + c)]) $(id).addEventListener('input', () => (this.dirty = true));
       // champs : Entrée valide, Échap ferme
-      for (const [id, a] of [['adm-pw', 'login'], ['adm-ann', 'ann'], ['adm-name', 'saveCfg'], ['adm-max', 'saveCfg']]) {
+      for (const [id, a] of [['adm-pw', 'login'], ['adm-ann', 'ann'], ['adm-name', 'saveCfg'], ['adm-max', 'saveCfg'], ['adm-free', 'free'], ['adm-lim', 'lim']]) {
         $(id).addEventListener('keydown', (e) => {
           e.stopPropagation();
           if (e.key === 'Enter') {

@@ -1005,8 +1005,8 @@
       }
       // choisir le bloc visé (clic molette)
       if (input.pressed.mouse1 && this.target) this.pickBlock(this.target.id);
-      // minage
-      if (input.mouse[0] && this.target) {
+      // minage (pas dans le terrain protégé d'un autre joueur)
+      if (input.mouse[0] && this.target && !CM.Social.blockedAt(g, this.target)) {
         const t = this.target;
         const b = CM.blocks[t.id];
         if (!b.unbreakable && b.hardness >= 0) {
@@ -1350,6 +1350,9 @@
     breakBlock(x, y, z, id, harvest, primary) {
       const g = this.game, w = g.world;
       const b = CM.blocks[id];
+      // (terrain protégé, coffre verrouillé d'un autre joueur : arbre abattu, filon, balle…)
+      if (CM.Social.blocked(g, x, z) || (b.container && CM.Social.lockedChest(g, x, y, z))) return;
+      CM.Social.hostBroke();
       if (b.container) g.chestAt(x, y, z); // un coffre de ruine se remplit avant d'être cassé
       w.setBlock(x, y, z, 0);
       if (b.container) g.spillChest(x, y, z);
@@ -1518,6 +1521,9 @@
       this.useCd = 0.22;
       const sneak = this.sneaking;
       const tb = t ? CM.blocks[t.id] : null;
+      // terrain protégé d'un autre joueur : on n'y touche à rien (manger, boire, lancer… restent permis)
+      const S = CM.Social;
+      if (t && !S.freeUse(info) && (S.blocked(g, t.x, t.z) || (info && (info.isBlock || info.places) && S.blocked(g, t.x + (t.nx | 0), t.z + (t.nz | 0))))) return;
       // toucher / clic droit sur une flamme : on l'éteint
       if (input.pressed.mouse2 && t && this.putOutFire(t, false)) return;
       // objet qui agit sur le bloc visé (multimètre, clé à molette…)
@@ -1555,6 +1561,7 @@
           return;
         }
         if (tb.container) {
+          if (S.lockedChest(g, t.x, t.y, t.z)) return; // (coffre verrouillé d'un autre joueur)
           g.openChestAt(t.x, t.y, t.z, tb.chestTitle || tb.name);
           return;
         }
@@ -1883,6 +1890,7 @@
       if (b.crop !== undefined) g.crops.add(px + ',' + py + ',' + pz);
       if (b.farmland) g.farmland.add(px + ',' + py + ',' + pz);
       g.stats.placed[id] = (g.stats.placed[id] || 0) + 1;
+      CM.Social.hostPlaced(g, px, py, pz, id); // (hôte : son conteneur lui appartient)
       CM.Audio.play('place', { mat: b.sound });
       this.swing = 1;
       if (id === B.DAWN_HEART) g.onDawnHeart(px, py, pz);
@@ -2026,6 +2034,7 @@
       if (this.gliding) CM.Weapons.stopGlide(this);
       this.bobber = null;
       CM.Comfort.onDeath(g, this); // lieu de la mort (boussole de récupération, carte)
+      if (g.net.isHost) CM.Social.onDeath(g.net.name, cause); // (classements)
       this.alive = false;
       this.hook = null;
       this.flying = false;

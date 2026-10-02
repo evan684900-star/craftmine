@@ -103,7 +103,7 @@ Un monde ouvert **24 h/24** sur une machine louée : bouton **🖥️ Serveur** 
 
 - Le jeu tourne sur la machine sans image ni son (navigateur invisible) et sert d'hôte permanent. Son joueur à lui est invisible et ne compte pas. Le monde est enregistré sur le disque chaque minute et à l'arrêt, avec une copie par heure.
 - **`/admin <mot de passe>`** : triches et commandes de l'hôte. **`/expulser`**, **`/bannir`**, **`/debannir`** pour la modération (aussi dans une partie entre amis, pour l'hôte).
-- **Pause → 🛡 Administration** (ou `/panel`) : le panneau d'administration, pour l'hôte et les administrateurs (sur le serveur, on s'y connecte avec le mot de passe). Joueurs connectés (aller vers eux, les faire venir, les nommer administrateurs, les expulser, les bannir), bannis, réglages (nom, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire, triches, extensions : sur le serveur, ils sont écrits dans `config.json` de la machine), heure, météo, annonce, sauvegarde et redémarrage du serveur, sans passer par la machine. En commande : `/serveur`, `/nommeradmin`, `/retireradmin`.
+- **Pause → 🛡 Administration** (ou `/panel`) : le panneau d'administration, pour l'hôte et les administrateurs (sur le serveur, on s'y connecte avec le mot de passe). Joueurs connectés (aller vers eux, les faire venir, les nommer administrateurs, les expulser, les bannir), bannis, pseudos protégés à libérer, nombre de tronçons protégés par joueur, réglages (nom, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire, triches, extensions : sur le serveur, ils sont écrits dans `config.json` de la machine), heure, météo, annonce, sauvegarde et redémarrage du serveur, sans passer par la machine. En commande : `/serveur`, `/nommeradmin`, `/retireradmin`.
 - Installation en une commande et commandes de la machine (`craftmine journal`, `craftmine config`…) : voir [serveur/LISEZMOI.md](serveur/LISEZMOI.md).
 
 ### Multijoueur (gratuit, sans serveur)
@@ -117,13 +117,25 @@ Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
 | --- | --- |
 | **T**, **Entrée** ou **/** (💬 sur téléphone) | Tchat et commandes |
 | **Tab** (maintenue) | Joueurs connectés, en haut de l'écran (sur téléphone : toucher « 🌐 CODE · N joueurs ») |
-| **G** | Menu Téléportation (aussi dans Pause) : tes maisons (définir, y aller, supprimer) et les demandes aux autres joueurs (aller chez lui, l'inviter ici, accepter, refuser). Impossible pendant un combat : il faut 10 s sans donner ni recevoir de coup |
+| **G** | Menu du joueur (aussi dans Pause), en onglets : Téléportation, Terrain, Équipe, Argent, Classements, Compte (voir ci-dessous). Rien de plus ne reste affiché pendant le jeu |
 
 - Les navigateurs se connectent **directement entre eux** (WebRTC). Le serveur public et gratuit de [PeerJS](https://peerjs.com) sert seulement à les mettre en relation ; aucun compte, aucun serveur à payer.
 - **L'hôte fait autorité** : il garde le monde, les créatures, les objets au sol, les coffres, l'heure et les réglages (mode de jeu, difficulté, durée des journées, « garder l'inventaire »). Chaque invité gère ses déplacements, son inventaire, sa faim et sa santé.
 - Les autres joueurs sont visibles avec leur pseudo au-dessus de la tête et **l'objet qu'ils tiennent en main**. Les coffres sont partagés (un seul joueur à la fois), les blocs posés et cassés, les explosions et les créatures sont vus par tous.
 - **Sauvegarde** : la progression de chaque invité (position, inventaire, statistiques) est rangée dans la sauvegarde de l'hôte, sous son pseudo, et retrouvée quand il revient. La partie solo de l'invité sur son propre appareil n'est pas touchée.
 - **Limites** : la partie n'existe que tant que l'hôte a le jeu ouvert et au premier plan (sur téléphone, verrouiller l'écran met la partie en pause pour tout le monde). Certains réseaux très fermés (Wi-Fi d'école ou d'entreprise) peuvent bloquer la connexion directe ; PeerJS fournit un relais de secours, sinon essaie un autre réseau (la 4G par exemple).
+
+### 🧭 Menu du joueur (touche G) : vie du serveur
+
+Tout se règle dans ce menu (ou par les commandes) ; l'hôte garde tout dans la sauvegarde du monde.
+
+- **🌀 Téléportation** : tes maisons (définir, y aller, supprimer) et les demandes aux autres joueurs (aller chez lui, l'inviter ici, accepter, refuser). Impossible pendant un combat : il faut 10 s sans donner ni recevoir de coup.
+- **👤 Compte — pseudo protégé** : un pseudo appartient au premier appareil qui l'utilise sur la partie (le navigateur garde une clé secrète). Pour jouer avec depuis un autre appareil, choisis un **mot de passe** dans cet onglet : l'autre appareil le demandera à la connexion. Changé d'appareil sans mot de passe ? Un administrateur **libère** le pseudo (panneau d'administration, ou `/liberer pseudo`) : on garde ses pièces et ses terrains. Les droits d'administrateur sont gardés d'une connexion à l'autre.
+- **🏡 Terrain** : protège le **tronçon** où tu es (carré de 16 × 16 blocs, du fond jusqu'au ciel ; 16 par joueur, réglable par l'administrateur). Sur tes tronçons, seuls toi, ton équipe et tes **amis autorisés** cassent, posent, ouvrent les portes et les coffres, utilisent les animaux ; les explosions ne les abîment pas. Petite carte des terrains autour de toi. `/terrain prendre | rendre | ami <joueur> | retirer <joueur> | liste`.
+- **🔒 Coffres verrouillés** : un coffre (tonneau, four…) appartient à celui qui l'a posé ; seuls lui, son équipe et ses amis l'ouvrent ou le cassent. Bouton dans le coffre (ou `/coffre public`) pour l'ouvrir à tous.
+- **🛡 Équipe** : crée-la (nom et TAG de 4 lettres), invite, rejoins, quitte, exclus (le chef). Le **[TAG]** s'affiche devant le pseudo, **pas de dégâts entre coéquipiers**, vous construisez sur les terrains les uns des autres. Tchat d'équipe : **`/e message`**.
+- **🪙 Argent** : des **pièces** pour chaque créature hostile vaincue. **Boutique** du serveur (acheter, revendre ×1, ×16, ×64), **hôtel des ventes** (mets en vente l'objet que tu tiens, à ton prix ; on te paie même si tu n'es pas là), **payer** un joueur (`/payer joueur montant`). Pas d'argent en mode créatif. Administrateur : `/donnerpieces joueur montant`.
+- **🏆 Classements** : les plus riches, créatures vaincues, joueurs vaincus, blocs posés et cassés, temps de jeu (aussi `/classement`).
 
 ### 💬 Commandes du tchat
 
@@ -295,7 +307,9 @@ js/guns.js        tir, visée et lunette, recul, rechargement, roquettes et gren
 js/vehicle_defs.js véhicules (extension) : caractéristiques, objets, recettes, textures, établi de mécanicien
 js/dedicated.js   serveur dédié : jeu sans image, hôte permanent, sauvegarde sur disque, /admin, réglages écrits sur la machine
 js/admin.js       panneau d'administration (Pause → Administration)
-js/teleport.js    menu Téléportation (maisons, demandes aux joueurs)
+js/teleport.js    menu du joueur (G) : onglets, téléportation (maisons, demandes aux joueurs)
+js/social.js      vie du serveur : pseudos protégés, terrains, coffres verrouillés, équipes, pièces, boutique, hôtel des ventes, classements
+js/social_ui.js   onglets Terrain, Équipe, Argent, Classements, Compte du menu du joueur
 serveur/          programme de la machine (serveur.js), installation (installer.sh), guide (LISEZMOI.md)
 js/fkeys.js       touches F : capture d’écran, vidéo, vues, bordures des tronçons, boîtes, zones des monstres, zoom…
 js/vehicles.js    conduite, vol, bateau, carburant, dégâts, passagers, klaxon et sirène, caméra de derrière, modèles 3D, réseau

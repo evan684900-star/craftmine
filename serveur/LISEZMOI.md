@@ -87,14 +87,17 @@ faux, il faut attendre une minute.
 
 Le panneau d'administration permet ensuite, sans passer par la machine :
 
-- **Joueurs connectés** : aller vers eux, les faire venir, les nommer administrateurs (jusqu'à leur
-  déconnexion), les expulser ou les bannir ; **débannir** ;
+- **Joueurs connectés** : aller vers eux, les faire venir, les nommer administrateurs (ils le
+  restent aux connexions suivantes), les expulser ou les bannir ; **débannir** ;
+- **Pseudos et terrains** : chaque pseudo est réservé à l'appareil qui l'a utilisé en premier (ou à
+  son mot de passe, menu G → Compte) ; **libérer** celui d'un joueur qui a changé d'appareil sans
+  mot de passe ; nombre de tronçons protégés par joueur ;
 - **Réglages** : nom du serveur, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire,
   triches pour tous, extensions (au prochain redémarrage). Ils sont enregistrés dans `config.json` ;
 - **Monde** : heure, météo, annonce à tous, sauvegarde, **redémarrage du serveur**.
 
 Les commandes de l'hôte marchent aussi dans le tchat : `/serveur` (réglages), `/nommeradmin`,
-`/retireradmin`, `/expulser`, `/bannir`, `/debannir`, `/triche`, `/regle`…
+`/retireradmin`, `/expulser`, `/bannir`, `/debannir`, `/liberer`, `/donnerpieces`, `/triche`, `/regle`…
 
 Le programme du serveur (`serveur.js`) se met à jour tout seul avec le jeu. S'il date d'avant le
 panneau d'administration, lance une fois `craftmine mettre-a-jour` pour que les réglages changés

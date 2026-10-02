@@ -1,8 +1,10 @@
 'use strict';
-// Menu Téléportation (touche G, ou Pause → Téléportation) : maisons (aller, définir, supprimer)
-// et demandes de téléportation aux autres joueurs (aller chez lui, l'inviter ici, accepter,
-// refuser). Tout passe par les commandes (/maison, /defmaison, /tpa, /tpaici, /tpaccepter…),
-// qui refusent la téléportation moins de 10 s après un combat.
+// Menu du joueur (touche G, ou Pause → Menu du joueur), en onglets :
+// - Téléportation : maisons (aller, définir, supprimer) et demandes aux autres joueurs (aller chez
+//   lui, l'inviter ici, accepter, refuser). Tout passe par les commandes (/maison, /tpa…), qui
+//   refusent la téléportation moins de 10 s après un combat.
+// - Terrain, Équipe, Argent, Classements, Compte : voir social.js et social_ui.js ; Gestes : emotes.js.
+// Rien ne reste affiché pendant le jeu, sauf le petit bandeau d'une demande de téléportation reçue.
 (function () {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -12,9 +14,20 @@
     const el = $(id);
     if (el._h !== html) el.innerHTML = el._h = html;
   };
+  const TABS = {
+    tp: '🌀 Téléportation',
+    terrain: '🏡 Terrain',
+    equipe: '🛡 Équipe',
+    argent: '🪙 Argent',
+    top: '🏆 Classements',
+    gestes: '👋 Gestes',
+    compte: '👤 Compte',
+  };
+  const NET_TABS = new Set(['terrain', 'equipe', 'argent', 'top']);
 
   const T = {
     open: false,
+    tab: 'tp',
     msg: '',
     msgKind: 'info',
     tick: 0,
@@ -24,9 +37,10 @@
       if (this.open) this.close(g);
       else this.show(g);
     },
-    show(g) {
+    show(g, tab) {
       if (g.state !== 'playing' || !g.player.alive) return;
       this.bind(g);
+      if (tab && TABS[tab]) this.tab = tab;
       this.open = true;
       this.msg = '';
       g.ui.modal = true;
@@ -34,14 +48,22 @@
       g.clearInput();
       $('tpmenu').classList.remove('hidden');
       $('tp-pop').classList.add('hidden');
-      this.render(g);
+      this.switchTab(g, this.tab);
     },
     close(g) {
       if (!this.open) return;
       this.open = false;
       g.ui.modal = false;
+      const a = document.activeElement;
+      if (a && $('tpmenu').contains(a)) a.blur();
       $('tpmenu').classList.add('hidden');
       if (!g.touch.enabled) g.captureMouse();
+    },
+    switchTab(g, tab) {
+      this.tab = TABS[tab] ? tab : 'tp';
+      this.msg = '';
+      if (CM.SocialUI) CM.SocialUI.opened(g, this.tab);
+      this.render(g);
     },
     // Touches : G ouvre/ferme, Échap ferme ; menu ouvert, les autres touches ne vont pas au jeu.
     keydown(g, e) {
@@ -67,6 +89,13 @@
       });
       this.render(g);
     },
+    // Réponse d'une commande (aussi celles que l'hôte renvoie à un invité).
+    onOut(s, k) {
+      if (!['ok', 'err', 'info'].includes(k || 'info')) return;
+      this.msg = String(s);
+      this.msgKind = k || 'info';
+      if (CM.game) this.render(CM.game);
+    },
     // Une demande est arrivée ou a changé (appelé par les commandes).
     changed() {
       const g = CM.game;
@@ -89,6 +118,7 @@
       el.classList.remove('hidden');
     },
     update(g, dt) {
+      if (this.open && CM.SocialUI) CM.SocialUI.tick(g, dt, this.tab);
       this.tick -= dt;
       if (this.tick > 0) return;
       this.tick = 0.5;
@@ -97,6 +127,27 @@
     },
 
     render(g) {
+      const tab = this.tab, solo = NET_TABS.has(tab) && !g.net.active;
+      $('pm-title').textContent = TABS[tab];
+      for (const b of $('pm-tabs').children) {
+        b.classList.toggle('on', b.dataset.tab === tab);
+        if (b.dataset.tab === 'gestes') b.classList.toggle('hidden', !CM.Emotes);
+      }
+      const sk = document.querySelector('#pm-compte .ac-skin');
+      if (sk) {
+        sk.classList.toggle('hidden', !CM.Skins);
+        sk.previousElementSibling.classList.toggle('hidden', !CM.Skins);
+      }
+      for (const el of document.querySelectorAll('#tpmenu .pm-page')) el.classList.toggle('hidden', el.id !== (solo ? 'pm-solo' : 'pm-' + tab));
+      const m = $('tp-msg');
+      m.textContent = this.msg;
+      m.className = 'tp-msg ' + this.msgKind;
+      $('tp-key').textContent = g.touch.enabled ? '' : 'Touche ' + g.keyName(g.binds.tpmenu) + ' ou Échap pour fermer · ';
+      $('pm-hint').textContent = tab === 'tp' ? 'Impossible pendant un combat (10 s après le dernier coup) · une demande dure 60 s' : '';
+      if (tab === 'tp') this.renderTp(g);
+      else if (!solo && CM.SocialUI) CM.SocialUI.render(g, tab);
+    },
+    renderTp(g) {
       const net = g.net, p = g.player;
       const st = CM.Commands.tpState();
       const left = p.combatLeft();
@@ -137,13 +188,9 @@
                 const btns = out
                   ? '<span class="tp-wait">Demande envoyée · ' + Math.max(0, Math.ceil(st.life - (st.clock - out.t))) + ' s</span>'
                   : '<button data-tp="tpa" data-n="' + esc(rp.name) + '" class="tp-go"' + (left > 0 ? ' disabled' : '') + '>Aller chez lui</button><button data-tp="here" data-n="' + esc(rp.name) + '">L’inviter ici</button>';
-                return '<div class="tp-row"><span class="tp-name"><b>' + esc(rp.name) + '</b>' + where + '</span>' + btns + '</div>';
+                return '<div class="tp-row"><span class="tp-name"><b>' + esc(CM.Social.label(rp.name)) + '</b>' + where + '</span>' + btns + '</div>';
               })
               .join(''));
-      const m = $('tp-msg');
-      m.textContent = this.msg;
-      m.className = 'tp-msg ' + this.msgKind;
-      $('tp-key').textContent = g.touch.enabled ? '' : 'Touche ' + g.keyName(g.binds.tpmenu) + ' ou Échap pour fermer · ';
     },
 
     bind(g) {
@@ -157,8 +204,13 @@
           if (e.target === el) this.close(g); // (clic à côté du panneau)
           return;
         }
+        if (b.disabled) return;
         const n = b.dataset.n;
         e.preventDefault();
+        if (b.dataset.tab) {
+          this.switchTab(g, b.dataset.tab);
+          return;
+        }
         switch (b.dataset.tp) {
           case 'close':
             this.close(g);
@@ -188,20 +240,29 @@
             this.run(g, '/tprefuser ' + q(n));
             return;
         }
+        if (CM.SocialUI) CM.SocialUI.click(g, b);
       });
-      const inp = $('tp-home-name');
-      inp.addEventListener('keydown', (e) => {
+      // champs de saisie : les touches ne vont pas au jeu ; Entrée valide la ligne, Échap ferme
+      el.addEventListener('keydown', (e) => {
+        if (!e.target.matches('input')) return;
         e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
-          $('tp-home-set').click();
+          const b = e.target.closest('.tp-add') && e.target.closest('.tp-add').querySelector('button[data-tp]');
+          if (b) b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         } else if (e.key === 'Escape') {
           e.preventDefault();
           this.close(g);
         }
       });
-      inp.addEventListener('input', () => this.render(g));
-      $('tp-pop').addEventListener('click', () => this.show(g));
+      el.addEventListener('input', (e) => {
+        if (e.target.id === 'tp-home-name') this.render(g);
+        else if (CM.SocialUI) CM.SocialUI.input(g, e.target);
+      });
+      el.addEventListener('change', (e) => {
+        if (CM.SocialUI) CM.SocialUI.change(g, e.target);
+      });
+      $('tp-pop').addEventListener('click', () => this.show(g, 'tp'));
     },
   };
   CM.Teleport = T;

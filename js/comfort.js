@@ -71,6 +71,11 @@
     m.set(k, v);
     return v;
   }
+  // Couleur du haut d'une colonne (carte des terrains du menu G) ; compute : la calculer si besoin.
+  C.mapColor = (g, x, z, compute) => {
+    const dim = g.playerDim, v = cache[dim].get(x + ',' + z);
+    return v || (compute ? column(g.world, dim, x, z, g.player.y) : null);
+  };
   C.onEdit = (dim, x, z) => {
     const m = cache[dim];
     if (m && m.size) m.delete(x + ',' + z);

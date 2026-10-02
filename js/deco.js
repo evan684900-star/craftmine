@@ -100,6 +100,7 @@
     },
     // Action du joueur de cet écran : appliquée tout de suite, puis partagée.
     act(g, o) {
+      if (CM.Social.decoBlocked(g, o)) return false; // (terrain protégé d'un autre joueur)
       if (!D.apply(g, o)) return false;
       if (g.net.isClient) g.net.send({ t: 'dco', o });
       else if (g.net.isHost) g.net.broadcast({ t: 'dco', o });

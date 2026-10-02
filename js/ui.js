@@ -203,7 +203,7 @@
   const BIND_LABELS = {
     forward: 'Avancer', back: 'Reculer', left: 'Aller à gauche', right: 'Aller à droite', jump: 'Sauter / nager / monter (vol)',
     sprint: 'Courir', sneak: "S'accroupir / descendre (vol)", dash: 'Ruée', inventory: 'Inventaire', drop: "Jeter l'objet", swap: 'Échanger les deux mains',
-    map: 'Mini-carte (masquée / petite / grande)', reload: 'Recharger (arme à feu)', horn: 'Klaxon / sirène (véhicule)', view: 'Vue de derrière / 1re personne', fullscreen: 'Plein écran', tpmenu: 'Téléportation (maisons, joueurs)',
+    map: 'Mini-carte (masquée / petite / grande)', reload: 'Recharger (arme à feu)', horn: 'Klaxon / sirène (véhicule)', view: 'Vue de derrière / 1re personne', fullscreen: 'Plein écran', tpmenu: 'Menu du joueur (téléportation, terrain, équipe, argent…)',
   };
   const MODE_NAMES = { survival: 'Survie', creative: 'Créatif' };
   const DIFF_NAMES = { peaceful: 'Paisible', easy: 'Facile', normal: 'Normale', hard: 'Difficile' };
@@ -590,7 +590,7 @@
       for (const r of rows) {
         const dm = DIM[r.dim] || DIM.overworld;
         const tags = (r.host ? '<i class="tl-host">👑 hôte</i>' : '') + (r.admin ? '<i class="tl-adm">🛡 admin</i>' : '') + (r.self ? '<i>toi</i>' : r.dist !== null && r.dist !== undefined ? '<i>' + r.dist + ' m</i>' : '');
-        h += '<div class="tl-row' + (r.self ? ' me' : '') + '"><span title="' + dm[1] + '">' + dm[0] + '</span><b>' + esc(r.name) + '</b>' + tags + '</div>';
+        h += '<div class="tl-row' + (r.self ? ' me' : '') + '"><span title="' + dm[1] + '">' + dm[0] + '</span><b>' + esc(CM.Social.label(r.name)) + '</b>' + tags + '</div>';
       }
       if (!net.active) h += '<div class="tl-foot">Joue avec tes amis : Pause › Ouvrir aux amis, ou le bouton « Serveur » du menu.</div>';
       $('tablist').innerHTML = h;
@@ -857,7 +857,7 @@
       $('help').innerHTML =
         '<h3>Commandes (modifiables dans Options &gt; Contrôles)</h3><ul>' +
         '<li><b>' + kn('forward') + kn('left') + kn('back') + kn('right') + '</b> : se déplacer · <b>' + kn('jump') + '</b> : sauter / nager · <b>' + kn('sprint') + '</b> : courir · <b>' + kn('sneak') + '</b> : s’accroupir</li>' +
-        '<li><b>' + kn('dash') + '</b> : ruée · <b>' + kn('inventory') + '</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>' + kn('view') + '</b> : vue de derrière · <b>' + kn('fullscreen') + '</b> : plein écran · <b>' + kn('map') + '</b> : carte · <b>Tab</b> (maintenue) : joueurs connectés · <b>' + kn('tpmenu') + '</b> : téléportation (maisons, demandes aux joueurs)</li>' +
+        '<li><b>' + kn('dash') + '</b> : ruée · <b>' + kn('inventory') + '</b> : inventaire et fabrication · <b>Échap</b> : pause · <b>' + kn('view') + '</b> : vue de derrière · <b>' + kn('fullscreen') + '</b> : plein écran · <b>' + kn('map') + '</b> : carte · <b>Tab</b> (maintenue) : joueurs connectés · <b>' + kn('tpmenu') + '</b> : menu du joueur (téléportation, terrain protégé, équipe, pièces et boutique, classements, gestes, skin)</li>' +
         '<li><b>Clic gauche</b> (maintenu) : miner / frapper · <b>Clic droit</b> : poser, manger, utiliser · <b>Clic molette</b> : choisir le bloc visé</li>' +
         '<li><b>1-9</b> ou <b>molette</b> : choisir l’objet en main · <b>' + kn('drop') + '</b> : jeter</li></ul>' +
         '<h3>Touches F</h3><ul>' + CM.FKeys.HELP.map(([k, d]) => '<li><b>' + k + '</b> : ' + d + '</li>').join('') +
@@ -966,6 +966,7 @@
       this.chest = slots;
       $('chest-title').textContent = title || 'Coffre';
       this.openInventory(true);
+      CM.SocialUI.chest(this.game); // (propriétaire, verrou)
     }
     openInventory(withChest) {
       if (this.invOpen || !this.game.player.alive) return;

@@ -279,6 +279,7 @@
       this.playerDim = this.dim;
       if (!this.net.isClient) this.net.guests = (save && save.guests) || {};
       if (!this.net.isClient) this.net.bans = (save && save.bans && typeof save.bans === 'object' && save.bans) || {};
+      if (!this.net.isClient) CM.Social.load(save && save.social); // (comptes, terrains, équipes, pièces)
       this.golemHomes = (!this.net.isClient && save && Array.isArray(save.golems) && save.golems) || []; // golems construits par les joueurs
       this.cityLots = new Set(save && Array.isArray(save.cityLots) ? save.cityLots.filter((k) => typeof k === 'string') : []);
       this.animals = (!this.net.isClient && save && Array.isArray(save.animals) && save.animals.filter((a) => Array.isArray(a) && a.length >= 4)) || []; // élevage hors de portée
@@ -868,6 +869,7 @@
         guardians: this.guardians,
         giantDay: this.giantDay,
         golems: this.golemHomes,
+        social: this.net.isClient ? undefined : CM.Social.save(),
         cityLots: this.cityLots && this.cityLots.size ? [...this.cityLots] : undefined, // îlots déjà garnis de voitures
         animals: this.ctxs.overworld ? this.ctxs.overworld.entities.tameList() : this.animals,
         carts: Object.fromEntries(CM.DIMS.map((d) => [d, this.ctxs[d] ? this.ctxs[d].entities.cartList() : this.dimCarts[d] || []])),
@@ -1229,6 +1231,9 @@
       $('mp-code').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') this.joinGame();
       });
+      $('mp-pw').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.joinGame();
+      });
       on('btn-lan', () => this.openHostDialog());
       on('btn-host-cancel', () => {
         this.ui.hide('hostdlg');
@@ -1307,13 +1312,19 @@
       $('btn-mp-join').disabled = true;
       let joined = false;
       try {
-        const w = await this.net.join(this.mpServer ? CM.SERVER_CODE : $('mp-code').value, name, (t) => this.mpStatus(t));
+        const pwOn = !$('mp-pw').classList.contains('hidden');
+        const w = await this.net.join(this.mpServer ? CM.SERVER_CODE : $('mp-code').value, name, (t) => this.mpStatus(t), pwOn ? $('mp-pw').value : '');
         joined = true;
         await this.startWorld(w.seed, this.net.guestSave(w));
       } catch (e) {
         console.warn(e);
         if (joined) this.exitToMenu('La partie n’a pas pu démarrer : ' + (e.message || e));
         else this.mpStatus(CM.netErrorText(Object.assign({}, e, { type: e && e.type, message: e && e.message, server: this.mpServer })), 'warn');
+        // pseudo protégé (un autre appareil l'utilise) : on peut taper son mot de passe
+        if (!joined && e && (e.code === 'pw' || e.code === 'taken')) {
+          for (const el of document.querySelectorAll('.mp-pw-row')) el.classList.remove('hidden');
+          if (e.code === 'pw') $('mp-pw').focus();
+        }
       }
       this.joining = false;
       $('btn-mp-join').disabled = false;
@@ -2019,12 +2030,14 @@
       this.explodeFx(x, y, z);
       this.net.fx({ k: 'boom', x, y, z });
       const chain = [];
+      const claimed = CM.Social.claimedFn(this); // (les terrains protégés ne sont pas abîmés)
       for (let dy = -R; dy <= R; dy++)
         for (let dz = -R; dz <= R; dz++)
           for (let dx = -R; dx <= R; dx++) {
             const d = Math.hypot(dx, dy, dz);
             if (d > power + (CM.hash3(x + dx, y + dy, z + dz, 7) - 0.5)) continue;
             const X = Math.floor(x) + dx, Y = Math.floor(y) + dy, Z = Math.floor(z) + dz;
+            if (claimed && claimed(X, Z)) continue;
             const id = w.get(X, Y, Z);
             if (!id || CM.isWater(id)) continue;
             const b = CM.blocks[id];
@@ -2303,6 +2316,7 @@
       CM.Vehicles.hud(this); // compteur de vitesse, carburant
       if (!this.dedicated) this.renderer.updateMeshes(this.world, this.player.x, this.player.z, 5, false);
       net.update(dt);
+      CM.Social.update(this, dt); // (hôte : terrains, équipes et pièces envoyés aux invités, temps de jeu)
     }
 
     render() {

@@ -94,7 +94,7 @@ function setConfig(patch) {
 // Empreinte du jeu en ligne : quand elle change (mise à jour de CraftMine), le serveur redémarre.
 async function onlineVersion() {
   const h = crypto.createHash('sha1');
-  for (const f of ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js', 'js/commands.js', 'js/admin.js']) {
+  for (const f of ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js', 'js/commands.js', 'js/admin.js', 'js/social.js']) {
     const r = await fetch(SITE + '/' + f + '?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error(f + ' : ' + r.status);
     h.update(await r.text());

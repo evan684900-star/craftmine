@@ -171,6 +171,7 @@
         </div>
         <div id="chest-panel" class="hidden">
           <div class="chest-head"><h2 id="chest-title">Coffre</h2><button id="chest-sort" title="Trier le coffre">⇅ Trier</button></div>
+          <div id="chest-own" class="chest-own hidden"><span id="chest-owner"></span><button id="chest-lock"></button></div>
           <div id="chest-grid" class="grid"></div>
           <div class="hint">Maj+clic : transférer entre le coffre et l'inventaire</div>
         </div>
@@ -320,6 +321,8 @@
         <input id="mp-name" type="text" maxlength="16" autocomplete="off" placeholder="ex. Évan" />
         <label for="mp-code" class="mp-code-row">Code de la partie</label>
         <input id="mp-code" type="text" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ex. K7F2Q" class="code-input" />
+        <label for="mp-pw" class="mp-pw-row hidden">Mot de passe du pseudo</label>
+        <input id="mp-pw" type="password" maxlength="64" autocomplete="current-password" placeholder="choisi dans le menu G → Compte" class="mp-pw-row hidden" />
       </div>
       <div id="mp-status" class="menu-msg hidden"></div>
       <div class="row2 mp-row">
@@ -384,7 +387,7 @@
       <div class="menu-col">
         <button id="btn-resume" class="big">Reprendre</button>
         <button id="btn-lan">Ouvrir aux amis (multijoueur)</button>
-        <button id="btn-tp">🌀 Téléportation (maisons, joueurs)</button>
+        <button id="btn-tp">🧭 Menu du joueur (téléportation, terrain, équipe, argent…)</button>
         <button id="btn-admin" class="hidden">🛡 Administration</button>
         <button id="btn-options2">Options</button>
         <button id="btn-fs2" title="Plein écran (touche P)">⛶ Plein écran</button>
@@ -429,16 +432,76 @@
 
   <div id="tpmenu" class="screen hidden">
     <div class="panel tp-panel">
-      <div class="tp-head"><h3>🌀 Téléportation</h3><button data-tp="close" title="Fermer">✕</button></div>
-      <div id="tp-combat" class="tp-combat hidden"></div>
-      <div id="tp-req"></div>
-      <h4>🏡 Mes maisons</h4>
-      <div id="tp-homes"></div>
-      <div class="tp-add"><input id="tp-home-name" type="text" maxlength="16" placeholder="Nom (maison)" autocomplete="off" spellcheck="false" /><button id="tp-home-set" data-tp="set">Définir ici</button></div>
-      <h4>👥 Joueurs</h4>
-      <div id="tp-players"></div>
+      <div class="tp-head"><h3 id="pm-title">🌀 Téléportation</h3><button data-tp="close" title="Fermer">✕</button></div>
+      <div id="pm-tabs" class="pm-tabs">
+        <button data-tab="tp">🌀<span>Téléport.</span></button>
+        <button data-tab="terrain" class="pm-net">🏡<span>Terrain</span></button>
+        <button data-tab="equipe" class="pm-net">🛡<span>Équipe</span></button>
+        <button data-tab="argent" class="pm-net">🪙<span>Argent</span></button>
+        <button data-tab="top" class="pm-net">🏆<span>Classements</span></button>
+        <button data-tab="gestes">👋<span>Gestes</span></button>
+        <button data-tab="compte">👤<span>Compte</span></button>
+      </div>
+      <div id="pm-tp" class="pm-page">
+        <div id="tp-combat" class="tp-combat hidden"></div>
+        <div id="tp-req"></div>
+        <h4>🏡 Mes maisons</h4>
+        <div id="tp-homes"></div>
+        <div class="tp-add"><input id="tp-home-name" type="text" maxlength="16" placeholder="Nom (maison)" autocomplete="off" spellcheck="false" /><button id="tp-home-set" data-tp="set">Définir ici</button></div>
+        <h4>👥 Joueurs</h4>
+        <div id="tp-players"></div>
+      </div>
+      <div id="pm-solo" class="pm-page hidden"><div class="tp-empty">Seulement en multijoueur : sur le serveur CraftMine (bouton « Serveur » du menu), ou dans une partie ouverte aux amis (Pause → Ouvrir aux amis).</div></div>
+      <div id="pm-terrain" class="pm-page hidden">
+        <div id="ter-here"></div>
+        <canvas id="ter-map" width="180" height="180"></canvas>
+        <div class="ter-legend"><i class="l-me"></i>à toi <i class="l-fr"></i>équipe, amis <i class="l-ot"></i>autres joueurs</div>
+        <h4>🏡 Mes terrains <i id="ter-count"></i></h4>
+        <div id="ter-list"></div>
+        <h4>🤝 Amis autorisés <i>(sur tous tes terrains)</i></h4>
+        <div id="ter-trust"></div>
+        <div class="tp-add"><input id="ter-friend" type="text" maxlength="16" placeholder="Pseudo du joueur" autocomplete="off" spellcheck="false" /><button data-tp="trust">Autoriser</button></div>
+        <div class="tp-empty">Un tronçon, c’est un carré de 16 × 16 blocs, du fond jusqu’au ciel. Sur tes tronçons, seuls toi, ton équipe et tes amis autorisés peuvent casser, poser, ouvrir les portes et les coffres ; les explosions ne les abîment pas.<br>🔒 Tes coffres (tonneaux, fours…) sont verrouillés partout : ouvre-en un pour le rendre public.</div>
+      </div>
+      <div id="pm-equipe" class="pm-page hidden">
+        <div id="eq-info"></div>
+        <div id="eq-create" class="tp-add"><input id="eq-name" type="text" maxlength="20" placeholder="Nom de l’équipe" autocomplete="off" spellcheck="false" /><input id="eq-tag" class="eq-tag" type="text" maxlength="4" placeholder="TAG" autocomplete="off" spellcheck="false" /><button data-tp="eqcreate" class="tp-go">Créer</button></div>
+        <div id="eq-invite" class="tp-add"><input id="eq-who" type="text" maxlength="16" placeholder="Pseudo à inviter" autocomplete="off" spellcheck="false" /><button data-tp="eqinv">Inviter</button></div>
+        <div class="tp-empty">Ton équipe : [TAG] devant ton pseudo, pas de dégâts entre vous, et vous construisez sur les terrains les uns des autres. Tchat d’équipe : <b>/e</b> message.</div>
+      </div>
+      <div id="pm-argent" class="pm-page hidden">
+        <div id="ar-bal" class="ar-bal"></div>
+        <div class="pm-sub"><button data-sub="shop">🛒 Boutique</button><button data-sub="hdv">🏷 Hôtel des ventes</button><button data-sub="pay">💸 Payer</button></div>
+        <div id="ar-shop" class="ar-part">
+          <div class="tp-add"><input id="ar-search" type="text" maxlength="20" placeholder="Chercher un objet" autocomplete="off" spellcheck="false" /><span class="ar-qty">×<button data-q="1">1</button><button data-q="16">16</button><button data-q="64">64</button></span></div>
+          <div id="ar-shop-list" class="ar-list"></div>
+        </div>
+        <div id="ar-hdv" class="ar-part hidden">
+          <div class="tp-add"><span id="ar-held" class="ar-held"></span><input id="ar-price" type="number" min="1" max="1000000" placeholder="Prix" /><button data-tp="hlist" class="tp-go">Mettre en vente</button></div>
+          <div id="ar-hdv-list" class="ar-list"></div>
+        </div>
+        <div id="ar-pay" class="ar-part hidden">
+          <div class="tp-add"><input id="ar-pay-who" type="text" maxlength="16" placeholder="Pseudo" autocomplete="off" spellcheck="false" /><input id="ar-pay-n" type="number" min="1" placeholder="Montant" /><button data-tp="pay" class="tp-go">Payer</button></div>
+          <div class="tp-empty">Les pièces vont au joueur même s’il n’est pas connecté.</div>
+        </div>
+        <div class="tp-empty">Gagne des pièces en battant des créatures hostiles, ou en vendant tes trouvailles à la boutique.</div>
+      </div>
+      <div id="pm-top" class="pm-page hidden">
+        <div id="top-cats" class="pm-sub"></div>
+        <div id="top-list"></div>
+      </div>
+      <div id="pm-gestes" class="pm-page hidden">
+        <div id="ge-list" class="ge-list"></div>
+        <div class="tp-empty">Les autres joueurs voient ton geste. Bouger l’arrête. Aussi au tchat : /geste &lt;nom&gt;.</div>
+      </div>
+      <div id="pm-compte" class="pm-page hidden">
+        <div id="ac-info"></div>
+        <div id="ac-pwbox" class="tp-add"><input id="ac-pw" type="password" maxlength="64" placeholder="Nouveau mot de passe (4 caractères au moins)" autocomplete="new-password" /><button data-tp="setpw" class="tp-go">Enregistrer</button></div>
+        <h4>🎨 Skin</h4>
+        <div class="ac-skin"><canvas id="ac-skin-prev" width="64" height="64"></canvas><div><label class="ac-file">Choisir une image (skin Minecraft 64 × 64)<input id="ac-skin" type="file" accept="image/png" /></label><button data-tp="skinoff">Retirer le skin</button><div id="ac-skin-msg" class="tp-empty"></div></div></div>
+      </div>
       <div id="tp-msg" class="tp-msg"></div>
-      <div class="tp-hint"><span id="tp-key"></span>Impossible pendant un combat (10 s après le dernier coup) · une demande dure 60 s</div>
+      <div class="tp-hint"><span id="tp-key"></span><span id="pm-hint"></span></div>
     </div>
   </div>
   <div id="tp-pop" class="hidden"></div>
@@ -456,6 +519,10 @@
         <div id="adm-players"></div>
         <h4>⛔ Bannis</h4>
         <div id="adm-bans"></div>
+        <h4>🔐 Pseudos et terrains</h4>
+        <div class="tp-empty">Chaque pseudo est réservé à l’appareil qui l’a utilisé en premier (ou à son mot de passe, menu G → Compte). Un joueur a changé d’appareil sans mot de passe ? Libère son pseudo (il garde ses pièces et ses terrains) :</div>
+        <div class="tp-add"><input id="adm-free" type="text" maxlength="16" placeholder="Pseudo à libérer" autocomplete="off" spellcheck="false" /><button data-a="free">Libérer</button></div>
+        <div class="tp-add"><span class="tp-name adm-lbl">Tronçons protégés par joueur</span><input id="adm-lim" type="number" min="1" max="10000" /><button data-a="lim">Appliquer</button></div>
         <h4>⚙ Réglages</h4>
         <div class="adm-form">
           <label class="adm-srv">Nom du serveur <input id="adm-name" type="text" maxlength="32" autocomplete="off" /></label>
@@ -556,6 +623,8 @@
   <script src="js/touch.js"></script>
   <script src="js/net.js"></script>
   <script src="js/commands.js"></script>
+  <script src="js/social.js"></script>
+  <script src="js/social_ui.js"></script>
   <script src="js/teleport.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/ui.js"></script>

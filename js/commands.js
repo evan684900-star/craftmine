@@ -35,6 +35,7 @@
   function print(s, kind) {
     const net = G().net;
     if (CM.Admin && CM.Admin.open) CM.Admin.onOut(s, kind); // (réponse affichée aussi dans le panneau)
+    if (CM.Teleport && CM.Teleport.open) CM.Teleport.onOut(s, kind); // (… et dans le menu du joueur)
     const d = document.createElement('div');
     d.className = 'cl cmd ' + (kind || 'info');
     d.textContent = String(s).slice(0, 600);
@@ -1530,8 +1531,10 @@
       }
       e.admin = true;
       net.sendCfgTo(e);
+      const acc = CM.Social.acc(ctx.name, true);
+      acc.adm = 1; // (pseudo protégé : il le reste aux prochaines connexions)
       D.log('🛡 ' + ctx.name + ' est administrateur');
-      o.ok('🛡 Tu es administrateur : triches et commandes de l’hôte permises (/aide)');
+      o.ok('🛡 Tu es administrateur : triches et commandes de l’hôte permises (/aide). Tu le resteras à chaque connexion.');
     },
   });
   // modération (hôte, ou administrateur du serveur)
@@ -1583,7 +1586,7 @@
       o.ok('✅ ' + a[0] + ' peut revenir');
     },
   });
-  // Donner ou retirer les droits d'administrateur à un joueur connecté (jusqu'à sa déconnexion).
+  // Donner ou retirer les droits d'administrateur à un joueur connecté (gardés d'une connexion à l'autre).
   function setAdmin(ctx, s, on) {
     const g = G(), net = g.net, D = CM.Dedicated;
     if (!net.isHost) bad('Seulement quand la partie est ouverte');
@@ -1593,12 +1596,15 @@
     if (!!e.admin === on) bad(q.name + (on ? ' est déjà administrateur' : ' n’est pas administrateur'));
     e.admin = on;
     net.sendCfgTo(e);
-    net.sendTo(e.pid, { t: 'cr', s: on ? '🛡 ' + ctx.name + ' t’a nommé administrateur (jusqu’à ta déconnexion) : Pause → Administration' : '🛡 ' + ctx.name + ' t’a retiré les droits d’administrateur', k: 'ok' });
+    const acc = CM.Social.acc(q.name, true);
+    if (on) acc.adm = 1; // (pseudo protégé : il le reste aux prochaines connexions)
+    else delete acc.adm;
+    net.sendTo(e.pid, { t: 'cr', s: on ? '🛡 ' + ctx.name + ' t’a nommé administrateur : Pause → Administration' : '🛡 ' + ctx.name + ' t’a retiré les droits d’administrateur', k: 'ok' });
     if (D.on) D.log('🛡 ' + q.name + (on ? ' nommé administrateur par ' : ' n’est plus administrateur (') + ctx.name + (on ? '' : ')'));
     return q.name;
   }
   def('nommeradmin addadmin', {
-    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'donne les droits d’administrateur à un joueur connecté (jusqu’à sa déconnexion)',
+    cat: 'Partie', hostOnly: true, local: false, usage: '<joueur>', desc: 'donne les droits d’administrateur à un joueur connecté (il les garde aux prochaines connexions)',
     args: [() => players().filter((q) => !q.self).map((q) => q.name)],
     run(ctx, a, o) {
       o.ok('🛡 ' + setAdmin(ctx, a[0], true) + ' est administrateur');
@@ -2049,6 +2055,11 @@
   CM.Commands = {
     list: CMDS,
     norm,
+    // (pour les autres modules : terrains, équipes, pièces…)
+    def,
+    bad,
+    int,
+    findPlayer,
     // Ligne tapée sur cet écran.
     // out(s, kind) : reçoit aussi ce que la commande affiche (menu Téléportation).
     run(line, out) {

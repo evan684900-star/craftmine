@@ -960,6 +960,7 @@
       // expérience pour le joueur qui l'a tué (Ombre 5, animal 1 à 3)
       const def = MOBS[m.type];
       const xp = def.xp !== undefined ? (m.baby > 0 ? 0 : def.xp) : m.type === 'ombre' ? 5 : m.type === 'ardent' ? 8 : m.type === 'golem' || m.type === 'villager' || m.baby > 0 ? 0 : 1 + Math.floor(r() * 3);
+      CM.Social.onKill(g, by, m.type); // (pièces pour celui qui a vaincu une créature hostile)
       if (by && by.pid) g.net.sendTo(by.pid, { t: 'kill', ty: m.type, xp });
       else {
         g.stats.kills[m.type] = (g.stats.kills[m.type] || 0) + 1;

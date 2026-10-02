@@ -347,13 +347,14 @@
       peer.on('connection', (conn) => this.incoming(conn));
       peer.on('disconnected', () => this.reconnectLater());
       this.attachWorld();
+      CM.Social.hostStarted();
       document.body.classList.add('net');
       this.sys('Partie ouverte ! Code : ' + this.code);
       return this.code;
     }
 
     // Rejoint une partie. Renvoie le message d'accueil de l'hôte (monde, règles…).
-    async join(code, name, status) {
+    async join(code, name, status, pw) {
       code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const srv = code === CM.SERVER_CODE; // serveur dédié (bouton « Serveur »)
       if (!srv && code.length !== 5) throw { type: 'input', message: 'Tape le code de la partie (5 caractères, donné par l’hôte).' };
@@ -386,7 +387,7 @@
                     clearTimeout(to);
                     this.queue = [];
                     resolve(m);
-                  } else if (m.t === 'deny') fail({ type: 'deny', message: m.r });
+                  } else if (m.t === 'deny') fail({ type: 'deny', message: m.r, code: m.c });
                   return;
                 }
                 if (this.queue) this.queue.push(m);
@@ -397,7 +398,9 @@
                 else this.lost('Connexion perdue avec l’hôte.');
               },
             );
-            this.hostLink.send({ t: 'hello', v: PROTO, name, look: CM.Comfort.myLook(this.game) });
+            const hi = { t: 'hello', v: PROTO, name, look: CM.Comfort.myLook(this.game), key: CM.Social.deviceKey() };
+            if (pw) hi.pw = String(pw).slice(0, 64);
+            this.hostLink.send(hi);
           });
           conn.on('error', () => fail({ type: 'timeout' }));
         });
@@ -515,6 +518,7 @@
       this.dayLen = 0;
       this.rules = { pvp: false, keep: false, cmds: false };
       this.admin = false;
+      CM.Social.reset();
       if (this.chatOpen) this.closeChat(false, true);
       document.body.classList.remove('net');
       this.tagsEl.innerHTML = '';
@@ -796,8 +800,8 @@
     hello(e, m) {
       const g = this.game;
       const name = cleanName(m.name) || CM.randomPlayerName();
-      const deny = (r) => {
-        e.link.send({ t: 'deny', r });
+      const deny = (r, c) => {
+        e.link.send({ t: 'deny', r, c });
         setTimeout(() => e.link.close(), 800);
       };
       if (m.v !== PROTO) return deny('Versions du jeu différentes : recharge la page (l’hôte et toi).');
@@ -808,6 +812,9 @@
       for (const o of [...this.links.values()]) if (same(o.name) && performance.now() - o.link.last > 6000) this.dropClient(o, 'lost');
       if (this.bans[name.toLowerCase()]) return deny('Tu es banni de cette partie.');
       if (same(this.name) || [...this.links.values()].some((x) => same(x.name))) return deny('Le pseudo « ' + name + ' » est déjà pris dans cette partie : choisis-en un autre.');
+      // pseudo protégé : il appartient à l'appareil qui l'a utilisé le premier (ou mot de passe)
+      const no = CM.Social.checkJoin(name, m);
+      if (no) return deny(no.r, no.c);
       const max = CM.Dedicated.on ? CM.Dedicated.max : MAX_PLAYERS;
       if (this.links.size >= (CM.Dedicated.on ? max : max - 1)) return deny((CM.Dedicated.on ? 'Le serveur est plein (' : 'La partie est pleine (') + max + ' joueurs au maximum). Réessaie un peu plus tard.');
       e.pid = this.nextPid++;
@@ -830,6 +837,8 @@
       });
       this.links.set(e.pid, e);
       this.remotes.set(e.pid, e.rp);
+      CM.Social.joined(e, m); // (terrains, équipes, pièces ; droits d'administrateur gardés)
+      if (e.admin) this.sendCfgTo(e);
       this.broadcast({ t: 'join', pid: e.pid, n: name, lk: e.rp.look }, e.pid);
       this.sys(name + ' a rejoint la partie');
       CM.Audio.play('pop');
@@ -920,7 +929,7 @@
         }
         case 'hit': {
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
-          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 8) break;
+          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 8 || !CM.Social.guestMob(e, mob)) break;
           rp.lastTarget = mob; // (son chien l'attaque aussi)
           rp.lastTargetT = g.clock;
           const lv = (v, max) => Math.min(max, Math.max(0, v | 0));
@@ -941,7 +950,7 @@
         case 'mint': {
           // clic droit de l'invité sur une créature (os, selle, seau, monter…)
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
-          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 7) break;
+          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 7 || !CM.Social.guestMob(e, mob)) break;
           const r = g.entities.interact(mob, rp, m.it | 0, false);
           if (r === 'mount' && (mob.rider === null || mob.rider === undefined)) {
             mob.rider = e.pid;
@@ -965,7 +974,7 @@
           break;
         case 'dco':
           // décoration posée par un invité (panneau, tableau, cadre, porte-armure, juke-box)
-          CM.Deco.fromGuest(g, e, m.o);
+          if (CM.Social.guestDeco(g, e, m.o)) CM.Deco.fromGuest(g, e, m.o);
           break;
         case 'bfx':
           // l'invité choisit l'effet d'une balise
@@ -988,6 +997,7 @@
           break;
         }
         case 'tnt':
+          if (!CM.Social.guestMay(e, num(m.x), num(m.z))) break;
           g.entities.addTnt(num(m.x), num(m.y), num(m.z), Math.min(10, num(m.f) || 3.2));
           if (Math.hypot(g.player.x - m.x, g.player.z - m.z) < 24) CM.Audio.play('fuse');
           this.fx({ k: 'fuse', x: num(m.x), y: num(m.y), z: num(m.z) }, e.pid);
@@ -1004,6 +1014,7 @@
           break;
         case 'note': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0, n = (m.n | 0) % 25;
+          if (!CM.Social.guestMay(e, x, z)) break;
           g.noteBlocks[g.bkey(x, y, z)] = n;
           g.noteFx(x, y, z, n);
           this.toDim({ t: 'note', x, y, z, n }, g.dim, e.pid);
@@ -1025,15 +1036,20 @@
         case 'save':
           if (m.d && typeof m.d === 'object') this.guests[e.name] = m.d;
           break;
+        case 'soc':
+          // menu du joueur : boutique, hôtel des ventes, classements, mot de passe…
+          CM.Social.fromGuest(g, e, m);
+          break;
         case 'admq':
           // panneau d'administration : état de la partie, pour les administrateurs seulement
           e.link.send({ t: 'adms', s: e.admin ? CM.Admin.state(g) : null });
           break;
         case 'dead':
           this.sysAll('💀 ' + e.name + ' a perdu la vie' + (m.c ? ' (' + cleanText(m.c) + ')' : ''));
+          CM.Social.onDeath(e.name, cleanText(m.c));
           break;
         case 'pvp': {
-          if (!this.rules.pvp) break;
+          if (!this.rules.pvp || this.mateOf(e, m.to)) break;
           const d = Math.min(30, Math.max(0, num(m.d)));
           if (m.to === 0) {
             if (g.playerDim === rp.dim) g.player.damage(d, rp.x, rp.z, e.name);
@@ -1138,20 +1154,20 @@
         case 'laser': {
           // tir de pistolet laser d'un invité (portée 32 blocs)
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
-          if (mob && !mob.dead && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 40) g.entities.hurtMob(mob, Math.min(8, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
+          if (mob && !mob.dead && Math.hypot(mob.x - rp.x, mob.z - rp.z) < 40 && CM.Social.guestMob(e, mob)) g.entities.hurtMob(mob, Math.min(8, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp);
           break;
         }
         case 'ghit': {
           // balle (ou flamme) d'un invité : l'hôte applique les dégâts
           const mob = g.entities.mobs.find((o) => o.uid === m.id);
-          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 250) break;
+          if (!mob || mob.dead || Math.hypot(mob.x - rp.x, mob.z - rp.z) > 250 || !CM.Social.guestMob(e, mob)) break;
           rp.lastTarget = mob;
           rp.lastTargetT = g.clock;
           g.entities.hurtMob(mob, Math.min(60, Math.max(0, num(m.d))), [rp.x, rp.z], false, rp, { kb: Math.min(2, Math.max(0, m.kb | 0)), fire: m.fi ? 1 : 0 });
           break;
         }
         case 'gpvp': {
-          if (!this.rules.pvp) break;
+          if (!this.rules.pvp || this.mateOf(e, m.to)) break;
           const d = Math.min(45, Math.max(0, num(m.d)));
           if (m.to === 0) {
             if (g.playerDim === rp.dim && Math.hypot(g.player.x - rp.x, g.player.z - rp.z) < 250) g.player.damage(d, rp.x, rp.z, e.name, true);
@@ -1178,7 +1194,7 @@
           break;
         case 'crank': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0;
-          if (CM.Tech && Math.hypot(x + 0.5 - rp.x, z + 0.5 - rp.z) < 8 && CM.blocks[g.world.get(x, y, z)].tech) CM.Tech.crank(g, x, y, z);
+          if (CM.Tech && Math.hypot(x + 0.5 - rp.x, z + 0.5 - rp.z) < 8 && CM.blocks[g.world.get(x, y, z)].tech && CM.Social.guestMay(e, x, z)) CM.Tech.crank(g, x, y, z);
           break;
         }
         case 'meter': {
@@ -1202,13 +1218,27 @@
     // Hôte : blocs modifiés par un invité (renvoyés à tous, y compris à l'auteur pour confirmation).
     clientSets(pid, b) {
       if (!Array.isArray(b)) return;
-      const g = this.game, w = g.world;
+      const g = this.game, w = g.world, e = this.links.get(pid);
       let fx = 6;
       for (let i = 0; i + 3 < b.length; i += 4) {
         const x = b[i] | 0, y = b[i + 1] | 0, z = b[i + 2] | 0, id = b[i + 3] | 0;
-        this.queueSet(pid, x, y, z, id);
-        if (!CM.isBlockId(id) || !CM.blocks[id] || y < CM.WORLD.MINY || y >= CM.WORLD.H) continue;
+        if (!CM.isBlockId(id) || !CM.blocks[id] || y < CM.WORLD.MINY || y >= CM.WORLD.H) {
+          this.queueSet(pid, x, y, z, id);
+          continue;
+        }
         const old = w.get(x, y, z);
+        // terrain protégé d'un autre, coffre verrouillé : refusé, l'invité remet le bloc comme avant
+        // (la confirmation solde sa modification en attente, puis la correction s'applique)
+        if (e && !CM.Social.guestSet(g, e, x, y, z, old, id)) {
+          this.queueSet(pid, x, y, z, old);
+          this.queueSet(0, x, y, z, old);
+          if (!e.denyT || g.clock - e.denyT > 3) {
+            e.denyT = g.clock;
+            CM.Social.toast(pid, '🔒 Terrain protégé : tu ne peux rien y modifier', 'warn');
+          }
+          continue;
+        }
+        this.queueSet(pid, x, y, z, id);
         this.muted = true;
         w.applyRemote(x, y, z, id);
         this.muted = false;
@@ -1219,6 +1249,7 @@
     chestOpen(e, x, y, z) {
       const g = this.game;
       if (!CM.blocks[g.world.get(x, y, z)].container) return;
+      if (!CM.Social.guestOpen(g, e, x, y, z)) return; // (coffre verrouillé, terrain protégé)
       const k = g.bkey(x, y, z);
       const by = this.locks.get(k);
       if (by !== undefined && by !== e.pid) {
@@ -1470,6 +1501,9 @@
         case 'adms':
           CM.Admin.gotState(m.s && typeof m.s === 'object' ? m.s : null);
           break;
+        case 'soc':
+          CM.Social.fromHost(g, m);
+          break;
         case 'cr':
           // réponse d'une commande, ou ligne pour tous (/moi, /dé…)
           if (typeof m.s === 'string') CM.Commands.print(m.s.replace(/[\u0000-\u001f]/g, ' ').slice(0, 600), ['ok', 'err', 'info', 'msg', 'me', 'ann'].includes(m.k) ? m.k : 'info');
@@ -1676,7 +1710,7 @@
       if (!this.rules.pvp) return null;
       let best = null, bestT = maxD;
       for (const rp of this.remotes.values()) {
-        if (!rp.seen || !rp.alive || rp.dim !== this.game.playerDim) continue;
+        if (!rp.seen || !rp.alive || rp.dim !== this.game.playerDim || CM.Social.mates(this.name, rp.name)) continue;
         const t = CM.rayBox(e[0], e[1], e[2], d[0], d[1], d[2], rp.x - 0.3, rp.y, rp.z - 0.3, rp.x + 0.3, rp.y + 1.8, rp.z + 0.3);
         if (t >= 0 && t < bestT) {
           bestT = t;
@@ -1684,6 +1718,11 @@
         }
       }
       return best ? { rp: best, t: bestT } : null;
+    }
+    // Hôte : la cible d'un coup d'invité est-elle dans son équipe ?
+    mateOf(e, to) {
+      const t = to === 0 ? (CM.Dedicated.on ? null : this.name) : (this.links.get(to) || {}).name;
+      return !!t && CM.Social.mates(e.name, t);
     }
     pvpHit(rp, dmg) {
       const p = this.game.player;
@@ -2024,7 +2063,8 @@
           this.tagsEl.appendChild(el);
           this.tags.set(rp.pid, el);
         }
-        if (el.textContent !== rp.name) el.textContent = rp.name;
+        const lab = CM.Social.label(rp.name); // ([TAG] de son équipe)
+        if (el.textContent !== lab) el.textContent = lab;
         let show = rp.seen && rp.alive && rp.dim === this.game.playerDim;
         if (show) {
           const x = rp.rx - cam[0], y = rp.ry + (rp.flags & 1 ? 1.85 : 2.05) - cam[1], z = rp.rz - cam[2];
