@@ -94,7 +94,11 @@ Le panneau d'administration permet ensuite, sans passer par la machine :
   mot de passe ; nombre de tronçons protégés par joueur ;
 - **Réglages** : nom du serveur, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire,
   triches pour tous, extensions (au prochain redémarrage). Ils sont enregistrés dans `config.json` ;
-- **Monde** : heure, météo, annonce à tous, sauvegarde, **redémarrage du serveur**.
+- **Monde** : heure, météo, annonce à tous, sauvegarde, **redémarrage du serveur** ;
+- **Copies du monde** : la liste des copies (une par heure, gardées 3 jours), **faire une copie
+  maintenant**, et **revenir** à une copie (deux appuis) : le serveur redémarre avec le monde de ce
+  moment-là, et le monde d'avant est gardé (`sauvegardes/avant-restauration-…`). En commande :
+  `/sauvegardes`, `/sauvegardes copier`, `/sauvegardes restaurer <numéro>`.
 
 Les commandes de l'hôte marchent aussi dans le tchat : `/serveur` (réglages), `/nommeradmin`,
 `/retireradmin`, `/expulser`, `/bannir`, `/debannir`, `/liberer`, `/donnerpieces`, `/triche`, `/regle`…

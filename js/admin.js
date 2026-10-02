@@ -127,6 +127,7 @@
         persist: D.on ? (D.canPersist() ? 1 : 0) : 1,
         bans: Object.keys(net.bans || {}),
         lim: CM.Social.D.lim,
+        bk: D.on ? (D.canBackup() ? D.bk.slice(0, 40).map((b) => [b.f, b.t, b.n]) : null) : null,
         day: g.dayCount + 1,
         hour: Math.floor(((g.time * 24 + 6) % 24) * 10) / 10,
         wx: (g.weather && g.weather.type) || 'clear',
@@ -176,6 +177,16 @@
         $('adm-pause').checked = !!st.pause;
         const want = st.next || st.ext;
         for (const [c] of EXT) $('adm-ext-' + c).checked = want.includes(c);
+      }
+      // copies du monde (serveur)
+      if (st.srv) {
+        const day = (t) => new Date(t).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const kind = (f) => (f.startsWith('manuel') ? ' <i>copie faite à la main</i>' : f.startsWith('avant') ? ' <i>avant une restauration</i>' : '');
+        put('adm-bk', !st.bk
+          ? '<div class="tp-empty">Le programme du serveur est trop ancien : tape une fois « craftmine mettre-a-jour » sur la machine.</div>'
+          : st.bk.length
+            ? st.bk.map(([f, t, n]) => '<div class="tp-row"><span class="tp-name"><b>' + esc(day(t)) + '</b>' + kind(f) + ' <i>' + Math.max(1, Math.round(n / 1024)) + ' Ko</i></span><button data-a="restore" data-n="' + esc(f) + '" class="adm-danger">' + (this.confirmBk === f && this.confirmBkT > performance.now() ? '⚠ Confirmer' : 'Revenir') + '</button></div>').join('')
+            : '<div class="tp-empty">Aucune copie pour l’instant.</div>');
       }
       $('adm-persist').classList.toggle('hidden', !!st.persist);
       $('adm-next').textContent = st.next && st.next.join(',') !== st.ext.join(',') ? 'Au prochain redémarrage : ' + (st.next.join(', ') || 'aucune') : '';
@@ -254,6 +265,18 @@
           time: () => this.run(g, '/temps ' + b.dataset.v),
           wx: () => this.run(g, '/meteo ' + b.dataset.v),
           save: () => this.run(g, '/sauver'),
+          bknow: () => this.run(g, '/sauvegardes copier'),
+          restore: () => {
+            // deux appuis : le serveur redémarre avec le monde d'avant
+            if (this.confirmBk === n && this.confirmBkT > performance.now()) {
+              this.confirmBk = null;
+              this.run(g, '/sauvegardes restaurer ' + n);
+            } else {
+              this.confirmBk = n;
+              this.confirmBkT = performance.now() + 4000;
+            }
+            this.render(g);
+          },
           ann: () => {
             const s = $('adm-ann').value.trim();
             if (!s) return;

@@ -61,6 +61,60 @@ function writeSave(json) {
   }
 }
 
+// Copies du monde (panneau d'administration) : liste, copie tout de suite, restauration.
+const BK_RE = /^(monde|manuel|avant-restauration)-[0-9_-]+\.json$/;
+function backups() {
+  if (!fs.existsSync(BACKUPS)) return [];
+  return fs
+    .readdirSync(BACKUPS)
+    .filter((f) => BK_RE.test(f))
+    .map((f) => {
+      const st = fs.statSync(path.join(BACKUPS, f));
+      return { f, t: st.mtimeMs, n: st.size };
+    })
+    .sort((a, b) => b.t - a.t);
+}
+// Garde les n dernières copies d'une sorte (« manuel- », « avant-restauration- »).
+function prune(prefix, n) {
+  const list = fs.readdirSync(BACKUPS).filter((x) => x.startsWith(prefix)).sort();
+  while (list.length > n) fs.unlinkSync(path.join(BACKUPS, list.shift()));
+}
+function backupNow(json) {
+  writeSave(json);
+  if (!fs.existsSync(SAVE)) return null;
+  fs.mkdirSync(BACKUPS, { recursive: true });
+  const f = 'manuel-' + stamp() + '.json';
+  fs.copyFileSync(SAVE, path.join(BACKUPS, f));
+  prune('manuel-', 20);
+  log('💾 Copie du monde : ' + f);
+  return f;
+}
+// Restauration : après la sauvegarde finale, le monde actuel est gardé (avant-restauration-…),
+// la copie choisie le remplace, et le service relance le serveur.
+function restoreLater(f) {
+  if (typeof f !== 'string' || !BK_RE.test(f) || !fs.existsSync(path.join(BACKUPS, f))) return false;
+  const txt = fs.readFileSync(path.join(BACKUPS, f), 'utf8');
+  try {
+    const d = JSON.parse(txt);
+    if (!d || typeof d !== 'object' || d.seed === undefined) return false;
+  } catch (e) {
+    return false;
+  }
+  setTimeout(
+    () =>
+      stop(0, () => {
+        if (fs.existsSync(SAVE)) fs.copyFileSync(SAVE, path.join(BACKUPS, 'avant-restauration-' + stamp() + '.json'));
+        prune('avant-restauration-', 10);
+        const tmp = SAVE + '.tmp';
+        fs.writeFileSync(tmp, txt);
+        fs.renameSync(tmp, SAVE);
+        log('♻ Monde restauré depuis ' + f + ' (le monde d’avant est gardé dans sauvegardes/avant-restauration-…)');
+      }),
+    100,
+  );
+  return true;
+}
+
 // Réglages changés depuis le jeu (panneau d'administration) : vérifiés puis écrits dans config.json.
 const SETTABLE = {
   nom: (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= 32,
@@ -141,6 +195,29 @@ async function start() {
       return setConfig(patch);
     } catch (e) {
       log('⚠ Réglage non enregistré : ' + e.message);
+      return false;
+    }
+  });
+  await page.exposeFunction('cmServerBackups', () => {
+    try {
+      return backups();
+    } catch (e) {
+      return [];
+    }
+  });
+  await page.exposeFunction('cmServerBackupNow', (json) => {
+    try {
+      return backupNow(json);
+    } catch (e) {
+      log('⚠ Copie impossible : ' + e.message);
+      return null;
+    }
+  });
+  await page.exposeFunction('cmServerRestore', (f) => {
+    try {
+      return restoreLater(f);
+    } catch (e) {
+      log('⚠ Restauration impossible : ' + e.message);
       return false;
     }
   });
@@ -233,7 +310,8 @@ async function checkUpdate() {
   await stop(0);
 }
 
-async function stop(code) {
+// (after : fait une fois le monde sauvegardé et le navigateur fermé, pour une restauration)
+async function stop(code, after) {
   if (stopping) return;
   stopping = true;
   try {
@@ -246,6 +324,13 @@ async function stop(code) {
     await Promise.race([browser.close(), sleep(5000)]);
   } catch (e) {
     /* ignore */
+  }
+  if (after) {
+    try {
+      after();
+    } catch (e) {
+      log('⚠ ' + e.message);
+    }
   }
   process.exit(code);
 }

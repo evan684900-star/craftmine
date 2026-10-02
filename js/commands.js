@@ -1721,6 +1721,33 @@
     },
   });
 
+  // Serveur : copies du monde sur la machine (aussi dans le panneau d'administration).
+  const bkLabel = (b) => new Date(b.t).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + (b.f.startsWith('manuel') ? ' (copie manuelle)' : b.f.startsWith('avant') ? ' (avant une restauration)' : '');
+  def('sauvegardes copies backups', {
+    cat: 'Partie', hostOnly: true, local: false, usage: '[copier | restaurer <numéro>]', desc: 'serveur : copies du monde (liste, copie maintenant, retour en arrière)',
+    args: [() => ['copier', 'restaurer']],
+    run(ctx, a, o) {
+      const D = CM.Dedicated, g = G();
+      if (!D.on) bad('Seulement sur le serveur CraftMine');
+      if (!D.canBackup()) bad('Le programme du serveur est trop ancien : tape « craftmine mettre-a-jour » sur la machine (une seule fois)');
+      const w = norm(a[0] || '');
+      if (w === 'copier' || w === 'maintenant') {
+        D.backupNow(g).then((f) => (f ? o.ok('💾 Copie du monde faite (' + bkLabel({ f, t: Date.now() }) + ')') : o.err('Copie impossible')));
+        return;
+      }
+      if (w === 'restaurer') {
+        // (numéro de la liste, ou nom du fichier : panneau d'administration)
+        const b = D.bk.find((x) => x.f === a[1]) || D.bk[int(a[1], 1, Math.max(1, D.bk.length), 'Numéro de la copie') - 1] || bad('Pas de copie n° ' + a[1]);
+        if (!D.restore(b.f, ctx.name)) bad('Restauration impossible (redémarrage déjà en cours ?)');
+        return o.ok('♻ Retour au ' + bkLabel(b) + ' : le serveur redémarre dans 10 s');
+      }
+      if (!D.bk.length) return o.info('Aucune copie pour l’instant (une par heure, automatiquement) : /sauvegardes copier');
+      o.info('💾 Copies du monde (les plus récentes) :');
+      D.bk.slice(0, 10).forEach((b, i) => o.info(i + 1 + '. ' + bkLabel(b)));
+      o.info('/sauvegardes restaurer <numéro> remet le monde comme il était (le monde actuel est gardé)');
+    },
+  });
+
   // ----------------------------------------------------------- créatures --
   def('invoquer summon spawnmob', {
     cat: 'Créatures', cheat: true, usage: '<créature> [nombre] [x y z]', desc: 'fait apparaître des créatures, de la TNT, un éclair… (là où tu vises)',

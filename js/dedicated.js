@@ -92,6 +92,8 @@
     await openServer(g);
     D.save(g);
     setInterval(() => watch(g), 20000);
+    D.refreshBackups();
+    setInterval(() => D.refreshBackups(), 60000);
   };
 
   // Le joueur du serveur : immobile au-dessus du point de départ, jamais blessé.
@@ -241,6 +243,33 @@
       if (window.cmServerRestart) window.cmServerRestart();
       else D.restartReq = by;
     }, 10000);
+  };
+  // Copies du monde (panneau d'administration, /sauvegardes) : sur la machine, dans sauvegardes/.
+  D.bk = [];
+  D.canBackup = () => !!window.cmServerBackups;
+  D.refreshBackups = async function () {
+    if (!window.cmServerBackups) return;
+    try {
+      const l = await window.cmServerBackups();
+      if (Array.isArray(l)) D.bk = l.slice(0, 60);
+    } catch (e) {
+      /* ignore */
+    }
+  };
+  D.backupNow = async function (g) {
+    if (!window.cmServerBackupNow) return null;
+    const f = await window.cmServerBackupNow(JSON.stringify(g.saveData()));
+    await D.refreshBackups();
+    return f;
+  };
+  // Remet le monde comme il était dans une copie : on prévient, puis le serveur redémarre avec.
+  D.restore = function (f, by) {
+    if (D.restarting || !window.cmServerRestore || !D.bk.some((b) => b.f === f)) return false;
+    D.restarting = true;
+    log('♻ Restauration de ' + f + ' demandée par ' + by);
+    CM.game.net.sysAll('♻ Le monde va être remis comme il était (copie choisie par ' + by + ') : le serveur redémarre dans 10 secondes. Recharge la page puis reviens dans une minute !');
+    setTimeout(() => window.cmServerRestore(f), 10000);
+    return true;
   };
   D.checkAdmin = function (pid, pw) {
     const want = String(D.cfg.motDePasseAdmin || '');

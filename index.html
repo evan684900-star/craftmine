@@ -542,6 +542,12 @@
         <div class="adm-btns"><span>Météo</span><button data-a="wx" data-v="clair">☀ Clair</button><button data-a="wx" data-v="pluie">🌧 Pluie</button><button data-a="wx" data-v="orage">⛈ Orage</button></div>
         <div class="tp-add"><input id="adm-ann" type="text" maxlength="200" placeholder="Annonce à tous les joueurs" autocomplete="off" /><button data-a="ann">📣 Envoyer</button></div>
         <div class="adm-btns"><button data-a="save">💾 Sauvegarder le monde</button><button id="adm-restart" data-a="restart" class="adm-srv adm-danger">🔄 Redémarrer le serveur</button></div>
+        <div class="adm-srv">
+          <h4>🗂 Copies du monde <i>(une par heure, gardées 3 jours)</i></h4>
+          <div class="adm-btns"><button data-a="bknow">📸 Faire une copie maintenant</button></div>
+          <div id="adm-bk" class="ar-list"></div>
+          <div class="tp-empty">« Revenir » remet tout le monde comme il était à ce moment-là (constructions, coffres, inventaires) : le serveur redémarre, et le monde d’avant est gardé dans les copies au cas où.</div>
+        </div>
       </div>
       <div id="adm-msg" class="tp-msg"></div>
     </div>
