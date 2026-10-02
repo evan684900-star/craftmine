@@ -1514,6 +1514,19 @@
       const v = this.villageAt(Math.floor(x / VILLAGE_REGION), Math.floor(z / VILLAGE_REGION));
       return v && Math.abs(x - v.x) <= v.r + pad && Math.abs(z - v.z) <= v.r + pad ? v : null;
     }
+    // Maisons d'un village où dormir : lit (dans le coin, à côté de la façade), seuil devant la porte,
+    // et sens du villageois couché (la tête sur le lit, le corps vers l'intérieur de la maison).
+    villageHomes(v) {
+      if (v.homes) return v.homes;
+      const out = [];
+      for (const b of v.builds) {
+        if (b.ux === undefined || b.type === 'farm' || b.type === 'smith') continue; // (puits, champs, forge : pas de lit)
+        const P = (u, w) => [b.ox + u * b.ux + w * b.vx, b.oz + u * b.uz + w * b.vz];
+        const [bx, bz] = P(1, 1), [dx, dz] = P(b.door, -1);
+        out.push({ bed: [bx, b.y + 1, bz], door: [dx, b.y + 1, dz], yaw: Math.atan2(-b.ux, -b.uz) });
+      }
+      return (v.homes = out);
+    }
     // Plan d'un village (puits, routes, bâtiments, lampadaires), déterministe pour la graine.
     planVillage(rx, rz) {
       const R = VILLAGE_REGION;

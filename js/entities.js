@@ -467,6 +467,7 @@
         m.loveCd = fl & 16 ? 1 : 0;
         m.fire = fl & 32 ? 1 : 0;
         m.ai.special = !!(fl & 64); // rampant qui siffle, squelette qui bande son arc
+        m.zzz = fl & 128 ? true : null; // villageois endormi
         // apprivoisé (1), assis (2), sellé (4), robe (8 × n), monté (64)
         const pb = pet | 0;
         m.tame = !!(pb & 1);
@@ -626,6 +627,8 @@
       m.hurt = Math.max(0, m.hurt - dt);
       m.knock = Math.max(0, m.knock - dt);
       m.ai.attackCd = Math.max(0, m.ai.attackCd - dt);
+      // villageois : la nuit, il rentre chez lui et dort dans son lit
+      if (m.type === 'villager' && this.villagerNight(m, dt)) return;
       const fx = Math.floor(m.x), fz = Math.floor(m.z);
       const inWater = CM.isWater(w.get(fx, Math.floor(MOBS[m.type].swim ? m.y + m.h * 0.5 : m.y + 0.4), fz));
       const inLava = CM.isLava(w.get(fx, Math.floor(m.y + 0.4), fz)) || CM.isLava(w.get(fx, Math.floor(m.y + 0.05), fz));
@@ -764,6 +767,13 @@
           if (m.home) {
             const hx = m.home[0] - m.x, hz = m.home[1] - m.z;
             if (hx * hx + hz * hz > 20 * 20) m.ai.dir = Math.atan2(-hx, -hz);
+          }
+          // villageois qui rentre chez lui (la nuit tombe) : vers le seuil de sa porte
+          if (m.goTo) {
+            const dx = m.goTo[0] - m.x, dz = m.goTo[1] - m.z;
+            m.ai.dir = Math.hypot(dx, dz) > 0.3 ? Math.atan2(-dx, -dz) : null;
+            m.ai.timer = 0.3;
+            speed = def.speed * 1.4;
           }
         }
         if (m.ai.dir !== null) {
@@ -1321,6 +1331,72 @@
         return;
       }
     }
+    // Villageois la nuit : il va jusqu'au seuil de sa maison, puis se couche dans son lit ; au matin,
+    // il ressort par sa porte. Frappé (ou son lit cassé), il se réveille. Vrai s'il dort.
+    villagerNight(m, dt) {
+      const g = this.game, w = g.world, BED = CM.B.BED;
+      const night = g.daylight < 0.35, morning = g.daylight > 0.45;
+      const h0 = m.zzz;
+      if (h0) {
+        if (morning || m.hurt > 0 || m.ai.flee > 0 || w.get(h0.bed[0], h0.bed[1], h0.bed[2]) !== BED) {
+          m.zzz = null;
+          m.goTo = null;
+          if (morning && !(m.hurt > 0)) {
+            m.x = h0.door[0] + 0.5;
+            m.y = h0.door[1];
+            m.z = h0.door[2] + 0.5;
+          } else m.y = h0.bed[1] + 0.6; // (debout sur son lit)
+          m.vx = m.vy = m.vz = 0;
+          return false;
+        }
+        m.x = h0.bed[0] + 0.5;
+        m.y = h0.bed[1] + 9 / 16;
+        m.z = h0.bed[2] + 0.5;
+        m.yaw = h0.yaw;
+        m.vx = m.vy = m.vz = 0;
+        m.moving = false;
+        m.speedVis = 0;
+        return true;
+      }
+      if (!night || !m.home || m.ai.flee > 0) {
+        m.goTo = null;
+        m.goT = 0;
+        return false;
+      }
+      let h = m.homeBed;
+      if (h && w.loaded(h.bed[0], h.bed[2]) && w.get(h.bed[0], h.bed[1], h.bed[2]) !== BED) h = m.homeBed = null;
+      if (!h) h = m.homeBed = this.pickBed(m);
+      if (!h) return false; // (pas de lit libre : il reste dehors)
+      const dx = h.door[0] + 0.5 - m.x, dz = h.door[2] + 0.5 - m.z;
+      m.goT = (m.goT || 0) + dt;
+      // arrivé devant sa porte (ou coincé depuis longtemps) : il entre et se couche
+      if ((Math.hypot(dx, dz) < 1.1 && Math.abs(h.door[1] - m.y) < 2) || m.goT > 45) {
+        m.zzz = h;
+        m.goTo = null;
+        m.goT = 0;
+        return true;
+      }
+      m.goTo = [h.door[0] + 0.5, h.door[2] + 0.5];
+      return false;
+    }
+    // Lit libre le plus proche dans le village du villageois.
+    pickBed(m) {
+      const w = this.game.world, v = w.villageNear(m.home[0], m.home[1], 4);
+      if (!v || !w.villageHomes) return null;
+      const taken = new Set();
+      for (const o of this.mobs) if (o !== m && o.type === 'villager' && !o.dead && o.homeBed) taken.add(o.homeBed.bed.join());
+      let best = null, bd = Infinity;
+      for (const h of w.villageHomes(v)) {
+        if (taken.has(h.bed.join()) || !w.loaded(h.bed[0], h.bed[2]) || w.get(h.bed[0], h.bed[1], h.bed[2]) !== CM.B.BED) continue;
+        const d = Math.hypot(h.door[0] - m.x, h.door[2] - m.z);
+        if (d < bd) {
+          bd = d;
+          best = h;
+        }
+      }
+      return best;
+    }
+
     // Quel monstre apparaît ici (la nuit ou dans le noir) ?
     hostileFor(w, x, y, z) {
       const r = this.rand(), bi = w.column(x, z).bi;
@@ -1583,13 +1659,15 @@
       const ground = !def.fly && !def.water && !def.swim;
       const bounce = ground ? Math.abs(Math.sin(m.walk)) * 0.035 * m.wamp : 0;
       const knock = m.hurt > 0 && !roll ? Math.sin((m.hurt / 0.35) * Math.PI) * 0.18 : 0;
-      mat4.compose(this.M, m.x, m.y + bounce, m.z, m.ryaw, -knock, roll || 0, m.baby > 0 ? BABY_SCALE : 1);
-      const sw = Math.sin(m.walk) * m.wamp;
+      // (villageois endormi : couché sur le dos, la tête sur son lit)
+      if (m.zzz && !roll) mat4.compose(this.M, m.x - Math.sin(m.ryaw) * 1.7, m.y + 0.2, m.z - Math.cos(m.ryaw) * 1.7, m.ryaw, Math.PI / 2, 0, 1);
+      else mat4.compose(this.M, m.x, m.y + bounce, m.z, m.ryaw, -knock, roll || 0, m.baby > 0 ? BABY_SCALE : 1);
+      const sw = m.zzz ? 0 : Math.sin(m.walk) * m.wamp;
       // animaux et villageois : la tête se tourne vers le joueur proche
       if (LOOKERS.has(m.type)) {
         const p = this.game.player, dx = p.x - m.x, dz = p.z - m.z;
         let want = 0;
-        if (!roll && p.alive && dx * dx + dz * dz < 49) {
+        if (!roll && !m.zzz && p.alive && dx * dx + dz * dz < 49) {
           const a = Math.atan2(-dx, -dz) - m.ryaw;
           want = CM.clamp(Math.atan2(Math.sin(a), Math.cos(a)), -1.1, 1.1);
         }

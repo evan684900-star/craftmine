@@ -1067,7 +1067,8 @@
         const vm = g.entities.raycastMob(e[0], e[1], e[2], d[0], d[1], d[2], 4.5);
         if (vm && (!this.target || vm.t < this.target.t)) {
           if (vm.mob.type === 'villager') {
-            g.ui.openTrade(vm.mob);
+            if (vm.mob.zzz) g.ui.toast('Chut… il dort. Reviens demain matin !', 'info', 'zzz');
+            else g.ui.openTrade(vm.mob);
             return;
           }
           if (this.interactMob(vm.mob)) return;

@@ -810,7 +810,7 @@
         const m = [], d = [], tn = [];
         for (const o of ents.mobs) {
           if (o.dead || !near(o)) continue;
-          const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0) | (o.ai.special ? 64 : 0);
+          const fl = (o.hurt > 0 ? 1 : 0) | (o.ai.chasing ? 2 : 0) | (o.baby > 0 ? 4 : 0) | (o.love > 0 ? 8 : 0) | (o.loveCd > 0 ? 16 : 0) | (o.fire > 0 ? 32 : 0) | (o.ai.special ? 64 : 0) | (o.zzz ? 128 : 0);
           const pet = (o.tame ? 1 : 0) | (o.sit ? 2 : 0) | (o.saddle ? 4 : 0) | ((o.variant | 0) << 3) | (o.rider !== undefined && o.rider !== null ? 64 : 0);
           // (villageois : métier, niveau, expérience ; boss : vie en %)
           const ex = o.type === 'villager' && o.profIdx !== undefined ? (o.profIdx & 15) | ((o.vlv || 1) << 4) | (Math.min(1023, o.vxp | 0) << 7) : CM.MOBS[o.type].boss ? Math.max(0, Math.ceil((o.hp / o.maxHp) * 100)) : undefined;
