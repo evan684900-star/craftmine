@@ -104,6 +104,7 @@ Un monde ouvert **24 h/24** sur une machine louée : bouton **🖥️ Serveur** 
 - Le jeu tourne sur la machine sans image ni son (navigateur invisible) et sert d'hôte permanent. Son joueur à lui est invisible et ne compte pas. Le monde est enregistré sur le disque chaque minute et à l'arrêt, avec une copie par heure.
 - **`/admin <mot de passe>`** : triches et commandes de l'hôte. **`/expulser`**, **`/bannir`**, **`/debannir`** pour la modération (aussi dans une partie entre amis, pour l'hôte).
 - **Pause → 🛡 Administration** (ou `/panel`) : le panneau d'administration, pour l'hôte et les administrateurs (sur le serveur, on s'y connecte avec le mot de passe). Joueurs connectés (aller vers eux, les faire venir, les nommer administrateurs, les expulser, les bannir), bannis, pseudos protégés à libérer, nombre de tronçons protégés par joueur, réglages (nom, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire, triches, extensions : sur le serveur, ils sont écrits dans `config.json` de la machine), heure, météo, annonce, sauvegarde et redémarrage du serveur, copies du monde (en faire une, revenir à une copie), sans passer par la machine. En commande : `/serveur`, `/nommeradmin`, `/retireradmin`.
+- **🗺 Carte du serveur** : [craftmine16.vercel.app/?carte](https://craftmine16.vercel.app/?carte) (aussi un lien sur l'écran « Serveur » et dans G → Terrain). Le monde vu du ciel, les terrains protégés et les joueurs en direct, sans se connecter comme joueur (glisser pour se déplacer, molette ou pincer pour zoomer, toucher un joueur pour le suivre). `?carte=CODE` : la carte d'une partie entre amis.
 - Installation en une commande et commandes de la machine (`craftmine journal`, `craftmine config`…) : voir [serveur/LISEZMOI.md](serveur/LISEZMOI.md).
 
 ### Multijoueur (gratuit, sans serveur)
@@ -310,6 +311,7 @@ js/admin.js       panneau d'administration (Pause → Administration)
 js/teleport.js    menu du joueur (G) : onglets, téléportation (maisons, demandes aux joueurs)
 js/social.js      vie du serveur : pseudos protégés, terrains, coffres verrouillés, équipes, pièces, boutique, hôtel des ventes, classements
 js/social_ui.js   onglets Terrain, Équipe, Argent, Classements, Compte du menu du joueur
+js/webmap.js      carte du monde sur le site (?carte) : spectateur, monde refait vu du ciel, terrains, joueurs en direct
 serveur/          programme de la machine (serveur.js), installation (installer.sh), guide (LISEZMOI.md)
 js/fkeys.js       touches F : capture d’écran, vidéo, vues, bordures des tronçons, boîtes, zones des monstres, zoom…
 js/vehicles.js    conduite, vol, bateau, carburant, dégâts, passagers, klaxon et sirène, caméra de derrière, modèles 3D, réseau

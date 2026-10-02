@@ -369,6 +369,7 @@
     }
     return { claims: D.claims, trust: D.trust, teams: D.teams, own: D.own, names, lim: D.lim };
   }
+  S.publicState = publicState;
   S.update = function (g, dt) {
     const n = g.net;
     if (!n.active) return;
@@ -388,6 +389,7 @@
       S.dirty = false;
       const p = publicState();
       n.broadcast({ t: 'soc', p });
+      n.toSpecs({ t: 'soc', p }); // (carte du site : terrains)
       if (CM.Teleport && CM.Teleport.open) CM.Teleport.render(g);
       if (g.ui.chest) CM.SocialUI.chest(g);
     }

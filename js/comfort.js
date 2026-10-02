@@ -76,6 +76,7 @@
     const dim = g.playerDim, v = cache[dim].get(x + ',' + z);
     return v || (compute ? column(g.world, dim, x, z, g.player.y) : null);
   };
+  C.blockColor = blockColor; // (carte du monde du site)
   C.onEdit = (dim, x, z) => {
     const m = cache[dim];
     if (m && m.size) m.delete(x + ',' + z);

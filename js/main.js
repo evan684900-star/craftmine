@@ -2459,6 +2459,11 @@
         CM.Dedicated.start(game).catch((e) => CM.Dedicated.log('⚠ Démarrage impossible : ' + (e.message || e)));
         return;
       }
+      // carte du monde (?carte : le serveur ; ?carte=CODE : une partie entre amis)
+      if (params.has('carte')) {
+        CM.WebMap.start(game, params.get('carte'));
+        return;
+      }
       // lien d'invitation : ?join=CODE
       if (params.has('join')) game.openMulti(params.get('join'));
       if (params.has('autostart')) {

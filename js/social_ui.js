@@ -77,6 +77,7 @@
       const tr = P.trust[me] || [];
       put('ter-trust', tr.length ? tr.map((x) => '<div class="tp-row"><span class="tp-name"><b>' + name(x) + '</b></span><button data-tp="untrust" data-n="' + name(x) + '" title="Retirer">✕</button></div>').join('') : '<div class="tp-empty">Personne. (Ton équipe a déjà le droit.)</div>');
       this.claimMap(g);
+      $('ter-bigmap').classList.toggle('hidden', g.net.code !== CM.SERVER_CODE);
     },
     // Petite carte : 9 × 9 tronçons autour du joueur, terrains en couleur.
     claimMap(g) {

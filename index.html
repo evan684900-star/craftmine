@@ -315,7 +315,7 @@
   <div id="multi" class="screen hidden">
     <div class="menu-box">
       <h1 id="mp-title">Multijoueur</h1>
-      <div class="small-note left mp-srv-note">Un monde ouvert <b>24 h/24</b> : tu retrouves tes constructions et ton inventaire à chaque visite. Choisis ton pseudo (garde toujours le même) et clique sur <b>Rejoindre</b>.</div>
+      <div class="small-note left mp-srv-note">Un monde ouvert <b>24 h/24</b> : tu retrouves tes constructions et ton inventaire à chaque visite. Choisis ton pseudo (garde toujours le même) et clique sur <b>Rejoindre</b>. <a href="?carte" target="_blank" rel="noopener">🗺 Voir la carte du serveur</a></div>
       <div class="nw-grid">
         <label for="mp-name">Ton pseudo</label>
         <input id="mp-name" type="text" maxlength="16" autocomplete="off" placeholder="ex. Évan" />
@@ -455,7 +455,7 @@
       <div id="pm-terrain" class="pm-page hidden">
         <div id="ter-here"></div>
         <canvas id="ter-map" width="180" height="180"></canvas>
-        <div class="ter-legend"><i class="l-me"></i>à toi <i class="l-fr"></i>équipe, amis <i class="l-ot"></i>autres joueurs</div>
+        <div class="ter-legend"><i class="l-me"></i>à toi <i class="l-fr"></i>équipe, amis <i class="l-ot"></i>autres joueurs<a id="ter-bigmap" class="hidden" href="?carte" target="_blank" rel="noopener">🗺 Grande carte ↗</a></div>
         <h4>🏡 Mes terrains <i id="ter-count"></i></h4>
         <div id="ter-list"></div>
         <h4>🤝 Amis autorisés <i>(sur tous tes terrains)</i></h4>
@@ -505,6 +505,13 @@
     </div>
   </div>
   <div id="tp-pop" class="hidden"></div>
+  <div id="webmap" class="hidden">
+    <canvas id="wm-cv"></canvas>
+    <div class="wm-top"><b id="wm-title">🗺 Carte du serveur</b><span id="wm-count"></span><span id="wm-status"></span></div>
+    <div class="wm-side"><a class="wm-play" href="./">▶ Jouer</a><div id="wm-players" class="wm-players"></div></div>
+    <div class="wm-zoom"><button id="wm-in" title="Zoomer">+</button><span id="wm-zoom-lv"></span><button id="wm-out" title="Dézoomer">−</button><button id="wm-home" title="Point d’apparition">⭐</button></div>
+    <div id="wm-coords" class="wm-coords">Glisse pour te déplacer · molette ou pince pour zoomer · touche un joueur pour le suivre</div>
+  </div>
   <div id="adminp" class="screen hidden">
     <div class="panel tp-panel adm-panel">
       <div class="tp-head"><h3>🛡 Administration</h3><button data-a="close" title="Fermer">✕</button></div>
@@ -631,6 +638,7 @@
   <script src="js/commands.js"></script>
   <script src="js/social.js"></script>
   <script src="js/social_ui.js"></script>
+  <script src="js/webmap.js"></script>
   <script src="js/teleport.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/ui.js"></script>

@@ -217,6 +217,7 @@
       this.pid = 0;
       this.hostLink = null; // invité : liaison vers l'hôte
       this.links = new Map(); // hôte : pid -> { pid, name, link, rp }
+      this.specs = new Map(); // hôte : spectateurs (carte du monde sur le site), qui ne jouent pas
       this.remotes = new Map(); // pid -> RemotePlayer (tous les autres joueurs)
       this.nextPid = 1;
       this.queue = null; // invité : messages reçus pendant le chargement du monde
@@ -351,6 +352,49 @@
       document.body.classList.add('net');
       this.sys('Partie ouverte ! Code : ' + this.code);
       return this.code;
+    }
+
+    // Carte du site : se connecte en spectateur (sans joueur). Renvoie { w : accueil, link }.
+    async spectate(code, onMsg, onLost, status) {
+      code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const srv = code === CM.SERVER_CODE;
+      await this.ensureLib();
+      status('Connexion au serveur de mise en relation…');
+      const peer = await this.openPeer(null, srv);
+      status(srv ? 'Connexion au serveur CraftMine…' : 'Recherche de la partie ' + code + '…');
+      return new Promise((resolve, reject) => {
+        let done = false, link = null;
+        const fail = (e) => {
+          if (done) return;
+          done = true;
+          clearTimeout(to);
+          reject(e);
+        };
+        const to = setTimeout(() => fail({ type: 'timeout' }), 25000);
+        peer.on('error', (e) => fail(e));
+        const conn = peer.connect(srv ? CM.SERVER_PEER : PREFIX + code, { reliable: true, serialization: 'raw' });
+        conn.on('open', () => {
+          if (link) return;
+          status('Connecté ! Réception de la carte…');
+          link = new Link(
+            conn,
+            (m) => {
+              if (!done) {
+                if (m.t === 'mapw') {
+                  done = true;
+                  clearTimeout(to);
+                  resolve({ w: m, link, peer });
+                } else if (m.t === 'deny') fail({ type: 'deny', message: m.r });
+                return;
+              }
+              onMsg(m);
+            },
+            () => (done ? onLost() : fail({ type: 'timeout' })),
+          );
+          link.send({ t: 'hello', v: PROTO, spec: 1 });
+        });
+        conn.on('error', () => fail({ type: 'timeout' }));
+      });
     }
 
     // Rejoint une partie. Renvoie le message d'accueil de l'hôte (monde, règles…).
@@ -508,6 +552,8 @@
       this.peer = null;
       this.hostLink = null;
       this.links.clear();
+      for (const e of this.specs.values()) if (e.link) e.link.close();
+      this.specs.clear();
       this.remotes.clear();
       this.queue = null;
       this.outSets = [];
@@ -535,6 +581,12 @@
       if (this.isHost) {
         for (const e of [...this.links.values()]) if (now - e.link.last > TIMEOUT) this.dropClient(e, 'lost');
         if (this.links.size) this.broadcast({ t: 'ping' });
+        for (const e of [...this.specs.values()]) if (now - e.link.last > TIMEOUT) this.dropClient(e, 'lost');
+        if (this.specs.size) {
+          this.toSpecs({ t: 'ping' });
+          // (carte du site : où sont les joueurs)
+          this.toSpecs({ t: 'mapp', p: this.mapPlayers() });
+        }
       } else if (this.isClient && this.hostLink) {
         if (now - this.hostLink.last > TIMEOUT) this.lost('Connexion perdue avec l’hôte.');
         else this.hostLink.send({ t: 'ping' });
@@ -581,6 +633,8 @@
       if (this.isHost) {
         // chacun ne reçoit que les blocs de la dimension où il se trouve
         for (const [o, b, d] of this.outSets) for (const e of this.links.values()) if (CM.dimId(e.rp.dim) === d) e.link.send({ t: 'set', o, b, d });
+        // (carte du site : blocs du monde normal)
+        if (this.specs.size) for (const [, b, d] of this.outSets) if (d === 0) this.toSpecs({ t: 'set', b });
       } else if (this.hostLink) {
         for (const [, b, d] of this.outSets) this.hostLink.send({ t: 'set', b, d });
       }
@@ -799,6 +853,7 @@
 
     hello(e, m) {
       const g = this.game;
+      if (m.spec) return this.helloSpec(e, m);
       const name = cleanName(m.name) || CM.randomPlayerName();
       const deny = (r, c) => {
         e.link.send({ t: 'deny', r, c });
@@ -844,7 +899,44 @@
       CM.Audio.play('pop');
     }
 
+    // Spectateur : la carte du monde du site (?carte). Il reçoit la graine, les blocs modifiés du
+    // monde normal, les terrains, puis la position des joueurs ; il ne compte pas comme joueur.
+    helloSpec(e, m) {
+      const g = this.game;
+      const deny = (r) => {
+        e.link.send({ t: 'deny', r });
+        setTimeout(() => e.link.close(), 800);
+      };
+      if (m.v !== PROTO) return deny('Versions du jeu différentes : recharge la page.');
+      if (g.state !== 'playing' || !g.worlds) return deny('La partie n’est pas prête.');
+      if (this.specs.size >= 12) return deny('Trop de cartes ouvertes en même temps : réessaie dans un moment.');
+      e.spec = true;
+      e.pid = this.nextPid++;
+      this.specs.set(e.pid, e);
+      const w = g.worlds.overworld;
+      e.link.send({ t: 'mapw', v: PROTO, name: this.name, srv: CM.Dedicated.on ? 1 : 0, seed: w.seed, settings: Object.assign({}, g.settings), spawn: w.spawn, edits: w.editsObject(), p: this.mapPlayers(), soc: CM.Social.publicState() });
+    }
+    // Position des joueurs pour la carte : [pseudo, x, z, dimension, TAG d'équipe].
+    mapPlayers() {
+      const g = this.game, out = [];
+      const tag = (n) => {
+        const t = CM.Social.teamOf(n);
+        return t ? t.tag : '';
+      };
+      if (!CM.Dedicated.on && g.player) out.push([this.name, Math.round(g.player.x), Math.round(g.player.z), g.playerDim, tag(this.name)]);
+      for (const e of this.links.values()) if (e.rp.seen) out.push([e.name, Math.round(e.rp.x), Math.round(e.rp.z), e.rp.dim, tag(e.name)]);
+      return out;
+    }
+    toSpecs(m) {
+      for (const e of this.specs.values()) e.link.send(m);
+    }
     dropClient(e, why) {
+      if (e.spec) {
+        this.specs.delete(e.pid);
+        e.gone = true;
+        if (e.link) e.link.close();
+        return;
+      }
       if (e.gone) return;
       e.gone = true;
       if (!this.isHost || e.pid < 0 || !this.links.has(e.pid)) return;
@@ -858,6 +950,10 @@
 
     fromClient(e, m) {
       if (e.gone) return;
+      if (e.spec) {
+        if (m.t === 'bye') this.dropClient(e, 'left');
+        return;
+      }
       if (e.pid < 0) {
         if (m.t === 'hello') this.hello(e, m);
         return;

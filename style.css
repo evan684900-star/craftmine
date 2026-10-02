@@ -794,3 +794,29 @@ button { transition: background 0.15s, transform 0.08s, box-shadow 0.08s, filter
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* carte du monde du site (?carte) */
+body.webmap { overflow: hidden; }
+#webmap { position: fixed; inset: 0; z-index: 50; background: #0d0f16; color: var(--text, #eee); font-family: system-ui, sans-serif; }
+#wm-cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#wm-cv:active { cursor: grabbing; }
+.wm-top { position: absolute; left: 10px; top: 10px; right: 120px; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; pointer-events: none; }
+.wm-side { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.wm-top > * { pointer-events: auto; }
+.wm-top b { font-size: 18px; padding: 6px 12px; border-radius: 10px; background: rgba(10, 12, 20, 0.8); }
+#wm-count, #wm-status { font-size: 13px; padding: 5px 10px; border-radius: 8px; background: rgba(10, 12, 20, 0.75); }
+#wm-status:empty, #wm-count:empty { display: none; }
+#wm-status.warn { color: #ffb3b3; }
+.wm-play { padding: 7px 14px; border-radius: 10px; background: var(--accent, #3b7a57); color: #fff; text-decoration: none; font-weight: bold; }
+.wm-players { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-height: 55vh; overflow-y: auto; }
+.wm-players button { display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 13px; background: rgba(10, 12, 20, 0.8); text-align: left; }
+.wm-players button.on { outline: 2px solid #fff; }
+.wm-players button i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.wm-players em { font-style: normal; color: var(--muted, #aaa); }
+.wm-none { font-size: 12px; color: var(--muted, #aaa); background: rgba(10, 12, 20, 0.75); padding: 5px 10px; border-radius: 8px; }
+.wm-zoom { position: absolute; right: 10px; bottom: 14px; display: flex; align-items: center; gap: 4px; background: rgba(10, 12, 20, 0.8); padding: 4px; border-radius: 10px; }
+.wm-zoom button { width: 38px; height: 38px; padding: 0; font-size: 20px; }
+#wm-zoom-lv { min-width: 34px; text-align: center; font-size: 12px; }
+.wm-coords { position: absolute; left: 10px; bottom: 14px; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: rgba(10, 12, 20, 0.8); max-width: calc(100vw - 230px); }
+@media (max-width: 600px) { .wm-coords { font-size: 11px; } .wm-top b { font-size: 15px; } }
+#ter-bigmap { margin-left: 8px; color: #9fd0ff; }
