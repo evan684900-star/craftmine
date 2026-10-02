@@ -12,7 +12,7 @@
   // ------------------------------------------------------- objets --
   M.items.push(function (K) {
     const { defItem } = K;
-    defItem(1365, 'GUNPOWDER', { name: 'Poudre à canon', tex: 'gunpowder', desc: 'Laissée par les rampants. 5 poudres + 4 sables : une TNT.' });
+    defItem(1365, 'GUNPOWDER', { name: 'Poudre à canon', tex: 'gunpowder', desc: 'Laissée par les squelettes et les sorcières (aussi à la boutique du serveur). 5 poudres + 4 sables : une TNT.' });
     defItem(1366, 'MAGMA_CREAM', { name: 'Crème de magma', tex: 'magma_cream', desc: 'Laissée par les petits cubes de magma. 4 crèmes : un bloc de magma.' });
     defItem(1367, 'BONE', { name: 'Os', tex: 'bone', desc: 'Laissé par les squelettes. Clic droit sur un loup pour l’apprivoiser ; donne 3 poudres d’os.' });
     defItem(1368, 'SADDLE', { name: 'Selle', tex: 'saddle', stack: 1, desc: 'Clic droit sur un cheval dressé pour la lui mettre, puis clic droit pour le monter.' });
@@ -779,6 +779,7 @@
     loot(e, m, meat, more) {
       drop(e, m, I().ARROW, Math.floor(e.rand() * 3) + more());
       drop(e, m, I().BONE, Math.floor(e.rand() * 3) + more());
+      if (e.rand() < 0.3) drop(e, m, I().GUNPOWDER, 1); // (les rampants n'existent plus : la poudre vient d'ici)
       if (e.rand() < 0.04) e.addDrop(I().BOW, 1, m.x, m.y + 0.5, m.z, { xp: 0 });
     },
     render(e, batch, m, l, f, sw) {

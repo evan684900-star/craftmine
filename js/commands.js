@@ -153,7 +153,7 @@
     return Object.keys(M).find((t) => t === k || norm(M[t].name || '') === k || (M[t].aliases || []).some((x) => norm(x) === k)) || null;
   };
   const mobName = (t) => MOB_NAMES[t] || (CM.MOBS && CM.MOBS[t] && CM.MOBS[t].name) || t;
-  const summonList = () => ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente'].concat(Object.values((CM.MORE && CM.MORE.mobs) || {}).map((d) => d.aliases[0])).concat(['tnt', 'eclair', 'wagonnet']);
+  const summonList = () => ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente'].concat(Object.values((CM.MORE && CM.MORE.mobs) || {}).map((d) => d.aliases[0]).filter((k) => k !== 'rampant')).concat(['tnt', 'eclair', 'wagonnet']);
 
   // -------------------------------------------------------- joueurs --
   const myPid = () => (G().net.isClient ? G().net.pid : 0);
@@ -1776,6 +1776,7 @@
       }
       const type = mobType(k);
       if (!type) bad('Créature inconnue : « ' + a[0] + ' » (' + summonList().join(', ') + ')');
+      if (type === 'rampant') bad('Les rampants ont été retirés du jeu');
       let made = 0;
       for (let i = 0; i < n; i++) {
         const x = p.x + jit(), z = p.z + jit();

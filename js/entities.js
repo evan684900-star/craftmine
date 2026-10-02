@@ -408,6 +408,8 @@
         }
       }
       this.tnts = this.tnts.filter((t) => !t.dead);
+      // rampants retirés du jeu : ceux qui restaient disparaissent (sans exploser)
+      if (!this.remote) for (const m of this.mobs) if (m.type === 'rampant') m.dead = true;
       this.mobs = this.mobs.filter((m) => !m.dead);
       this.drops = this.drops.filter((d) => !d.dead);
       this.particles = this.particles.filter((p) => p.life > 0);
@@ -1326,10 +1328,10 @@
       if ((bi === CM.BIO.SWAMP || bi === CM.BIO.MANGROVE || y < 0) && r < 0.3) return 'slime';
       if (MOBS.witch && w.structures && r > 0.975) return 'witch'; // (rare) une sorcière rôde
       if (MOBS.arpenteur && r > 0.94 && r <= 0.975 && y > 0) return 'arpenteur'; // (rare) un Arpenteur, la nuit en surface
-      if (r < 0.42) return 'ombre';
-      if (r < 0.62) return 'spider';
-      if (r < 0.81) return 'skeleton';
-      return 'rampant';
+      // (plus de rampants : retirés du jeu)
+      if (r < 0.46) return 'ombre';
+      if (r < 0.7) return 'spider';
+      return 'skeleton';
     }
 
     // Nether : des Ombres ardentes rôdent partout, de jour comme de nuit, même à la lumière.
