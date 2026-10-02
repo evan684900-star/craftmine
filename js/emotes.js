@@ -15,8 +15,17 @@
     { k: 'montrer', icon: '👉', name: 'Montrer', dur: 3 },
     { k: 'reflechir', icon: '🤔', name: 'Réfléchir', dur: 4 },
     { k: 'desespoir', icon: '🤦', name: 'Désespoir', dur: 2.2 },
+    // mèmes
+    { k: 'dab', icon: '😎', name: 'Dab', dur: 2, meme: true },
+    { k: 'tpose', icon: '✝', name: 'T-pose', dur: 0, meme: true },
+    { k: 'floss', icon: '🕺', name: 'Floss', dur: 0, meme: true },
+    { k: 'griddy', icon: '🏃', name: 'Griddy', dur: 0, meme: true },
+    { k: 'gangnam', icon: '🐴', name: 'Gangnam Style', dur: 0, meme: true },
+    { k: 'carlton', icon: '🎵', name: 'Carlton', dur: 0, meme: true },
+    { k: 'loser', icon: '🫵', name: 'L sur le front', dur: 3, meme: true },
+    { k: 'toupie', icon: '🌀', name: 'Toupie', dur: 2.5, meme: true },
   ];
-  const ALIASES = { wave: 'saluer', salut: 'saluer', dance: 'danser', danse: 'danser', sit: 'asseoir', assis: 'asseoir', cheer: 'hourra', clap: 'applaudir', bravo: 'applaudir', bow: 'reverence', point: 'montrer', think: 'reflechir', facepalm: 'desespoir' };
+  const ALIASES = { wave: 'saluer', salut: 'saluer', dance: 'danser', danse: 'danser', sit: 'asseoir', assis: 'asseoir', cheer: 'hourra', clap: 'applaudir', bravo: 'applaudir', bow: 'reverence', point: 'montrer', think: 'reflechir', facepalm: 'desespoir', t_pose: 'tpose', t: 'tpose', l: 'loser', spin: 'toupie', gangnam_style: 'gangnam' };
 
   const E = {
     LIST,
@@ -76,6 +85,66 @@
         case 'desespoir':
           p.ra = [2.45, -0.8];
           p.hp = 0.45;
+          break;
+        // --- mèmes ---
+        case 'dab':
+          // la tête plonge dans le coude, l'autre bras tendu vers le ciel
+          p.ra = [2.3, 1.15];
+          p.la = [1.95, -1.25];
+          p.hp = 0.6;
+          p.yaw = 0.35;
+          break;
+        case 'tpose':
+          p.ra = [0, PI / 2];
+          p.la = [0, PI / 2];
+          break;
+        case 'floss': {
+          // les bras passent devant et derrière, les hanches de l'autre côté
+          const c = sin(t * 7), s2 = sin(t * 14);
+          p.ra = [0.55 * s2, 0.15 + 0.55 * c];
+          p.la = [-0.55 * s2, 0.15 - 0.55 * c];
+          p.roll = -0.12 * c;
+          break;
+        }
+        case 'griddy': {
+          const s3 = sin(t * 10);
+          p.lean = 0.3;
+          p.ra = [0.6 + 1.0 * s3, 0.15];
+          p.la = [0.6 - 1.0 * s3, 0.15];
+          p.legs = [0.7 * s3, -0.7 * s3];
+          p.dy = Math.abs(s3) * 0.07;
+          break;
+        }
+        case 'gangnam': {
+          // les poignets croisés comme sur des rênes, petits sauts d'une jambe sur l'autre
+          const s4 = sin(t * 7);
+          p.ra = [1.35 + 0.15 * s4, -0.4];
+          p.la = [1.35 + 0.15 * s4, -0.4];
+          p.dy = Math.abs(s4) * 0.16;
+          p.legs = [0.45 * Math.max(0, s4), 0.45 * Math.max(0, -s4)];
+          break;
+        }
+        case 'carlton': {
+          const c5 = sin(t * 5);
+          p.ra = [0.9 + 0.2 * c5, 0.25 + 0.55 * c5];
+          p.la = [0.9 - 0.2 * c5, 0.25 - 0.55 * c5];
+          p.roll = 0.08 * c5;
+          p.yaw = 0.3 * c5;
+          p.legs = [0.15 * c5, -0.15 * c5];
+          break;
+        }
+        case 'loser':
+          // la main en « L » sur le front, en sautillant
+          p.ra = [2.65, -0.65];
+          p.hp = -0.15;
+          p.dy = Math.abs(sin(t * 6)) * 0.12;
+          p.legs = [0.3 * sin(t * 6), -0.3 * sin(t * 6)];
+          break;
+        case 'toupie':
+          p.ra = [0, 1.3];
+          p.la = [0, 1.3];
+          p.yaw = t * 11;
+          p.dy = 0.05 * Math.abs(sin(t * 11));
           break;
       }
       return p;

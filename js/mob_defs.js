@@ -12,7 +12,7 @@
   // ------------------------------------------------------- objets --
   M.items.push(function (K) {
     const { defItem } = K;
-    defItem(1365, 'GUNPOWDER', { name: 'Poudre à canon', tex: 'gunpowder', desc: 'Laissée par les squelettes et les sorcières (aussi à la boutique du serveur). 5 poudres + 4 sables : une TNT.' });
+    defItem(1365, 'GUNPOWDER', { name: 'Poudre à canon', tex: 'gunpowder', desc: 'À l’établi : charbon + poudre d’os + silex = 2 poudres. Aussi sur les squelettes, les sorcières, et à la boutique du serveur. 5 poudres + 4 sables : une TNT.' });
     defItem(1366, 'MAGMA_CREAM', { name: 'Crème de magma', tex: 'magma_cream', desc: 'Laissée par les petits cubes de magma. 4 crèmes : un bloc de magma.' });
     defItem(1367, 'BONE', { name: 'Os', tex: 'bone', desc: 'Laissé par les squelettes. Clic droit sur un loup pour l’apprivoiser ; donne 3 poudres d’os.' });
     defItem(1368, 'SADDLE', { name: 'Selle', tex: 'saddle', stack: 1, desc: 'Clic droit sur un cheval dressé pour la lui mettre, puis clic droit pour le monter.' });
@@ -23,6 +23,9 @@
     const { r } = K;
     const B = CM.B, I = CM.I;
     CM.recipes.push(r(B.TNT, 1, [[I.GUNPOWDER, 5], ['sand', 4]], 'table', 'deco'));
+    // poudre à canon : charbon (ou charbon de bois) + poudre d'os + silex (les rampants n'existent plus)
+    CM.recipes.push(r(I.GUNPOWDER, 2, [[I.COAL, 1], [I.BONE_MEAL, 1], [I.FLINT, 1]], 'table', 'objets'));
+    if (I.CHARCOAL) CM.recipes.push(r(I.GUNPOWDER, 2, [[I.CHARCOAL, 1], [I.BONE_MEAL, 1], [I.FLINT, 1]], 'table', 'objets'));
     if (B.MAGMA) CM.recipes.push(r(B.MAGMA, 1, [[I.MAGMA_CREAM, 4]], 'table', 'blocs'));
     CM.recipes.push(r(I.BONE_MEAL, 3, [[I.BONE, 1]], null, 'objets'));
     CM.recipes.push(r(I.SADDLE, 1, [[I.LEATHER, 5], [I.IRON_INGOT, 2]], 'table', 'objets'));

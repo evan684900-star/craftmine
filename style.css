@@ -496,6 +496,7 @@ body.touch .inv-panel > .hint, body.touch #chest-panel .hint, body.touch #tab-cr
 .top-row.me { background: rgba(80, 220, 120, 0.15); }
 .ge-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
 .ge-list button { padding: 10px 6px; font-size: 14px; }
+.ge-list .ge-sub { grid-column: 1 / -1; margin: 6px 0 0; }
 .ac-skin { display: flex; gap: 10px; align-items: center; }
 .ac-skin > div { display: flex; flex-direction: column; gap: 5px; flex: 1; }
 #ac-skin-prev { width: 96px; height: 96px; image-rendering: pixelated; border-radius: 6px; background: repeating-conic-gradient(#333 0 25%, #222 0 50%) 0 0 / 12px 12px; }

@@ -204,7 +204,8 @@
     // -------------------------------------------------------------- gestes --
     gestures(g) {
       const E = CM.Emotes;
-      put('ge-list', E ? E.LIST.map((e) => '<button data-tp="geste" data-n="' + e.k + '">' + e.icon + ' ' + esc(e.name) + '</button>').join('') : '');
+      const btn = (e) => '<button data-tp="geste" data-n="' + e.k + '">' + e.icon + ' ' + esc(e.name) + '</button>';
+      put('ge-list', E ? E.LIST.filter((e) => !e.meme).map(btn).join('') + '<h4 class="ge-sub">😎 Mèmes</h4>' + E.LIST.filter((e) => e.meme).map(btn).join('') : '');
     },
 
     // -------------------------------------------------------------- compte --
