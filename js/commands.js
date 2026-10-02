@@ -153,7 +153,7 @@
     return Object.keys(M).find((t) => t === k || norm(M[t].name || '') === k || (M[t].aliases || []).some((x) => norm(x) === k)) || null;
   };
   const mobName = (t) => MOB_NAMES[t] || (CM.MOBS && CM.MOBS[t] && CM.MOBS[t].name) || t;
-  const summonList = () => ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente'].concat(Object.values((CM.MORE && CM.MORE.mobs) || {}).map((d) => d.aliases[0]).filter((k) => k !== 'rampant')).concat(['tnt', 'eclair', 'wagonnet']);
+  const summonList = () => ['mouflon', 'sanglier', 'manchot', 'ombre', 'villageois', 'golem', 'ombre_ardente'].concat(Object.values((CM.MORE && CM.MORE.mobs) || {}).map((d) => d.aliases[0]).filter((k) => k !== 'rampant' && k !== 'bandit')).concat(['tnt', 'eclair', 'wagonnet']);
 
   // -------------------------------------------------------- joueurs --
   const myPid = () => (G().net.isClient ? G().net.pid : 0);
@@ -1472,6 +1472,7 @@
     saisons: ['seasons', 'setting', 'les saisons passent (printemps, été, automne, hiver)'],
     pvp: ['pvp', 'net', 'combats entre joueurs'],
     triches_invites: ['cmds', 'net', 'les invités peuvent utiliser les triches'],
+    dormir: ['sleepNeed', 'num', 'joueurs couchés pour passer la nuit (0 : tout le monde)'],
   };
   CM.gameRule = function (g, k) {
     if (g.net && g.net.isClient) return g.net.rules[k] !== false;
@@ -1483,14 +1484,23 @@
     run(ctx, a, o) {
       const g = G(), net = g.net;
       const cur = (r) => (r[1] === 'option' ? !!g.options[r[0]] : r[1] === 'net' ? !!net.rules[r[0]] : g.settings[r[0]] !== false);
+      const txt = (r) => (r[1] === 'num' ? String(g.settings[r[0]] | 0 || 'tout le monde') : cur(r) ? 'on' : 'off');
       if (!a[0]) {
-        for (const [k, r] of Object.entries(RULES)) o.info(k + ' : ' + (cur(r) ? 'on' : 'off') + ' — ' + r[2]);
+        for (const [k, r] of Object.entries(RULES)) o.info(k + ' : ' + txt(r) + ' — ' + r[2]);
         return;
       }
       const n = norm(a[0]), key = Object.keys(RULES).find((k) => k === n || k.startsWith(n) || norm(RULES[k][0]) === n);
       if (!key) bad('Règle inconnue : « ' + a[0] + ' » (' + Object.keys(RULES).join(', ') + ')');
       const r = RULES[key];
-      if (a[1] === undefined) return o.info(key + ' : ' + (cur(r) ? 'on' : 'off') + ' — ' + r[2]);
+      if (a[1] === undefined) return o.info(key + ' : ' + txt(r) + ' — ' + r[2]);
+      if (r[1] === 'num') {
+        // (nombre : « tous » ou 0 pour tout le monde)
+        const n = /^(tous|tout|all)/.test(norm(a[1])) ? 0 : int(a[1], 0, 50, 'Nombre de joueurs');
+        g.settings[r[0]] = n;
+        net.sendCfg();
+        broadcastLine('📜 ' + key + ' : ' + (n ? n + ' joueur' + (n > 1 ? 's' : '') : 'tout le monde') + by(ctx), 'ok');
+        return;
+      }
       const v = onOff(a[1]);
       if (r[1] === 'option') {
         g.options[r[0]] = v;
@@ -1776,7 +1786,7 @@
       }
       const type = mobType(k);
       if (!type) bad('Créature inconnue : « ' + a[0] + ' » (' + summonList().join(', ') + ')');
-      if (type === 'rampant') bad('Les rampants ont été retirés du jeu');
+      if (type === 'rampant' || type === 'bandit') bad(type === 'rampant' ? 'Les rampants ont été retirés du jeu' : 'Les bandits ont été retirés du jeu');
       let made = 0;
       for (let i = 0; i < n; i++) {
         const x = p.x + jit(), z = p.z + jit();

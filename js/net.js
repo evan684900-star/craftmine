@@ -648,7 +648,7 @@
       const s = this.game.settings || {};
       return {
         pvp: this.rules.pvp, keep: !!this.game.options.keepInventory, cmds: !!this.rules.cmds,
-        fallDamage: s.fallDamage !== false, hunger: s.hunger !== false, mobSpawn: s.mobSpawn !== false, seasons: s.seasons === true,
+        fallDamage: s.fallDamage !== false, hunger: s.hunger !== false, mobSpawn: s.mobSpawn !== false, seasons: s.seasons === true, sleep: s.sleepNeed | 0,
       };
     }
     applyRules(r) {
@@ -659,6 +659,7 @@
       // règles de la partie (/regle) qui jouent chez l'invité
       for (const k of ['fallDamage', 'hunger', 'mobSpawn']) this.rules[k] = r[k] !== false;
       this.rules.seasons = r.seasons === true;
+      this.rules.sleep = Math.max(0, r.sleep | 0); // (joueurs couchés pour passer la nuit, 0 : tous)
     }
     // Hôte : réglages du monde modifiés (mode, difficulté, règles).
     sendCfg() {
@@ -1160,7 +1161,7 @@
           break;
         }
         case 'sleep':
-          this.sysAll('💤 ' + e.name + ' est allé se coucher');
+          this.sysAll('💤 ' + e.name + ' est allé se coucher' + this.sleepCount(e.rp));
           break;
         case 'golem': {
           const x = m.x | 0, y = m.y | 0, z = m.z | 0;
@@ -1716,7 +1717,13 @@
     sleepChanged(on) {
       if (!this.active || !on) return;
       if (this.isClient) this.send({ t: 'sleep' });
-      else this.sysAll('💤 ' + this.name + ' est allé se coucher');
+      else this.sysAll('💤 ' + this.name + ' est allé se coucher' + this.sleepCount(null));
+    }
+    // Hôte : « (2 / 3) » joueurs couchés sur ceux qu'il faut (rp : celui qui vient de se coucher).
+    sleepCount(rp) {
+      const s = this.game.sleepStatus();
+      const n = s.asleep + (rp && !(rp.flags & 32) ? 1 : 0);
+      return s.total > 1 ? ' (' + Math.min(n, s.need) + ' / ' + s.need + ')' : '';
     }
     died(cause) {
       const txt = this.name + ' a perdu la vie' + (cause ? ' (' + cause + ')' : '');

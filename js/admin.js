@@ -127,6 +127,7 @@
         persist: D.on ? (D.canPersist() ? 1 : 0) : 1,
         bans: Object.keys(net.bans || {}),
         lim: CM.Social.D.lim,
+        sleep: (g.settings && g.settings.sleepNeed) | 0,
         bk: D.on ? (D.canBackup() ? D.bk.slice(0, 40).map((b) => [b.f, b.t, b.n]) : null) : null,
         day: g.dayCount + 1,
         hour: Math.floor(((g.time * 24 + 6) % 24) * 10) / 10,
@@ -171,6 +172,7 @@
         $('adm-mode').value = st.mode === 'creative' ? 'creatif' : 'survie';
         $('adm-diff').value = DIFF_CFG[st.diff] || 'normal';
         $('adm-max').value = st.max || 10;
+        $('adm-sleep').value = st.sleep || 0;
         $('adm-pvp').checked = st.pvp;
         $('adm-keep').checked = st.keep;
         $('adm-cheats').checked = st.cheats;
@@ -206,6 +208,8 @@
       if (diff !== DIFF_CFG[st.diff]) lines.push('/serveur difficulte ' + diff);
       const max = Math.max(2, Math.min(20, +$('adm-max').value | 0));
       if (st.srv && max && max !== st.max) lines.push('/serveur max ' + max);
+      const sleep = Math.max(0, Math.min(20, Math.round(+$('adm-sleep').value || 0)));
+      if (sleep !== (st.sleep || 0)) lines.push('/regle dormir ' + sleep);
       if (st.srv && $('adm-pause').checked !== !!st.pause) lines.push('/serveur pause ' + ($('adm-pause').checked ? 'on' : 'off'));
       for (const [id, k, cur] of [['adm-pvp', 'pvp', st.pvp], ['adm-keep', 'garder_inventaire', st.keep], ['adm-cheats', 'triches', st.cheats]]) {
         if ($(id).checked !== cur) lines.push('/serveur ' + k + ' ' + ($(id).checked ? 'on' : 'off'));
@@ -295,7 +299,7 @@
         if (act) act();
       });
       // réglages modifiés : on ne les remplace plus par l'état reçu, jusqu'à « Enregistrer »
-      for (const id of ['adm-name', 'adm-mode', 'adm-diff', 'adm-max', 'adm-pvp', 'adm-keep', 'adm-cheats', 'adm-pause', ...EXT.map(([c]) => 'adm-ext-' + c)]) $(id).addEventListener('input', () => (this.dirty = true));
+      for (const id of ['adm-name', 'adm-mode', 'adm-diff', 'adm-max', 'adm-sleep', 'adm-pvp', 'adm-keep', 'adm-cheats', 'adm-pause', ...EXT.map(([c]) => 'adm-ext-' + c)]) $(id).addEventListener('input', () => (this.dirty = true));
       // champs : Entrée valide, Échap ferme
       for (const [id, a] of [['adm-pw', 'login'], ['adm-ann', 'ann'], ['adm-name', 'saveCfg'], ['adm-max', 'saveCfg'], ['adm-free', 'free'], ['adm-lim', 'lim']]) {
         $(id).addEventListener('keydown', (e) => {

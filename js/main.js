@@ -1848,7 +1848,8 @@
       this.clearInput();
       if (this.touch.enabled) this.touch.reset();
       this.releaseMouse();
-      $('sleep-text').textContent = this.net.active ? 'Le jour se lèvera quand tout le monde sera couché.' : 'Le jour va bientôt se lever…';
+      const need = this.net.isClient ? this.net.rules.sleep | 0 : (this.settings.sleepNeed | 0);
+      $('sleep-text').textContent = !this.net.active ? 'Le jour va bientôt se lever…' : need > 0 ? 'Le jour se lèvera quand ' + need + ' joueur' + (need > 1 ? 's seront couchés' : ' sera couché') + '.' : 'Le jour se lèvera quand tout le monde sera couché.';
       this.ui.show('sleep');
       this.net.sleepChanged(true);
     }
@@ -1861,16 +1862,43 @@
       this.net.sleepChanged(false);
       if (reason === 'button' || reason === 'day') this.captureMouse();
     }
-    // Solo ou hôte : quand tous les joueurs dorment depuis un moment, on passe au matin.
-    checkSleep() {
-      const p = this.player;
-      if (this.net.isClient || !p.sleeping || this.clock - p.sleeping.t0 < 2.5) return;
-      // (comme dans Minecraft, ceux qui sont dans le Nether ne comptent pas)
-      for (const rp of this.net.remotes.values()) if (rp.seen && rp.alive && rp.dim === 'overworld' && !(rp.flags & 32)) return;
+    // Nuit assez avancée pour que les monstres sortent en surface : un moment après la tombée de la
+    // nuit (30 s de jeu), pour avoir le temps de se coucher.
+    nightReady() {
+      if (!(this.daylight < 0.35)) return false;
+      const grace = Math.min(0.1, 30 / this.dayLen);
+      return (this.time - 0.5 + 1) % 1 > 0.004 + grace;
+    }
+    // Joueurs du monde normal : combien dorment, combien il en faut pour passer la nuit
+    // (réglage « dormir » : 0 = tout le monde). Ceux du Nether et de l'End ne comptent pas.
+    sleepStatus() {
+      const me = this.player, want = (this.settings && this.settings.sleepNeed) | 0;
+      let total = 0, asleep = 0;
+      if (!this.dedicated && me && me.alive && this.playerDim === 'overworld') {
+        total++;
+        if (me.sleeping) asleep++;
+      }
+      for (const rp of this.net.remotes.values()) {
+        if (!rp.seen || !rp.alive || rp.dim !== 'overworld') continue;
+        total++;
+        if (rp.flags & 32) asleep++;
+      }
+      return { asleep, total, need: want > 0 ? Math.min(want, total) : total };
+    }
+    // Solo, hôte ou serveur : assez de joueurs couchés depuis un moment, on passe au matin.
+    checkSleep(dt) {
+      if (this.net.isClient) return;
+      const s = this.sleepStatus();
+      this.sleepT = s.asleep > 0 && s.asleep >= s.need && this.daylight < 0.45 ? (this.sleepT || 0) + dt : 0;
+      if (this.sleepT < 2.5) return;
+      this.sleepT = 0;
       if (this.time > 0.4) this.dayCount++;
       this.time = 0.02;
-      this.ui.toast('Jour ' + (this.dayCount + 1) + ' — bien dormi !', 'good');
-      if (this.net.isHost) this.net.broadcast({ t: 'time', ti: this.time, d: this.dayCount, l: this.dayLen });
+      if (!this.dedicated) this.ui.toast('Jour ' + (this.dayCount + 1) + ' — bien dormi !', 'good');
+      if (this.net.isHost) {
+        this.net.broadcast({ t: 'time', ti: this.time, d: this.dayCount, l: this.dayLen });
+        this.net.sys('☀ ' + (s.need < s.total ? s.asleep + (s.asleep > 1 ? ' joueurs ont dormi' : ' joueur a dormi') : 'Tout le monde a dormi') + ' : jour ' + (this.dayCount + 1));
+      }
     }
 
     // ------------------------------------------------ enchantement ------
@@ -2275,17 +2303,17 @@
         this.dayCount++;
         this.ui.toast('Jour ' + (this.dayCount + 1) + ' — tu as survécu à la nuit !', 'good');
       }
-      const prevDay = this.daylight;
+      const prevDay = this.daylight, prevReady = this.nightReady();
       this.daylight = CM.smoothstep(-0.18, 0.22, Math.sin(this.time * Math.PI * 2));
-      if (prevDay >= 0.35 && this.daylight < 0.35 && this.difficulty !== 'peaceful') {
-        this.ui.toast('La nuit tombe… les Ombres se réveillent.', 'warn');
+      // la nuit tombe : on peut dormir ; les Ombres ne sortent (en surface) qu'un peu plus tard
+      if (prevDay >= 0.35 && this.daylight < 0.35 && this.difficulty !== 'peaceful') this.ui.toast('🌙 La nuit tombe : couche-toi vite, les Ombres arrivent bientôt.', 'info', 'dusk');
+      if (!prevReady && this.nightReady() && this.difficulty !== 'peaceful') {
+        this.ui.toast('Les Ombres se réveillent…', 'warn', 'dusk2');
         this.entities.nightfall = true;
       }
       const active = (this.locked || this.forceInput) && !this.ui.invOpen && !this.paused && !net.chatOpen && !this.player.sleeping && !this.ui.modal;
-      if (this.player.sleeping) {
-        this.checkSleep();
-        if (this.daylight > 0.45 && this.clock - this.player.sleeping.t0 > 0.5) this.wake('day');
-      }
+      this.checkSleep(dt);
+      if (this.player.sleeping && this.daylight > 0.45 && this.clock - this.player.sleeping.t0 > 0.5) this.wake('day');
       // l'hôte garde aussi chargés les alentours de ses invités (créatures, objets)
       this.world.stream(this.player.x, this.player.z, this.renderer.renderDist + 1, 5, net.isHost ? net.simCenters() : null);
       if (this.dedicated) CM.Dedicated.tick(this, dt); // (le joueur du serveur ne bouge pas)

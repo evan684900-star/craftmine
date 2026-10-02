@@ -408,8 +408,8 @@
         }
       }
       this.tnts = this.tnts.filter((t) => !t.dead);
-      // rampants retirés du jeu : ceux qui restaient disparaissent (sans exploser)
-      if (!this.remote) for (const m of this.mobs) if (m.type === 'rampant') m.dead = true;
+      // rampants et bandits retirés du jeu : ceux qui restaient disparaissent (sans exploser)
+      if (!this.remote) for (const m of this.mobs) if (m.type === 'rampant' || m.type === 'bandit') m.dead = true;
       this.mobs = this.mobs.filter((m) => !m.dead);
       this.drops = this.drops.filter((d) => !d.dead);
       this.particles = this.particles.filter((p) => p.life > 0);
@@ -1374,7 +1374,8 @@
           if (!w.solidAt(x, y - 1, z) || w.solidAt(x, y, z) || w.solidAt(x, y + 1, z)) continue;
           if (CM.isFluid(w.get(x, y, z)) || CM.isFluid(w.get(x, y - 1, z))) continue;
           const bl = w.blockLightAt(x, y, z);
-          const sky = w.skyAt(x, y, z) * (g.daylight > 0.45 ? 1 : 0.2);
+          // (en plein air : seulement quand la nuit est bien tombée, on a le temps de se coucher)
+          const sky = w.skyAt(x, y, z) * (g.nightReady() ? 0.2 : 1);
           if (bl < 4 && sky < 4) {
             const type = this.hostileFor(w, x, y, z);
             if (MOBS[type].hw > 0.45 && (w.solidAt(x + 1, y, z) || w.solidAt(x - 1, y, z) || w.solidAt(x, y, z + 1) || w.solidAt(x, y, z - 1))) continue; // (trop large)

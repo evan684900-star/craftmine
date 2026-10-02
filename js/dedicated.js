@@ -187,16 +187,7 @@
 
   // À chaque image : nuit passée si tous les joueurs du monde normal dorment.
   D.tick = function (g, dt) {
-    const pls = [...g.net.remotes.values()].filter((rp) => rp.seen && rp.alive && rp.dim === 'overworld');
-    const all = pls.length > 0 && pls.every((rp) => rp.flags & 32);
-    D.sleepT = all ? (D.sleepT || 0) + dt : 0;
-    if (D.sleepT > 2.5 && g.daylight < 0.45) {
-      D.sleepT = 0;
-      if (g.time > 0.4) g.dayCount++;
-      g.time = 0.02;
-      g.net.broadcast({ t: 'time', ti: g.time, d: g.dayCount, l: g.dayLen });
-      g.net.sys('☀ Tout le monde dort : jour ' + (g.dayCount + 1));
-    }
+    // (nuit passée quand assez de joueurs dorment : main.js, checkSleep)
     const p = g.player;
     if (p && (Math.abs(p.vy) > 0 || !p.flying)) parkPlayer(g);
   };

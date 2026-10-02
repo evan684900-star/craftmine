@@ -665,19 +665,10 @@
       ['gachette', '🔫', 'Gâchette facile', 'Vaincre une créature avec une arme à feu', (g) => (g.stats.gunKills || 0) > 0],
       ['mille', '🎯', 'En plein dans le mille', 'Toucher une créature à la tête', (g) => (g.stats.headshots || 0) > 0],
       ['lynx', '🔭', 'Œil de lynx', 'Toucher une créature à plus de 100 blocs', (g) => (g.stats.longShot || 0) >= 100],
-      ['justicier', '🦹', 'Justicier', 'Vaincre 10 bandits', (g) => (g.stats.kills.bandit || 0) >= 10],
     ].map(([k, icon, name, desc, test]) => ({ k, icon, name, desc, test, ext: 'guns' }));
     const A = CM.Comfort.ACH, at = A.findIndex((a) => a.k === 'aube');
     A.splice(at < 0 ? A.length : at, 0, ...add);
   }
 
-  // --------------------------------------------------- apparition des bandits --
-  // La nuit, en surface : parfois un bandit à la place d'une Ombre (souvent en ville).
-  const hostile0 = E.hostileFor;
-  E.hostileFor = function (w, x, y, z) {
-    const t = hostile0.call(this, w, x, y, z);
-    if (!CM.extOn('guns') || w.nether || w.end || y < CM.WORLD.SEA - 4) return t;
-    const city = w.city && w.city.urban && w.city.urban(x, z);
-    return this.rand() < (city ? 0.35 : 0.08) ? 'bandit' : t;
-  };
+  // (les bandits ont été retirés du jeu : ils n'apparaissent plus)
 })();

@@ -92,7 +92,8 @@ Le panneau d'administration permet ensuite, sans passer par la machine :
 - **Pseudos et terrains** : chaque pseudo est réservé à l'appareil qui l'a utilisé en premier (ou à
   son mot de passe, menu G → Compte) ; **libérer** celui d'un joueur qui a changé d'appareil sans
   mot de passe ; nombre de tronçons protégés par joueur ;
-- **Réglages** : nom du serveur, mode, difficulté, nombre de joueurs, PvP, garder l'inventaire,
+- **Réglages** : nom du serveur, mode, difficulté, nombre de joueurs, joueurs couchés pour passer
+  la nuit (0 = tout le monde), PvP, garder l'inventaire,
   triches pour tous, extensions (au prochain redémarrage). Ils sont enregistrés dans `config.json` ;
 - **Monde** : heure, météo, annonce à tous, sauvegarde, **redémarrage du serveur** ;
 - **Copies du monde** : la liste des copies (une par heure, gardées 3 jours), **faire une copie
