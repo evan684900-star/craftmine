@@ -129,6 +129,7 @@
     update(dt, input) {
       const g = this.game, w = g.world, K = g.binds;
       if (!this.alive) return;
+      CM.Emotes.update(g, this); // (geste : bouger l'arrête)
       this.invul = Math.max(0, this.invul - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
       this.dashCd = Math.max(0, this.dashCd - dt);

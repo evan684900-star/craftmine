@@ -118,7 +118,7 @@ Jusqu'à 8 joueurs dans le même monde, sur ordinateur comme sur téléphone.
 | --- | --- |
 | **T**, **Entrée** ou **/** (💬 sur téléphone) | Tchat et commandes |
 | **Tab** (maintenue) | Joueurs connectés, en haut de l'écran (sur téléphone : toucher « 🌐 CODE · N joueurs ») |
-| **G** | Menu du joueur (aussi dans Pause), en onglets : Téléportation, Terrain, Équipe, Argent, Classements, Compte (voir ci-dessous). Rien de plus ne reste affiché pendant le jeu |
+| **G** | Menu du joueur (aussi dans Pause), en onglets : Téléportation, Terrain, Équipe, Argent, Classements, Gestes, Compte (voir ci-dessous). Rien de plus ne reste affiché pendant le jeu |
 
 - Les navigateurs se connectent **directement entre eux** (WebRTC). Le serveur public et gratuit de [PeerJS](https://peerjs.com) sert seulement à les mettre en relation ; aucun compte, aucun serveur à payer.
 - **L'hôte fait autorité** : il garde le monde, les créatures, les objets au sol, les coffres, l'heure et les réglages (mode de jeu, difficulté, durée des journées, « garder l'inventaire »). Chaque invité gère ses déplacements, son inventaire, sa faim et sa santé.
@@ -137,6 +137,8 @@ Tout se règle dans ce menu (ou par les commandes) ; l'hôte garde tout dans la 
 - **🛡 Équipe** : crée-la (nom et TAG de 4 lettres), invite, rejoins, quitte, exclus (le chef). Le **[TAG]** s'affiche devant le pseudo, **pas de dégâts entre coéquipiers**, vous construisez sur les terrains les uns des autres. Tchat d'équipe : **`/e message`**.
 - **🪙 Argent** : des **pièces** pour chaque créature hostile vaincue. **Boutique** du serveur (acheter, revendre ×1, ×16, ×64), **hôtel des ventes** (mets en vente l'objet que tu tiens, à ton prix ; on te paie même si tu n'es pas là), **payer** un joueur (`/payer joueur montant`). Pas d'argent en mode créatif. Administrateur : `/donnerpieces joueur montant`.
 - **🏆 Classements** : les plus riches, créatures vaincues, joueurs vaincus, blocs posés et cassés, temps de jeu (aussi `/classement`).
+- **👋 Gestes** : saluer, danser, s'asseoir, hourra, applaudir, révérence, montrer, réfléchir, désespoir (aussi `/geste <nom>`). Les autres joueurs les voient ; bouger, frapper ou être touché les arrête (vue de derrière ou de face : touche V).
+- **🎨 Skin** (onglet Compte) : choisis une image de skin Minecraft (64 × 64, ou l'ancien format 64 × 32, avec chapeau, veste, manches…). Le navigateur la garde et les autres joueurs la voient ; « Retirer le skin » rend l'apparence des options.
 
 ### 💬 Commandes du tchat
 
@@ -312,6 +314,8 @@ js/teleport.js    menu du joueur (G) : onglets, téléportation (maisons, demand
 js/social.js      vie du serveur : pseudos protégés, terrains, coffres verrouillés, équipes, pièces, boutique, hôtel des ventes, classements
 js/social_ui.js   onglets Terrain, Équipe, Argent, Classements, Compte du menu du joueur
 js/webmap.js      carte du monde sur le site (?carte) : spectateur, monde refait vu du ciel, terrains, joueurs en direct
+js/skins.js       skins Minecraft (64 × 64) : découpe en faces, couches de texture réservées, aperçu
+js/emotes.js      gestes (/geste) : poses du personnage, partagées avec les autres joueurs
 serveur/          programme de la machine (serveur.js), installation (installer.sh), guide (LISEZMOI.md)
 js/fkeys.js       touches F : capture d’écran, vidéo, vues, bordures des tronçons, boîtes, zones des monstres, zoom…
 js/vehicles.js    conduite, vol, bateau, carburant, dégâts, passagers, klaxon et sirène, caméra de derrière, modèles 3D, réseau

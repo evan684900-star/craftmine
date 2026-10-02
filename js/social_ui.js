@@ -316,7 +316,10 @@
           return S.req('pw', { pw: v });
         }
         case 'geste':
-          return T.run(g, '/geste ' + n);
+          // (le menu se ferme : on voit le geste en vue de derrière)
+          T.run(g, '/geste ' + n);
+          if (T.msgKind === 'ok') T.close(g);
+          return;
         case 'skinoff':
           if (CM.Skins) CM.Skins.clear(g);
           return;

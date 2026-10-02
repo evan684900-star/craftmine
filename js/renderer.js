@@ -457,9 +457,14 @@
       const n = T.count();
       const maxLayers = gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS);
       if (n > maxLayers) throw new Error('trop de textures pour cette carte graphique (' + n + ' > ' + maxLayers + ')');
+      // places réservées pour les skins des joueurs (36 couches chacun, skins.js)
+      this.skinBase = n;
+      this.skinSlots = Math.max(0, Math.min(14, Math.floor((maxLayers - n) / 36)));
+      const total = n + this.skinSlots * 36;
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
-      gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, 16, 16, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, T.pixels());
+      gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, 16, 16, total, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 16, 16, n, gl.RGBA, gl.UNSIGNED_BYTE, T.pixels());
       gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
@@ -467,6 +472,14 @@
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
       this.texture = tex;
+    }
+
+    // Couches de texture remplacées en cours de jeu (skins des joueurs).
+    uploadLayers(first, count, data) {
+      const gl = this.gl;
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, first, 16, 16, count, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
     }
 
     initBuffers() {

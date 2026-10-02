@@ -448,7 +448,10 @@
   const COLORS = () => (CM.DYES || []).map((d) => d.key.toLowerCase());
   C.myLook = (g) => {
     const o = g.options;
-    return { s: o.lookSkin | 0, h: o.lookHair | 0, t: o.lookShirt || 'blue', p: o.lookPants || 'jeans', c: o.lookCape || 'none' };
+    const l = { s: o.lookSkin | 0, h: o.lookHair | 0, t: o.lookShirt || 'blue', p: o.lookPants || 'jeans', c: o.lookCape || 'none' };
+    const k = CM.Skins && CM.Skins.mine(); // (skin personnalisé, menu G → Compte)
+    if (k) l.k = k;
+    return l;
   };
   C.cleanLook = (l) => {
     if (!l || typeof l !== 'object') return null;
@@ -459,9 +462,10 @@
       t: cols.includes(l.t) ? l.t : 'blue',
       p: l.p === 'jeans' || cols.includes(l.p) ? l.p : 'jeans',
       c: l.c === 'none' || cols.includes(l.c) ? l.c : 'none',
+      k: CM.Skins && CM.Skins.valid(l.k) ? l.k : undefined,
     };
   };
-  C.lookKey = (l) => (l ? [l.s, l.h, l.t, l.p, l.c].join('|') : '');
+  C.lookKey = (l) => (l ? [l.s, l.h, l.t, l.p, l.c, l.k ? CM.Skins.keyOf(l.k) : ''].join('|') : '');
   // Options changées : on prévient les autres joueurs.
   C.lookChanged = function (g) {
     const l = C.myLook(g), k = C.lookKey(l);

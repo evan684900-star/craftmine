@@ -176,6 +176,10 @@
       this.dim = CM.dimName(a[8]);
       this.offhand = CM.itemInfo(a[9] | 0) ? a[9] | 0 : 0; // main secondaire
       this.bob = Array.isArray(a[10]) && a[10].length === 3 ? a[10].map(num) : null; // flotteur de canne à pêche
+      // geste (emotes.js) : on note quand il commence
+      const em = Math.max(0, Math.min(CM.Emotes.LIST.length, a[11] | 0));
+      if (em !== this.emote) this.emoteT = this.net.game.clock;
+      this.emote = em;
       this.blocking = !!(this.flags & 64);
       const wasAlive = this.alive;
       this.alive = !!(this.flags & 4);
@@ -677,7 +681,7 @@
         if (s && !CM.itemInfo(s.id).elytra) armor += (CM.ARMOR_MATS.findIndex((m) => m.key === CM.itemInfo(s.id).mat) + 1) * 6 ** k;
       });
       const off = g.inventory.offhand;
-      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, CM.dimId(g.playerDim), off ? off.id : 0, CM.Fishing.netState(p)];
+      return [r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), f, held ? held.id : 0, armor, CM.dimId(g.playerDim), off ? off.id : 0, CM.Fishing.netState(p), p.emote || 0];
     }
     sendMyState(withInv) {
       const g = this.game;
@@ -790,7 +794,7 @@
       const all = CM.Dedicated.on ? [] : [[0, ...this.stateOf(g.player)]]; // (serveur dédié : pas de joueur à montrer)
       for (const e of this.links.values()) {
         const rp = e.rp;
-        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, CM.dimId(rp.dim), rp.offhand || 0, rp.bob || 0]);
+        if (rp.seen) all.push([e.pid, r2(rp.x), r2(rp.y), r2(rp.z), r2(rp.yaw), r2(rp.pitch), rp.flags, rp.held, rp.armor, CM.dimId(rp.dim), rp.offhand || 0, rp.bob || 0, rp.emote || 0]);
       }
       for (const e of this.links.values()) e.link.send({ t: 'ps', p: all.filter((a) => a[0] !== e.pid) });
     }
@@ -2042,8 +2046,13 @@
         headYaw = vc || glides ? 0 : Math.atan2(Math.sin(headYaw), Math.cos(headYaw));
         // mort : il tombe sur le côté
         const dying = !rp.alive && rp.deathAt !== undefined ? Math.min(1, (now - rp.deathAt) / 0.45) : 0;
+        // geste en cours (emotes.js) : pose des bras, du corps et des jambes ; ev : 0 → 1 en entrant
+        const em = rp.emote && rp.alive && !rp.moving && !rides && !seated ? CM.Emotes.pose(rp.emote, now - (rp.emoteT === undefined ? now : rp.emoteT), rp.pitch) : null;
+        const ev = em ? em.env : 0, mix = (a, b) => a + (b - a) * ev;
+        // skin personnalisé (skins.js) : ses couches, une fois l'image prête
+        const sk = rp.look && rp.look.k ? CM.Skins.layersFor(rp.look.k) : null;
         if (glides) CM.Weapons.glideMatrix(M, this.Q, this.P, rp.rx, rp.ry, rp.rz, rp.ryaw, rp.pitch);
-        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0), rp.rz, vc ? vc.yaw : rp.byaw, 0, dying * dying * (Math.PI / 2), 1);
+        else mat4.compose(M, rp.rx, rp.ry - (sneak ? 0.12 : 0) + (rides ? 0.78 : 0) - (seated ? 0.45 : 0) + (em ? em.dy * ev : 0), rp.rz, (vc ? vc.yaw : rp.byaw) + (em ? em.yaw * ev : 0), 0, dying * dying * (Math.PI / 2) + (em ? em.roll * ev : 0), 1);
         if (rp.flags & 2048) CM.Weapons.renderWings(ents, batch, M, l, fl, glides);
         // canne à pêche : la ligne jusqu'au flotteur
         if (rp.bob) {
@@ -2057,16 +2066,20 @@
         // (rotation autour de x : positif = vers l'avant pour un membre qui pend)
         // (à cheval : jambes écartées de part et d'autre)
         // (assis dans un bateau ou un wagonnet : jambes vers l'avant)
-        ents.part(batch, M, -0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], lk.pants, l, fl, null, 0, seated ? 0.1 : rides ? 0.5 : 0);
-        ents.part(batch, M, 0.12, 0.7, 0, seated ? 1.45 : rides ? -0.35 : -sw * 0.7, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], lk.pants, l, fl, null, 0, seated ? -0.1 : rides ? -0.5 : 0);
+        const legA = seated ? 1.45 : rides ? -0.35 : em && em.legs ? mix(sw * 0.7, em.legs[0]) : sw * 0.7;
+        const legB = seated ? 1.45 : rides ? -0.35 : em && em.legs ? mix(-sw * 0.7, em.legs[1]) : -sw * 0.7;
+        const spread = seated || (em && em.sit) ? 0.1 : rides ? 0.5 : 0;
+        ents.part(batch, M, -0.12, 0.7, 0, legA, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], sk ? sk.lleg : lk.pants, l, fl, null, 0, spread);
+        ents.part(batch, M, 0.12, 0.7, 0, legB, [-0.12, -0.7, -0.12, 0.12, 0, 0.12], sk ? sk.rleg : lk.pants, l, fl, null, 0, -spread);
         // cape (flotte un peu quand il avance)
         if (lk.cape && !(rp.flags & 2048)) ents.part(batch, M, 0, 1.35, 0.14, -(0.1 + (rp.moving ? 0.35 : 0) + (glides ? 0.8 : 0)), [-0.24, -1.0, 0, 0.24, 0, 0.04], lk.cape, l, fl);
         // corps (penché quand il est accroupi), tête qui suit le regard
-        const lean = sneak ? 0.4 : 0;
-        ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], shirt, l, fl);
+        const lean = sneak ? 0.4 : em ? em.lean * ev : 0;
+        ents.part(batch, M, 0, 0.7, 0, -lean, [-0.25, 0, -0.13, 0.25, 0.65, 0.13], sk ? sk.body : shirt, l, fl);
         const ny = 0.7 + 0.65 * Math.cos(lean), nz = -0.65 * Math.sin(lean);
-        ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], rp.look ? lk.head : head, l, fl, null, headYaw);
-        if (rp.look) ents.part(batch, M, 0, ny, nz, CM.clamp(rp.pitch, -1.2, 1.2) * 0.8, [-0.232, 0, -0.232, 0.232, 0.452, 0.232], lk.hair, l, fl, null, headYaw);
+        const hp = CM.clamp(rp.pitch, -1.2, 1.2) * 0.8 + (em ? em.hp * ev : 0);
+        ents.part(batch, M, 0, ny, nz, hp, [-0.22, 0, -0.22, 0.22, 0.44, 0.22], sk ? sk.head : rp.look ? lk.head : head, l, fl, null, headYaw);
+        if (rp.look && !sk) ents.part(batch, M, 0, ny, nz, hp, [-0.232, 0, -0.232, 0.232, 0.452, 0.232], lk.hair, l, fl, null, headYaw);
         // bras (le droit frappe, et avance un peu quand il tient quelque chose)
         const swing = rp.swingT > 0 ? 1.3 * Math.sin((1 - rp.swingT / 0.3) * Math.PI) : 0;
         const sy = ny - 0.02, sz = nz * 0.9;
@@ -2076,10 +2089,18 @@
         const arms = gunAim !== null
           ? [[-0.36, gunAim - 0.15, 0], [0.36, gunAim, 0]]
           : [[-0.36, rp.blocking ? 1.1 : -sw * 0.6 + (rp.offhand ? 0.3 : 0) + idleX, rp.blocking ? 0 : -idleZ], [0.36, sw * 0.6 + swing + (rp.held ? 0.3 : 0) - idleX, swing ? 0 : idleZ]];
-        for (const [ax, rot, rz] of arms) {
-          ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl, null, 0, rz);
-          ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl, null, 0, rz);
+        // (geste : les bras prennent la pose ; écart vers l'extérieur positif pour le bras droit)
+        if (em) {
+          arms[0] = [-0.36, mix(arms[0][1], em.la[0]), mix(arms[0][2], -em.la[1])];
+          arms[1] = [0.36, mix(arms[1][1], em.ra[0]), mix(arms[1][2], em.ra[1])];
         }
+        arms.forEach(([ax, rot, rz], i) => {
+          if (sk) ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.62, -0.11, 0.11, 0.04, 0.11], i ? sk.rarm : sk.larm, l, fl, null, 0, rz);
+          else {
+            ents.part(batch, M, ax, sy, sz, rot, [-0.11, -0.24, -0.11, 0.11, 0.04, 0.11], shirt, l, fl, null, 0, rz);
+            ents.part(batch, M, ax, sy, sz, rot, [-0.1, -0.62, -0.1, 0.1, -0.24, 0.1], lk.skin, l, fl, null, 0, rz);
+          }
+        });
         // armure portée : coques un peu plus grandes que chaque partie du corps
         const am = (k) => {
           const i = Math.floor(rp.armor / 6 ** k) % 6;

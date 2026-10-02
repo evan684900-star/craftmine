@@ -2008,6 +2008,8 @@
       o.walk += Math.min(sp, 8) * dt * 2.6;
       o.swingT = p.swing > 0.85 ? 0.3 : Math.max(0, o.swingT - dt);
       o.look = CM.Comfort.myLook(this);
+      if (o.emote !== (s[11] | 0)) o.emoteT = now; // (geste en cours)
+      o.emote = s[11] | 0;
       return o;
     }
 
@@ -2322,7 +2324,7 @@
     render() {
       const p = this.player;
       const bobOn = this.options.viewBob ? 1 : 0;
-      let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn - p.landOffset() * bobOn, p.z];
+      let cam = [p.x, p.y + p.eyeH - p.eyeOffset + Math.sin(p.bob * 2) * 0.025 * p.bobAmp * bobOn - p.landOffset() * bobOn - CM.Emotes.camDrop(p), p.z];
       // roulis : la vue penche un peu en marchant, et du côté d'un coup reçu
       let camRoll = Math.sin(p.bob) * 0.009 * p.bobAmp * bobOn;
       if (p.hurtFlash > 0 && p.alive) camRoll += (p.hurtDir || 1) * Math.sin(Math.pow(p.hurtFlash / 0.45, 2) * Math.PI) * 0.11; // (vite, puis revient doucement)
