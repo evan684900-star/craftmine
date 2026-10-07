@@ -146,13 +146,17 @@ function setConfig(patch) {
 }
 
 // Empreinte du jeu en ligne : quand elle change (mise à jour de CraftMine), le serveur redémarre.
+// Requêtes « HEAD » : seulement l'étiquette (ETag) de chaque fichier, sans le télécharger, et sans
+// casser le cache du site (sinon chaque vérification coûte ~0,5 Mo de transfert à l'hébergeur).
+const WATCHED = ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js', 'js/commands.js', 'js/admin.js', 'js/social.js'];
+async function fileTag(f) {
+  const r = await fetch(SITE + '/' + f, { method: 'HEAD', cache: 'no-store' });
+  if (!r.ok) throw new Error(f + ' : ' + r.status);
+  return r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '';
+}
 async function onlineVersion() {
   const h = crypto.createHash('sha1');
-  for (const f of ['index.html', 'js/net.js', 'js/main.js', 'js/dedicated.js', 'js/commands.js', 'js/admin.js', 'js/social.js']) {
-    const r = await fetch(SITE + '/' + f + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) throw new Error(f + ' : ' + r.status);
-    h.update(await r.text());
-  }
+  for (const f of WATCHED) h.update(f + '=' + (await fileTag(f)) + ';');
   return h.digest('hex');
 }
 
@@ -231,7 +235,7 @@ async function start() {
     process.exit(1);
   });
   // (peerserver : serveur de mise en relation local, pour les essais)
-  await page.goto(SITE + '/?server=1&t=' + Date.now() + (cfg.peerserver ? '&peerserver=' + cfg.peerserver : '') + (cfg.turnhost ? '&turnhost=' + cfg.turnhost : ''), { waitUntil: 'load', timeout: 180000 });
+  await page.goto(SITE + '/?server=1' + (cfg.peerserver ? '&peerserver=' + cfg.peerserver : '') + (cfg.turnhost ? '&turnhost=' + cfg.turnhost : ''), { waitUntil: 'load', timeout: 180000 });
   setInterval(tick, 5000);
   setInterval(checkUpdate, 10 * 60e3);
 }
@@ -271,11 +275,16 @@ async function tick() {
 }
 
 // Nouveau programme du serveur en ligne (ce fichier) ? Renvoie son texte, sinon null.
+// (téléchargé seulement si son étiquette a changé depuis la dernière fois)
+let progTag = null;
 async function newProgram() {
   try {
-    const r = await fetch(SITE + '/serveur/serveur.js?t=' + Date.now(), { cache: 'no-store' });
+    const tag = await fileTag('serveur/serveur.js').catch(() => null);
+    if (tag && tag === progTag) return null;
+    const r = await fetch(SITE + '/serveur/serveur.js', { cache: 'no-store' });
     if (!r.ok) return null;
     const t = await r.text();
+    progTag = tag;
     if (!t.includes('cmServerSave') || !t.includes('checkUpdate') || t === fs.readFileSync(__filename, 'utf8')) return null;
     return t;
   } catch (e) {
